@@ -401,7 +401,7 @@ class Mirror:
             status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
             logger.debug(f"Found {len(status_selectable_packs_pos)} packs contain current status which haven't owned yet: {status_selectable_packs_pos}")
 
-            # Check prioritized packs first, if found then select, if not and refresh available, then refresh
+            # 1. Check prioritized packs first (if enabled)
             if shared_vars.prioritize_list_over_status and not is_floor_without_priority:
                 if len(selectable_priority_packs_pos) > 0:
                     x, y = selectable_priority_packs_pos[0]
@@ -415,19 +415,35 @@ class Mirror:
                     common.sleep(1.5)
                     continue
 
-            # Only floor < 5 can have status packs
+            # 2. Check status packs (Floor < 5)
             if floor != "floor5":
                 if len(status_selectable_packs_pos) > 0:
                     x, y = status_selectable_packs_pos[0]
                     common.mouse_move(x, y)
                     common.mouse_drag(x, y + 350)
                     return
+
+            # 3. Check prioritized packs (if not enabled above, but list exists)
+            if not is_floor_without_priority:
+                if len(selectable_priority_packs_pos) > 0:
+                    x, y = selectable_priority_packs_pos[0]
+                    common.mouse_move(x, y)
+                    common.mouse_drag(x, y + 350)
+                    return
                 elif refresh_btn_available:
-                    # Refresh available --> click it to look for desired status pack
+                    # Refresh available --> click it to look for desired priority pack
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                     common.sleep(1.5)
                     continue
+
+            # 4. Refresh for status packs (if no priority list, and status missing)
+            if floor != "floor5" and is_floor_without_priority and refresh_btn_available:
+                # Refresh available --> click it to look for desired status pack
+                common.click_matching("pictures/mirror/general/refresh.png", 0.9)
+                common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                common.sleep(1.5)
+                continue
 
             # Fallback: select whatever available
             if len(status_selectable_packs_pos) > 0:
