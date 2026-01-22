@@ -326,6 +326,16 @@ class Mirror:
                 x,y = found[0]
                 refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
 
+            # Detect selectable pack (Moved up to check if packs are loaded)
+            selectable_packs_pos = common.match_image("pictures/CustomAdded1080p/mirror/packs/inpack.png", screenshot=screenshot)
+            selectable_packs_pos = [pos for pos in selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
+            
+            if len(selectable_packs_pos) == 0:
+                if retry_attempt > 0:
+                    logger.debug("No packs detected, retrying...")
+                    common.sleep(0.5)
+                    continue
+
             # Detect priority packs
             selectable_priority_packs_pos = []
             try:
@@ -360,9 +370,7 @@ class Mirror:
             _, offset_y = common.scale_offset_1440p(0, -200)
             except_packs_pos = [(pos[0], pos[1]+offset_y) for pos in except_packs_pos]
 
-            # Detect selectable pack
-            selectable_packs_pos = common.match_image("pictures/CustomAdded1080p/mirror/packs/inpack.png", screenshot=screenshot)
-            selectable_packs_pos = [pos for pos in selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
+            # Filter selectable packs
             logger.debug(f"Found {len(selectable_packs_pos)} packs in total: {selectable_packs_pos}")
             for _pack in common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_x_1080p(150)):
                 selectable_packs_pos.remove(_pack)
@@ -403,6 +411,7 @@ class Mirror:
                     # Refresh available --> click it to look for desired priority pack
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                    common.sleep(1.5)
                     continue
 
             # Only floor < 5 can have status packs
@@ -416,6 +425,7 @@ class Mirror:
                     # Refresh available --> click it to look for desired status pack
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                    common.sleep(1.5)
                     continue
 
             # Fallback: select whatever available
