@@ -473,7 +473,7 @@ class Mirror:
             self.squad_set = True
         # Click battle button
         common.mouse_move_click(*common.scale_coordinates_1080p(1722, 881))
-        # r i in range(20):
+        for i in range(20):
             if common.element_exist("pictures/battle/winrate.png"):
                 logger.debug("Premature break due to winrate detected.")
                 break
