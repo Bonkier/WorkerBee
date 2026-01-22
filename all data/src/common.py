@@ -81,7 +81,7 @@ class NoMillisecondsFormatter(logging.Formatter):
         return formatted
 
 # Setting up basic logging configuration
-LOG_FILENAME = os.path.join(BASE_PATH, "Pro_Peepol's.log")
+LOG_FILENAME = os.path.join(BASE_PATH, "Logs.log")
 
 # Create custom handler with no-milliseconds formatter
 handler = logging.FileHandler(LOG_FILENAME)
