@@ -19,15 +19,7 @@ BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
 
-# Setting up basic logging configuration
-LOG_FILENAME = os.path.join(BASE_PATH, "Pro_Peepol's.log")
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILENAME)
-    ]
-)
+# Logging is handled by common.py
 logger = logging.getLogger(__name__)
 
 # Signal handler for clean shutdown
@@ -81,6 +73,6 @@ def claim_rewards():
     end_time = time.time() + duration
     while not common.click_matching("pictures/general/beeg_confirm.png", recursive=False):
         if time.time() > end_time:
-            logger.info("aww nothing to claim, here have 10 cents go eat a candy")
+            logger.info("No rewards found to claim.")
             return
         common.sleep(0.1)

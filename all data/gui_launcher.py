@@ -1784,7 +1784,7 @@ def run_next_chain_step():
         elif automation_type == "GameLauncher":
             from src import Game_Launcher
             global game_launcher_process
-            game_launcher_process = Process(target=Game_Launcher.launch_limbussy, daemon=True)
+            game_launcher_process = Process(target=Game_Launcher.launch_limbus, daemon=True)
             game_launcher_process.start()
         
         # Move to next step

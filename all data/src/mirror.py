@@ -473,8 +473,7 @@ class Mirror:
             self.squad_set = True
         # Click battle button
         common.mouse_move_click(*common.scale_coordinates_1080p(1722, 881))
-        # Fuck PM, battle button now blocked by event prompt... Wait at most 10 sec or win rate button, or skip button detected to go ahead
-        for i in range(20):
+        # r i in range(20):
             if common.element_exist("pictures/battle/winrate.png"):
                 logger.debug("Premature break due to winrate detected.")
                 break
