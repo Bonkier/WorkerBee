@@ -143,7 +143,8 @@ class Updater:
                     raise
                     
             # Fall back to checking version.json file in the repository
-            version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json"
+            # Add timestamp to prevent caching
+            version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
             
             try:
                 with urllib.request.urlopen(version_file_url) as response:
@@ -183,6 +184,7 @@ class Updater:
         latest_clean = latest_version.strip() if latest_version else ""
         
         # Debug logging
+        logger.info(f"Checking for updates... Local: '{current_clean}', Remote: '{latest_clean}'")
             
         # Check if we need to update (simple string comparison)
         if current_clean != latest_clean:
