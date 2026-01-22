@@ -21,7 +21,7 @@ logger = logging.getLogger("updater")
 EXCLUDED_PATHS = [
     "backups/",    # Backup directory
     "temp/",      # Temporary files
-    "*.log"        # Any log files (including Pro_Peepol's.log)
+    "*.log"        # Any log files
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)

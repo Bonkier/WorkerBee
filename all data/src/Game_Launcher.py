@@ -18,15 +18,7 @@ BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
 
-# Setting up basic logging configuration
-LOG_FILENAME = os.path.join(BASE_PATH, "Pro_Peepol's.log")
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILENAME)
-    ]
-)
+# Logging is handled by common.py
 logger = logging.getLogger(__name__)
 
 # Signal handler for clean shutdown
@@ -52,7 +44,7 @@ def launch_game(appid):
     steam_exe = get_steam_exe()
     subprocess.Popen([steam_exe, f"steam://rungameid/{appid}"])
 
-def launch_limbussy():
+def launch_limbus():
     launch_game("1973530")
     while not common.element_exist("pictures/CustomAdded1080p/launch/Clear_All_Caches.png"):
         common.sleep(1)
