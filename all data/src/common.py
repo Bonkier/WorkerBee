@@ -923,24 +923,41 @@ def click_skip(times):
 def wait_skip(img_path, threshold=0.8):
     """Clicks on the skip button and waits for specified element to appear"""
     mouse_move_click(*scale_coordinates_1080p(895, 465))
-    while(not element_exist(img_path, threshold)):
+    
+    # Check first to avoid unnecessary clicks if already there
+    if element_exist(img_path, threshold):
+        click_matching(img_path, threshold)
+        return
+
+    # Aggressive clicking loop: click multiple times per check to ensure input is registered
+    while not element_exist(img_path, threshold):
         mouse_click()
+        time.sleep(0.05)
+        mouse_click()
+        time.sleep(0.05)
+        
     click_matching(img_path, threshold)
 
 def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Find and click on image match. Returns True if clicked, False if not found."""
-    found = ifexist_match(image_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot)
-    if found:
-        x, y = found[0]
-        mouse_move_click(x, y, log_click=False)
-        # Handle both multiprocessing.Value and plain float
-        delay = shared_vars.click_delay.value if hasattr(shared_vars.click_delay, 'value') else shared_vars.click_delay
-        time.sleep(delay)
-        return True
-    elif recursive:
-        return click_matching(image_path, threshold, area, mousegoto200, grayscale=grayscale, no_grayscale=no_grayscale, debug=debug, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=None)
-    else:
-        return False
+    # Iterative implementation to avoid recursion depth issues and improve performance
+    while True:
+        found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot)
+        if found:
+            x, y = found[0]
+            mouse_move_click(x, y, log_click=False)
+            # Handle both multiprocessing.Value and plain float
+            delay = shared_vars.click_delay.value if hasattr(shared_vars.click_delay, 'value') else shared_vars.click_delay
+            time.sleep(delay)
+            return True
+        
+        if not recursive:
+            return False
+            
+        # If recursive, loop again with fresh screenshot
+        screenshot = None
+        # Minimal sleep to yield CPU but stay responsive
+        time.sleep(0.05)
     
 def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Checks if the element exists if not returns none"""
