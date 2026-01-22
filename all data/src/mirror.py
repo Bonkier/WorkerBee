@@ -740,7 +740,21 @@ class Mirror:
         fusion_gifts = self.filter_exception_gifts(fusion_gifts, screenshot, exception_gifts)
         
         # Strictly filter results to ensure we don't pick up gifts from the fusion slots below
-        return [x for x in fusion_gifts if x[1] < common.scale_y(800)]
+        fusion_gifts = [x for x in fusion_gifts if x[1] < common.scale_y(800)]
+
+        # Filter out coordinates that are too close to each other (duplicates)
+        unique_gifts = []
+        for gift in fusion_gifts:
+            is_duplicate = False
+            for unique in unique_gifts:
+                # Check distance (e.g. within 20 pixels)
+                if abs(gift[0] - unique[0]) < common.scale_x(20) and abs(gift[1] - unique[1]) < common.scale_y(20):
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                unique_gifts.append(gift)
+        
+        return unique_gifts
     
     def filter_exception_gifts(self, fusion_gifts, screenshot=None, exception_gifts=None):
         """Remove status detections that are inside exception gift areas"""
@@ -887,7 +901,7 @@ class Mirror:
                 click_count = 0
                 for x,y in fusion_gifts:
                     common.mouse_move_click(x, y)
-                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png")
+                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
                     click_count += 1
                     if click_count == 3:
                         if not self.fuse():
@@ -900,7 +914,7 @@ class Mirror:
                 click_count = 0
                 for x,y in fusion_gifts:
                     common.mouse_move_click(x, y)
-                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png")
+                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
                     click_count += 1
                 common.click_matching("pictures/mirror/restshop/scroll_bar.png")
                 for i in range(5):
@@ -913,7 +927,7 @@ class Mirror:
                 if (len(fusion_gifts_scroll) + click_count) >= 3:
                     for x,y in fusion_gifts_scroll:
                         common.mouse_move_click(x, y)
-                        common.click_matching("pictures/mirror/restshop/fusion/forecasts.png")
+                        common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
                         click_count += 1
                         if click_count == 3:
                             if not self.fuse():
