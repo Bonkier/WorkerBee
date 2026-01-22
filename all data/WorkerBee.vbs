@@ -7,4 +7,4 @@ dataFolder = currentFolder & "\all data"
 
 shell.CurrentDirectory = dataFolder
 
-shell.Run "python gui_launcher.py", 0, False
+shell.Run "python bootstrapper.py", 0, False
