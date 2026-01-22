@@ -16,4 +16,5 @@ Link.Save
 
 MsgBox "Shortcut created successfully! You can now use 'Launch App'.", 64, "Installation Complete"
 
-FSO.DeleteFile WScript.ScriptFullName
+' Use cmd to delete the file after a short delay to ensure the script has terminated
+Shell.Run "cmd /c ping 127.0.0.1 -n 2 > nul & del """ & WScript.ScriptFullName & """", 0, False
