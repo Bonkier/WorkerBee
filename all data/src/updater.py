@@ -11,13 +11,13 @@ import subprocess
 import platform
 import threading
 import fnmatch
-import configparser  # Add this import for config modification
+import configparser  # Config modification lib
 from datetime import datetime
 
-# Configure logging
+# Configure log
 logger = logging.getLogger("updater")
 
-# Define exclusions - files/directories that should never be updated
+# Define exclusions
 EXCLUDED_PATHS = [
     "backups/",    # Backup directory
     "temp/",      # Temporary files
