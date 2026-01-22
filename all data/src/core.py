@@ -210,9 +210,21 @@ def ego_check():
         logger.debug(f"Processing {len(bad_clashes)} bad clashes for EGO usage")
         bad_clashes = [x for x in bad_clashes if x[1] > common.scale_y(1023)]
         for x,y in bad_clashes:
-            usable_ego = []
             offset_x, offset_y = common.scale_offset_1440p(-55, 100)
-            common.mouse_move(x + offset_x, y + offset_y)
+            slot_x, slot_y = x + offset_x, y + offset_y
+            
+            # Check if EGO is already selected (sanity icon visible near slot)
+            region_size = common.uniform_scale_single(100)
+            if common.ifexist_match("pictures/battle/ego/sanity.png", threshold=0.8, 
+                                  x1=max(0, int(slot_x - region_size)), y1=max(0, int(slot_y - region_size)), 
+                                  x2=int(slot_x + region_size), y2=int(slot_y + region_size)):
+                logger.info("Struggling EGO detected, switching to defensive")
+                common.mouse_move_click(slot_x, slot_y)
+                common.sleep(0.5)
+                continue
+
+            usable_ego = []
+            common.mouse_move(slot_x, slot_y)
             common.mouse_hold()
             egos = common.match_image("pictures/battle/ego/sanity.png")
             for i in egos:
