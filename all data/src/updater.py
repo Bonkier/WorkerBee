@@ -81,7 +81,7 @@ class Updater:
             self.all_data_dir = os.path.join(self.parent_dir, "all data")
         
         # Create full paths
-        self.version_file_path = os.path.join(self.parent_dir, current_version_file)
+        self.version_file_path = os.path.join(self.all_data_dir, current_version_file)
         
         # Put backup folder in parent directory (same level as 'all data')
         self.backup_path = os.path.join(self.parent_dir, backup_folder)
@@ -142,7 +142,7 @@ class Updater:
                     raise
                     
             # Fall back to checking version.json file in the repository
-            version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/version.json"
+            version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json"
             
             try:
                 with urllib.request.urlopen(version_file_url) as response:

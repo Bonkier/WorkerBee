@@ -2250,7 +2250,7 @@ sidebar_footer.pack(side="bottom", fill="x", padx=10, pady=20)
 
 def get_display_version():
     try:
-        v_path = os.path.join(MAIN_DIR, "version.json")
+        v_path = os.path.join(ALL_DATA_DIR, "version.json")
         if os.path.exists(v_path):
             with open(v_path, "r") as f:
                 v = f.read().strip()
