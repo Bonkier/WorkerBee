@@ -6,7 +6,7 @@ CurrentPath = FSO.GetParentFolderName(WScript.ScriptFullName)
 
 IconPath = CurrentPath & "\all data\app_icon.ico"
 TargetPath = CurrentPath & "\all data\WorkerBee.vbs"
-ShortcutPath = CurrentPath & "\Launch App.lnk"
+ShortcutPath = CurrentPath & "\WorkerBee.lnk"
 
 Set Link = Shell.CreateShortcut(ShortcutPath)
 Link.TargetPath = TargetPath
