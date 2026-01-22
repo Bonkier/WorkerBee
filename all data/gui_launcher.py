@@ -2280,7 +2280,17 @@ def get_display_version():
         v_path = os.path.join(ALL_DATA_DIR, "version.json")
         if os.path.exists(v_path):
             with open(v_path, "r") as f:
-                v = f.read().strip()
+                content = f.read().strip()
+                # Try parsing as JSON first
+                try:
+                    data = json.loads(content)
+                    if isinstance(data, dict) and "version" in data:
+                        v = str(data["version"])
+                    else:
+                        v = content
+                except json.JSONDecodeError:
+                    v = content
+                
                 if v:
                     return f"v{v}" if v[0].isdigit() else v
     except:
@@ -5153,16 +5163,26 @@ if __name__ == "__main__":
             # Load checkbox data at startup (before any automation can run)
             load_checkbox_data()
             
-            # Check for updates if enabled
-            if config['Settings'].get('auto_update', False):
-                try:
-                    import updater
-                    def update_cb(success, msg):
-                        if success:
-                            logger.info(f"Auto-update: {msg}")
-                    updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
-                except Exception as e:
-                    logger.error(f"Failed to initialize auto-updater: {e}")
+            # Check for updated flag
+            if "--updated" in sys.argv:
+                messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
+
+            # Check internet connection
+            if not common.check_internet_connection():
+                root.title("WorkerBee | Bonk (Offline)")
+                logger.warning("No internet connection detected. Running in offline mode.")
+                messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
+            else:
+                # Check for updates if enabled and online
+                if config['Settings'].get('auto_update', False):
+                    try:
+                        import updater
+                        def update_cb(success, msg):
+                            if success:
+                                logger.info(f"Auto-update: {msg}")
+                        updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
+                    except Exception as e:
+                        logger.error(f"Failed to initialize auto-updater: {e}")
             
             check_processes()
             
