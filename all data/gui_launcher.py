@@ -2854,6 +2854,10 @@ def load_mirror_settings():
             
             # Check if it's a directory to determine display name
             full_path = os.path.join(BASE_PATH, image_path)
+        # Helper to create checkbox
+        def add_exception_checkbox(path, parent):
+            filename = os.path.basename(path)
+            full_path = os.path.join(BASE_PATH, path)
             if os.path.isdir(full_path):
                 display_name = filename
             else:
@@ -2862,16 +2866,40 @@ def load_mirror_settings():
             # Create toggle variable (default OFF, ON if filename in saved exceptions)
             var = ctk.BooleanVar(value=display_name in fusion_exceptions_data)
             fuse_exception_vars[image_path] = var
+            fuse_exception_vars[path] = var
             
             # Create checkbox
             checkbox = ctk.CTkCheckBox(
                 exceptions_container,
+                parent,
                 text=display_name,
                 variable=var,
                 command=update_fuse_exception_from_toggle,
                 font=UIStyle.SMALL_FONT
             )
             checkbox.pack(anchor="w", pady=1)
+
+        # Separate CustomEgoGifts from other items
+        custom_gifts_path = None
+        other_items = []
+        
+        for item in fuse_images:
+            if os.path.basename(item) == "CustomEgoGifts":
+                custom_gifts_path = item
+            else:
+                other_items.append(item)
+
+        # Add CustomEgoGifts first if it exists
+        if custom_gifts_path:
+            add_exception_checkbox(custom_gifts_path, exceptions_container)
+            # Add separator if there are other items
+            if other_items:
+                separator = ctk.CTkFrame(exceptions_container, height=2, fg_color="#404040")
+                separator.pack(fill="x", pady=5)
+        
+        # Add other items
+        for image_path in other_items:
+            add_exception_checkbox(image_path, exceptions_container)
     else:
         # Show message if no images found
         no_images_label = ctk.CTkLabel(
