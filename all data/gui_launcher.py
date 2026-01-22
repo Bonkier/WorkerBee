@@ -2838,7 +2838,7 @@ def load_mirror_settings():
             anchor="w"
         )
         btn.configure(command=make_fuse_toggle(btn))
-        btn.pack(anchor="w", pady=(0, 6))
+        btn.pack(pady=(0, 6))
         
         # Create the expandable frame (hidden by default)
         fuse_exception_expand_frame = ctk.CTkFrame(master=wrapper, fg_color="transparent", corner_radius=0)

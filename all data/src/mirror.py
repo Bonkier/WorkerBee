@@ -704,7 +704,7 @@ class Mirror:
         x1 = common.scale_x(1235)
         y1 = common.scale_y_1080p(300)
         x2 = common.scale_x_1080p(1700)
-        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for robust matching
+        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for matching
         
         screenshot = common.capture_screen()
         
