@@ -145,6 +145,9 @@ class Mirror:
             common.click_skip(15)
             self.event_choice()
 
+        elif common.click_matching("pictures/events/proceed.png", recursive=False):
+            self.event_choice()
+
         elif common.element_exist("pictures/mirror/general/danteh.png"): #checks if currently navigating
             self.navigation()
 

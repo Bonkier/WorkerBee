@@ -2418,6 +2418,37 @@ master_btn.pack(pady=(0, 6))
 master_expand_frame = ctk.CTkFrame(master=master_wrapper, fg_color="transparent", corner_radius=0)
 master_expand_frame.pack_forget()
 
+def load_floor_packs():
+    """Dynamically load pack names from image files in floor directories"""
+    floor_packs = {}
+    packs_base_dir = os.path.join(BASE_PATH, "pictures", "mirror", "packs")
+    
+    # Map floor keys (floor1) to folder names (f1)
+    floor_mapping = {
+        "floor1": "f1",
+        "floor2": "f2",
+        "floor3": "f3",
+        "floor4": "f4",
+        "floor5": "f5"
+    }
+    
+    for floor_key, folder_name in floor_mapping.items():
+        floor_dir = os.path.join(packs_base_dir, folder_name)
+        packs = []
+        
+        if os.path.exists(floor_dir):
+            for filename in os.listdir(floor_dir):
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    # Remove extension to get pack name
+                    pack_name = os.path.splitext(filename)[0]
+                    packs.append(pack_name)
+        
+        # Sort alphabetically for consistent UI
+        packs.sort()
+        floor_packs[floor_key] = packs
+        
+    return floor_packs
+
 def load_mirror_settings():
     """Lazy load all mirror settings sections"""
     global grace_expand_frame, fuse_exception_expand_frame, pack_dropdown_vars
@@ -2650,13 +2681,7 @@ def load_mirror_settings():
     PACK_COLUMNS = [["floor1", "floor2"], ["floor3", "floor4"], ["floor5"]]
 
     # Define packs for each floor
-    FLOOR_PACKS = {
-        "floor1": ["erosion", "factory", "forgotten", "gamblers", "nagel", "nest", "outcast", "unloving"],
-        "floor2": ["cleaved", "crushed", "erosion", "factory", "gamblers", "hell", "lake", "nest", "pierced", "SEA", "unloving"],
-        "floor3": ["cleaved", "craving", "crushed", "dregs", "flood", "flowers", "indolence", "judgment", "pierced", "repression", "seduction", "subservience", "unconfronting","hatred"],
-        "floor4": ["crawling", "envy", "fullstop", "gloom", "gluttony", "lust", "miracle", "noon", "pride", "sloth", "tearful", "time", "violet", "warp", "world", "wrath", "yield","line2"],
-        "floor5": ["crawling", "crushers", "envy", "gloom", "gluttony", "lcb_check", "lust", "nocturnal", "piercers", "pride", "slicers", "sloth", "tearful", "time", "warp", "world", "wrath", "yield","miracle"]
-    }
+    FLOOR_PACKS = load_floor_packs()
 
     pack_container = ctk.CTkFrame(master_expand_frame)
     pack_container.pack(anchor="center", pady=(0, 15))
