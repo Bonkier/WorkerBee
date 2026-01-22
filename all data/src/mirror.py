@@ -144,7 +144,7 @@ class Mirror:
 
         if common.element_exist("pictures/events/skip.png"): #if hitting the events click skip to determine which is it
             common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-            common.click_skip(6)
+            common.click_skip(15)
             self.event_choice()
 
         elif common.element_exist("pictures/mirror/general/danteh.png"): #checks if currently navigating
@@ -1040,7 +1040,6 @@ class Mirror:
 
     def event_choice(self):
         """Handle different event types and make appropriate choices"""
-        common.sleep(1)
         if common.click_matching("pictures/events/level_up.png", recursive=False):
             common.wait_skip("pictures/events/proceed.png")
             skill_check()
@@ -1069,7 +1068,7 @@ class Mirror:
         elif common.click_matching("pictures/events/gain_gift.png", recursive=False): #Proceed to gain
             common.wait_skip("pictures/events/proceed.png")
             if common.element_exist("pictures/events/skip.png"):
-                common.click_skip(4)
+                common.click_skip(15)
                 self.event_choice()
 
         elif common.element_exist("pictures/events/select_right.png"): #select the right answer
