@@ -3200,14 +3200,12 @@ chain_frame = ctk.CTkFrame(chain_card, fg_color="transparent")
 chain_frame.pack(pady=(0, 10), padx=20, fill="x")
 
 # Launch game toggle
-launch_game_frame = ctk.CTkFrame(chain_frame)
 launch_game_frame = ctk.CTkFrame(chain_frame, fg_color="transparent")
 launch_game_frame.pack(pady=2)
 launch_game_var = ctk.BooleanVar(value=config['Settings'].get('launch_game_before_runs', False))
 launch_game_checkbox = ctk.CTkCheckBox(launch_game_frame, text="Launch Game before runs", variable=launch_game_var, command=save_gui_config, font=UIStyle.BODY_FONT)
 launch_game_checkbox.pack(side="left", padx=(10, 10))
 # Threads input
-threads_chain_frame = ctk.CTkFrame(chain_frame)
 threads_chain_frame = ctk.CTkFrame(chain_frame, fg_color="transparent")
 threads_chain_frame.pack(pady=2)
 ctk.CTkLabel(threads_chain_frame, text="Threads Runs:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left", padx=(10, 5))
@@ -3230,7 +3228,6 @@ def update_chain_threads_runs():
 chain_threads_entry.bind('<Return>', lambda e: update_chain_threads_runs())
 
 # Exp input
-exp_chain_frame = ctk.CTkFrame(chain_frame)
 exp_chain_frame = ctk.CTkFrame(chain_frame, fg_color="transparent")
 exp_chain_frame.pack(pady=2)
 ctk.CTkLabel(exp_chain_frame, text="Exp Runs:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left", padx=(10, 5))
@@ -3253,7 +3250,6 @@ def update_chain_exp_runs():
 chain_exp_entry.bind('<Return>', lambda e: update_chain_exp_runs())
 
 # Mirror input
-mirror_chain_frame = ctk.CTkFrame(chain_frame)
 mirror_chain_frame = ctk.CTkFrame(chain_frame, fg_color="transparent")
 mirror_chain_frame.pack(pady=2)
 ctk.CTkLabel(mirror_chain_frame, text="Mirror Runs:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left", padx=(10, 5))
@@ -3276,7 +3272,6 @@ def update_chain_mirror_runs():
 chain_mirror_entry.bind('<Return>', lambda e: update_chain_mirror_runs())
 
 # Collect rewards toggle
-collect_rewards_frame = ctk.CTkFrame(chain_frame)
 collect_rewards_frame = ctk.CTkFrame(chain_frame, fg_color="transparent")
 collect_rewards_frame.pack(pady=2)
 collect_rewards_var = ctk.BooleanVar(value=config['Settings'].get('collect_rewards_when_finished', False))

@@ -121,7 +121,7 @@ def main(runs, stage, shared_vars=None):
                         # Handle case where common module isn't available
                         pass
                     except Exception as e:
-                                logger.error(f"Error checking for server error: {e}")
+                        logger.error(f"Error checking for server error: {e}")
                         
             except Exception as e:
                 logger.error(f"Error during Exp run {i+1}: {e}")
