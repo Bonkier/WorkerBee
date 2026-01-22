@@ -4817,7 +4817,7 @@ render_help_text()
 # Add Discord invite button at bottom of Help tab
 discord_card = CardFrame(help_scroll)
 discord_card.pack(fill="x", padx=10, pady=10)
-discord_button = ctk.CTkButton(discord_card, text="Join my Discord", command=join_discord, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
+discord_button = ctk.CTkButton(discord_card, text="Join Discord", command=join_discord, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
 discord_button.pack(pady=20)
 
 if load_settings_on_startup:

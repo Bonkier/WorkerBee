@@ -434,6 +434,11 @@ class Mirror:
                 common.mouse_move(x, y)
                 common.mouse_drag(x, y + 350)
                 return
+            elif len(selectable_priority_packs_pos) > 0:
+                x, y = selectable_priority_packs_pos[0]
+                common.mouse_move(x, y)
+                common.mouse_drag(x, y + 350)
+                return
             elif len(selectable_packs_pos) > 0:
                 x, y = selectable_packs_pos[0]
                 common.mouse_move(x, y)
