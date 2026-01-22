@@ -291,7 +291,7 @@ class Mirror:
         status = mirror_utils.pack_choice(self.status) or "pictures/mirror/packs/status/poise_pack.png"
         floor = self.floor_id()
         if floor == "floor1":
-            common.sleep(4)
+            common.sleep(0.5)
 
         if common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", 0.9):
             if shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
@@ -299,7 +299,7 @@ class Mirror:
                 floor = self.floor_id()
 
         elif common.element_exist("pictures/mirror/packs/floor_hard.png", 0.9): #accounts for cost additions or hard mode swap
-            common.sleep(4) # the ego gift crediting blocks the refresh button
+            common.sleep(0.5) # the ego gift crediting blocks the refresh button
             if not shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
                 common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.9, recursive=False)
                 floor = self.floor_id()
@@ -318,12 +318,13 @@ class Mirror:
         retry_attempt = 10
         while retry_attempt > 0:
             retry_attempt -= 1
-            screenshot = common.capture_screen()
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
-            common.sleep(2)
+            common.sleep(0.2)
+            screenshot = common.capture_screen()
+            refresh_btn_available = False
             if found := common.match_image("pictures/mirror/general/refresh.png", 0.9, screenshot=screenshot):
                 x,y = found[0]
-            refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
+                refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
 
             # Detect priority packs
             selectable_priority_packs_pos = []
@@ -429,6 +430,10 @@ class Mirror:
                 common.mouse_drag(x, y + 350)
                 return
             else:
+                if retry_attempt > 0:
+                    logger.info("No packs found, retrying...")
+                    continue
+                
                 logger.info("No available option, have to choose from except pack")
                 if len(except_packs_pos) == 0:
                     raise ValueError("No exception pack to choose")
