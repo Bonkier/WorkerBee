@@ -932,9 +932,7 @@ def wait_skip(img_path, threshold=0.8):
     # Aggressive clicking loop: click multiple times per check to ensure input is registered
     while not element_exist(img_path, threshold):
         mouse_click()
-        time.sleep(0.05)
         mouse_click()
-        time.sleep(0.05)
         
     click_matching(img_path, threshold)
 
