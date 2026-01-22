@@ -41,6 +41,11 @@ EXPECTED_WIDTH: int | None = None
 EXPECTED_HEIGHT: int | None = None
 IS_NON_STANDARD_RATIO: bool | None = None  # Whether current monitor size follow standard 16:9 ratio, e.g. 16:10
 
+# Global MSS instance for performance
+_sct = mss()
+# Template cache to reduce disk I/O
+_template_cache = {}
+
 # Determine if running as executable or script
 def get_base_path():
     """Get the base directory path for resource access"""
@@ -153,29 +158,28 @@ def detect_monitor_resolution():
     """Detect the actual resolution of the game monitor"""
     global MONITOR_WIDTH, MONITOR_HEIGHT, IS_NON_STANDARD_RATIO, EXPECTED_WIDTH, EXPECTED_HEIGHT
     
-    with mss() as sct:
-        # Use monitor 1 as default if shared_vars.game_monitor doesn't exist yet
-        monitor_index = getattr(shared_vars, 'game_monitor', 1)
-        monitor = sct.monitors[monitor_index]
-        MONITOR_WIDTH = monitor['width']
-        MONITOR_HEIGHT = monitor['height']
-        
-        logger.info(f"Detected montior size: {MONITOR_WIDTH}x{MONITOR_HEIGHT}")
+    # Use monitor 1 as default if shared_vars.game_monitor doesn't exist yet
+    monitor_index = getattr(shared_vars, 'game_monitor', 1)
+    monitor = _sct.monitors[monitor_index]
+    MONITOR_WIDTH = monitor['width']
+    MONITOR_HEIGHT = monitor['height']
+    
+    logger.info(f"Detected montior size: {MONITOR_WIDTH}x{MONITOR_HEIGHT}")
 
-        # Calculate aspect ratio
-        aspect_ratio = MONITOR_WIDTH / MONITOR_HEIGHT
-        IS_NON_STANDARD_RATIO = not(abs(aspect_ratio - REFERENCE_ASPECT_RATIO) < 0.0001)
+    # Calculate aspect ratio
+    aspect_ratio = MONITOR_WIDTH / MONITOR_HEIGHT
+    IS_NON_STANDARD_RATIO = not(abs(aspect_ratio - REFERENCE_ASPECT_RATIO) < 0.0001)
 
-        EXPECTED_WIDTH = MONITOR_WIDTH
-        EXPECTED_HEIGHT = MONITOR_HEIGHT
-        if IS_NON_STANDARD_RATIO:
-            if aspect_ratio > REFERENCE_ASPECT_RATIO:
-                EXPECTED_WIDTH = round(MONITOR_HEIGHT * REFERENCE_ASPECT_RATIO)
-            else:
-                EXPECTED_HEIGHT = round(MONITOR_WIDTH / REFERENCE_ASPECT_RATIO)
-            logger.info(f"Non-standard monitor ratio detected (expect {EXPECTED_WIDTH}x{EXPECTED_HEIGHT} instead)")
+    EXPECTED_WIDTH = MONITOR_WIDTH
+    EXPECTED_HEIGHT = MONITOR_HEIGHT
+    if IS_NON_STANDARD_RATIO:
+        if aspect_ratio > REFERENCE_ASPECT_RATIO:
+            EXPECTED_WIDTH = round(MONITOR_HEIGHT * REFERENCE_ASPECT_RATIO)
+        else:
+            EXPECTED_HEIGHT = round(MONITOR_WIDTH / REFERENCE_ASPECT_RATIO)
+        logger.info(f"Non-standard monitor ratio detected (expect {EXPECTED_WIDTH}x{EXPECTED_HEIGHT} instead)")
 
-        return MONITOR_WIDTH, MONITOR_HEIGHT
+    return MONITOR_WIDTH, MONITOR_HEIGHT
 
 # Initialize monitor resolution at module load time
 detect_monitor_resolution()
@@ -194,18 +198,16 @@ def mouse_scroll(amount):
 
 def _validate_monitor_index(monitor_index, fallback=1):
     """Validate and return a safe monitor index"""
-    with mss() as sct:
-        if monitor_index >= len(sct.monitors):
-            logger.warning(f"Monitor index {monitor_index} out of range")
-            return fallback
-        return monitor_index
+    if monitor_index >= len(_sct.monitors):
+        logger.warning(f"Monitor index {monitor_index} out of range")
+        return fallback
+    return monitor_index
 
 def get_monitor_info(monitor_index=None):
     """Get information about the specified monitor or the game monitor"""
-    with mss() as sct:
-        mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
-        mon_idx = _validate_monitor_index(mon_idx)
-        return sct.monitors[mon_idx]
+    mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
+    mon_idx = _validate_monitor_index(mon_idx)
+    return _sct.monitors[mon_idx]
 
 def get_MonCords(x, y):
     """Convert local coordinates to global monitor coordinates"""
@@ -259,21 +261,20 @@ def key_press(Key, presses=1):
 
 def capture_screen(monitor_index=None):
     """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""
-    with mss() as sct:
-        # Use specified monitor or default game monitor
-        mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
-        mon_idx = _validate_monitor_index(mon_idx)
-            
-        monitor = sct.monitors[mon_idx]
+    # Use specified monitor or default game monitor
+    mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
+    mon_idx = _validate_monitor_index(mon_idx)
         
-        # Capture the screen with the current resolution
-        screenshot = sct.grab(monitor)
-        img = np.array(screenshot)
-        
-        # Convert the color from BGRA to BGR for OpenCV compatibility
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-        
-        return img
+    monitor = _sct.monitors[mon_idx]
+    
+    # Capture the screen with the current resolution
+    screenshot = _sct.grab(monitor)
+    img = np.array(screenshot)
+    
+    # Convert the color from BGRA to BGR for OpenCV compatibility
+    img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    
+    return img
 
 def save_match_screenshot(screenshot, top_left, bottom_right, template_path, match_index):
     """Saves a screenshot of the matched region, preserving directory structure in 'higher_res'."""
@@ -414,9 +415,16 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
         color_flag = cv2.IMREAD_COLOR
     else:
         color_flag = cv2.IMREAD_GRAYSCALE if (grayscale or shared_vars.convert_images_to_grayscale) else cv2.IMREAD_COLOR
-    original_template = cv2.imread(full_template_path, color_flag)
-    if original_template is None:
-        raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
+    
+    # Check cache
+    cache_key = (full_template_path, color_flag)
+    if cache_key in _template_cache:
+        original_template = _template_cache[cache_key]
+    else:
+        original_template = cv2.imread(full_template_path, color_flag)
+        if original_template is None:
+            raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
+        _template_cache[cache_key] = original_template
     
     # Skip scaling for CustomFuse images - use them at their original resolution
     if is_custom_fuse_image(full_template_path):
@@ -986,22 +994,20 @@ def error_screenshot():
     """Take a screenshot for error debugging"""
     error_dir = os.path.join(BASE_PATH, "error")
     os.makedirs(error_dir, exist_ok=True)
-    with mss() as sct:
-        monitor = sct.monitors[shared_vars.game_monitor]  # Use the configured game monitor
-        screenshot = sct.grab(monitor)
-        png = to_png(screenshot.rgb, screenshot.size)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        with open(os.path.join(error_dir, timestamp + ".png"), "wb") as f:
-            f.write(png)
+    monitor = _sct.monitors[shared_vars.game_monitor]  # Use the configured game monitor
+    screenshot = _sct.grab(monitor)
+    png = to_png(screenshot.rgb, screenshot.size)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    with open(os.path.join(error_dir, timestamp + ".png"), "wb") as f:
+        f.write(png)
 
 def set_game_monitor(monitor_index):
     """Set which monitor the game is running on"""
-    with mss() as sct:
-        if monitor_index < 1 or monitor_index >= len(sct.monitors):
-            logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(sct.monitors)-1})")
-            shared_vars.game_monitor = 1
-        else:
-            shared_vars.game_monitor = monitor_index
+    if monitor_index < 1 or monitor_index >= len(_sct.monitors):
+        logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(_sct.monitors)-1})")
+        shared_vars.game_monitor = 1
+    else:
+        shared_vars.game_monitor = monitor_index
     
     # Re-detect monitor resolution after changing monitor
     detect_monitor_resolution()
@@ -1009,19 +1015,18 @@ def set_game_monitor(monitor_index):
 
 def list_available_monitors():
     """List all available monitors and their properties"""
-    with mss() as sct:
-        monitors = []
-        for i, monitor in enumerate(sct.monitors):
-            if i == 0:  # Skip the "all monitors" entry
-                continue
-            monitors.append({
-                "index": i,
-                "left": monitor["left"],
-                "top": monitor["top"],
-                "width": monitor["width"],
-                "height": monitor["height"]
-            })
-        return monitors
+    monitors = []
+    for i, monitor in enumerate(_sct.monitors):
+        if i == 0:  # Skip the "all monitors" entry
+            continue
+        monitors.append({
+            "index": i,
+            "left": monitor["left"],
+            "top": monitor["top"],
+            "width": monitor["width"],
+            "height": monitor["height"]
+        })
+    return monitors
 
 def get_monitor_resolution():
     """Get the current monitor resolution"""
