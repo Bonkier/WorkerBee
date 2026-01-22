@@ -19,7 +19,7 @@ from PIL import ImageGrab
 import shared_vars
 
 pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.05
+pyautogui.PAUSE = 0.01
 
 # Template reference resolutions - used only for template matching
 REFERENCE_WIDTH_1440P = 2560
@@ -221,9 +221,10 @@ def mouse_move(x, y):
 
 def mouse_click():
     """Performs a left click on the current position"""
-    caller_info = _get_caller_info()
-    current_pos = pyautogui.position()
-    logger.debug(f"Mouse click at ({current_pos.x}, {current_pos.y}) - {caller_info}", dirty=True)
+    if logger.isEnabledFor(logging.DEBUG):
+        caller_info = _get_caller_info()
+        current_pos = pyautogui.position()
+        logger.debug(f"Mouse click at ({current_pos.x}, {current_pos.y}) - {caller_info}", dirty=True)
     pyautogui.click()
 
 def mouse_hold():
@@ -242,16 +243,17 @@ def mouse_up():
 
 def mouse_move_click(x, y, log_click=True):
     """Moves the mouse to the X,Y coordinate specified and performs a left click"""
-    if log_click:
+    if log_click and logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse move and click to ({x}, {y}) - {caller_info}", dirty=True)
-    mouse_move(x, y)
-    pyautogui.click()
+    real_x, real_y = get_MonCords(x, y)
+    pyautogui.click(real_x, real_y)
 
 def mouse_drag(x, y, seconds=1):
     """Drag from current position to the specified coords on the game monitor"""
-    caller_info = _get_caller_info()
-    logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
+    if logger.isEnabledFor(logging.DEBUG):
+        caller_info = _get_caller_info()
+        logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
     pyautogui.dragTo(real_x, real_y, seconds, button='left')
 
@@ -374,12 +376,13 @@ def _get_caller_info():
         pass
     return "unknown"
 
-def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None):
+def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Internal function that handles all template matching logic"""
     
     full_template_path = resource_path(template_path)
         
-    screenshot = capture_screen()
+    if screenshot is None:
+        screenshot = capture_screen()
     original_screenshot_height, original_screenshot_width = screenshot.shape[:2]
     
     # Handle region cropping
@@ -492,19 +495,20 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     filtered_boxes = non_max_suppression_fast(boxes)
     
     if not quiet_failure:
-        caller_info = _get_caller_info()
-        highest_match_rate = result.max() if result.size > 0 else 0.0
-        if len(filtered_boxes) > 0:
-            # Get center coordinates of matches for logging (adjusted for crop offset)
-            locations = []
-            for box in filtered_boxes:
-                center_x = int((box[0] + box[2]) / 2) + crop_offset_x
-                center_y = int((box[1] + box[3]) / 2) + crop_offset_y
-                locations.append(f"({center_x},{center_y})")
-            locations_str = ", ".join(locations)
-            logger.debug(f"Match found: {template_path} at {locations_str} - found {len(filtered_boxes)} matches - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
-        else:
-            logger.debug(f"Match not found: {template_path} - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
+        if logger.isEnabledFor(logging.DEBUG):
+            caller_info = _get_caller_info()
+            highest_match_rate = result.max() if result.size > 0 else 0.0
+            if len(filtered_boxes) > 0:
+                # Get center coordinates of matches for logging (adjusted for crop offset)
+                locations = []
+                for box in filtered_boxes:
+                    center_x = int((box[0] + box[2]) / 2) + crop_offset_x
+                    center_y = int((box[1] + box[3]) / 2) + crop_offset_y
+                    locations.append(f"({center_x},{center_y})")
+                locations_str = ", ".join(locations)
+                logger.debug(f"Match found: {template_path} at {locations_str} - found {len(filtered_boxes)} matches - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
+            else:
+                logger.debug(f"Match not found: {template_path} - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
     
     if (debug or shared_vars.debug_image_matches) and len(filtered_boxes) > 0:
         
@@ -596,7 +600,7 @@ def get_path_specific_adjustment(template_path):
     image_adjustments = config.get("image_adjustments", {})
     return image_adjustments.get(template_path, 0.0)
 
-def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None):
+def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Finds the image specified and returns coordinates depending on area: center, bottom, left, right, top.
     
     Args:
@@ -604,17 +608,17 @@ def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, 
     """
     if mousegoto200:
         mouse_move(*scale_coordinates_1080p(200, 200))
-    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2)
+    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot)
 
-def greyscale_match_image(template_path, threshold=0.75, area="center", no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None):
+def greyscale_match_image(template_path, threshold=0.75, area="center", no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Finds the image specified and returns the center coordinates, regardless of screen resolution,
     and saves screenshots of each match found."""
-    return _base_match_template(template_path, threshold, grayscale=True, no_grayscale=no_grayscale, debug=debug, area=area, quiet_failure=quiet_failure, x1=x1, y1=y1, x2=x2, y2=y2)
+    return _base_match_template(template_path, threshold, grayscale=True, no_grayscale=no_grayscale, debug=debug, area=area, quiet_failure=quiet_failure, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
 
-def debug_match_image(template_path, threshold=0.8, area="center", grayscale=False, no_grayscale=False, x1=None, y1=None, x2=None, y2=None):
+def debug_match_image(template_path, threshold=0.8, area="center", grayscale=False, no_grayscale=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Finds the image specified and returns the center coordinates, regardless of screen resolution,
        and draws rectangles on each match found."""
-    return _base_match_template(template_path, threshold, grayscale=grayscale, no_grayscale=no_grayscale, debug=True, area=area, x1=x1, y1=y1, x2=x2, y2=y2)
+    return _base_match_template(template_path, threshold, grayscale=grayscale, no_grayscale=no_grayscale, debug=True, area=area, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
 
 def proximity_check(list1, list2, threshold):
     """Check which coordinates in list1 are close to any in list2"""
@@ -923,9 +927,9 @@ def wait_skip(img_path, threshold=0.8):
         mouse_click()
     click_matching(img_path, threshold)
 
-def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None):
+def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Find and click on image match. Returns True if clicked, False if not found."""
-    found = ifexist_match(image_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2)
+    found = ifexist_match(image_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot)
     if found:
         x, y = found[0]
         mouse_move_click(x, y, log_click=False)
@@ -934,18 +938,18 @@ def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False,
         time.sleep(delay)
         return True
     elif recursive:
-        return click_matching(image_path, threshold, area, mousegoto200, grayscale=grayscale, no_grayscale=no_grayscale, debug=debug, x1=x1, y1=y1, x2=x2, y2=y2)
+        return click_matching(image_path, threshold, area, mousegoto200, grayscale=grayscale, no_grayscale=no_grayscale, debug=debug, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=None)
     else:
         return False
     
-def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None):
+def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Checks if the element exists if not returns none"""
-    result = match_image(img_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2)
+    result = match_image(img_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
     return result
 
-def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None):
+def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """checks if exists and returns the image location if found"""
-    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, False, x1, y1, x2, y2)
+    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, False, x1, y1, x2, y2, screenshot)
     return result
 
 def squad_order(status):
@@ -983,9 +987,10 @@ def squad_order(status):
     
     return sinner_order
 
-def luminence(x,y):
+def luminence(x,y, screenshot=None):
     """Get Luminence of the pixel and return overall coefficient"""
-    screenshot = capture_screen()
+    if screenshot is None:
+        screenshot = capture_screen()
     pixel_image = screenshot[y, x]
     coeff = (int(pixel_image[0]) + int(pixel_image[1]) + int(pixel_image[2])) / 3
     return coeff
