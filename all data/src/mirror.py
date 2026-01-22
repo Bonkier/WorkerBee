@@ -144,7 +144,7 @@ class Mirror:
 
         if common.element_exist("pictures/events/skip.png"): #if hitting the events click skip to determine which is it
             common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-            common.click_skip(4)
+            common.click_skip(6)
             self.event_choice()
 
         elif common.element_exist("pictures/mirror/general/danteh.png"): #checks if currently navigating
