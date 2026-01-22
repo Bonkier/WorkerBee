@@ -14,6 +14,6 @@ Link.IconLocation = IconPath
 Link.WindowStyle = 7 
 Link.Save
 
-MsgBox "Shortcut created successfully! You can now use 'Launch App'.", 64, "Installation Complete"
+MsgBox "Shortcut created successfully! You can now use 'WorkerBee'.", 64, "Installation Complete"
 
 FSO.DeleteFile WScript.ScriptFullName
