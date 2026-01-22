@@ -21,7 +21,8 @@ logger = logging.getLogger("updater")
 EXCLUDED_PATHS = [
     "backups/",    # Backup directory
     "temp/",      # Temporary files
-    "*.log"        # Any log files
+    "*.log",       # Any log files
+    "profiles/"    # User profiles
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)
@@ -50,7 +51,7 @@ class Updater:
         self.temp_folder = temp_folder
         self.exclusions = EXCLUDED_PATHS
         
-        # Default GitHub API URL if none provided
+        # Default GitHub API URL fallback
         if api_url is None:
             self.api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
         else:

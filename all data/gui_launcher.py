@@ -847,7 +847,8 @@ def load_gui_config():
         'convert_images_to_grayscale': True,
         'reconnection_delay': 6,
         'reconnect_when_internet_reachable': True,
-        'click_delay': 0.5
+        'click_delay': 0.5,
+        'auto_update': False
     }
     
     # Default log filter values
@@ -952,6 +953,7 @@ def save_gui_config(config=None):
                 'reconnect_when_internet_reachable': bool(shared_vars.reconnect_when_internet_reachable.value) if 'shared_vars' in globals() else False,
                 'good_pc_mode': bool(shared_vars.good_pc_mode.value) if 'shared_vars' in globals() else True,
                 'click_delay': float(shared_vars.click_delay.value) if 'shared_vars' in globals() else 0.5,
+                'auto_update': bool(auto_update_var.get()) if 'auto_update_var' in globals() else False,
             }
         except Exception as e:
             pass
@@ -1168,7 +1170,7 @@ class OptimizedLogHandler(logging.Handler):
                             root.after(0, self._append_log, msg)
                         except tk.TclError:
                             # Main window was destroyed, stop the handler
-                            self.stop()
+                            self.running = False
                             break
                 
                 self.queue.task_done()
@@ -2155,6 +2157,7 @@ def register_keyboard_shortcuts():
 
 # Initialize theme settings
 theme_var = ctk.StringVar(value=config['Settings'].get('theme', 'Dark'))
+auto_update_var = ctk.BooleanVar(value=config['Settings'].get('auto_update', False))
 
 # Make sure theme is one of the valid ones
 if theme_var.get() not in THEMES:
@@ -3758,6 +3761,19 @@ def _setup_misc_settings(parent):
     )
     reconnect_internet_checkbox.pack(anchor="w", padx=10, pady=5)
 
+    # Auto Update toggle
+    def update_auto_update():
+        save_gui_config()
+        
+    auto_update_checkbox = ctk.CTkCheckBox(
+        misc_frame, 
+        text="Auto Update on Startup", 
+        variable=auto_update_var,
+        command=update_auto_update,
+        font=UIStyle.BODY_FONT
+    )
+    auto_update_checkbox.pack(anchor="w", padx=10, pady=5)
+
     # Click delay setting
     click_delay_row = ctk.CTkFrame(misc_frame)
     click_delay_row.pack(pady=5, fill="x")
@@ -5136,6 +5152,17 @@ if __name__ == "__main__":
         try:
             # Load checkbox data at startup (before any automation can run)
             load_checkbox_data()
+            
+            # Check for updates if enabled
+            if config['Settings'].get('auto_update', False):
+                try:
+                    import updater
+                    def update_cb(success, msg):
+                        if success:
+                            logger.info(f"Auto-update: {msg}")
+                    updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
+                except Exception as e:
+                    logger.error(f"Failed to initialize auto-updater: {e}")
             
             check_processes()
             
