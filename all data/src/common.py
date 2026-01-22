@@ -19,7 +19,7 @@ from PIL import ImageGrab
 import shared_vars
 
 pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.01
+pyautogui.PAUSE = 0.05
 
 # Template reference resolutions - used only for template matching
 REFERENCE_WIDTH_1440P = 2560
