@@ -17,7 +17,7 @@ def get_base_path():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
-        folder_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        folder_path = os.path.dirname(os.path.abspath(__file__))
         return (os.path.dirname(folder_path) if os.path.basename(folder_path) == 'src' 
                 else folder_path)
 
@@ -30,9 +30,6 @@ os.chdir(BASE_PATH)
 # Logging configuration is handled by common.py
 logger = logging.getLogger(__name__)
 
-PACK_PRIORITY_JSON = os.path.join(BASE_PATH, "config", "pack_priority.json")
-PACK_EXCEPTIONS_JSON = os.path.join(BASE_PATH, "config", "pack_exceptions.json")
-
 
 class Mirror:
     def __init__(self, status):
@@ -44,6 +41,7 @@ class Mirror:
         self.aspect_ratio = common.get_aspect_ratio()
         self.res_x, self.res_y = common.get_resolution()
         self.squad_set = False
+        self.vestige_coords = None
         self.logger.debug(f"Mirror initialized - resolution: {self.res_x}x{self.res_y}, aspect ratio: {self.aspect_ratio}")
 
     @staticmethod
@@ -701,18 +699,23 @@ class Mirror:
         """Find all gifts matching the given status list for fusion, with region optimization"""
         fusion_gifts = []
         
-        # Region limitation for performance: (900,300) to (1700,800) in 1080p
-        x1, y1 = common.scale_coordinates_1080p(900, 300)
-        x2, y2 = common.scale_coordinates_1080p(1700, 800)
+        # Region limitation optimized to match the return filter
+        # x > scale_x(1235) and y < scale_y(800)
+        x1 = common.scale_x(1235)
+        y1 = common.scale_y_1080p(300)
+        x2 = common.scale_x_1080p(1700)
+        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for robust matching
         
         screenshot = common.capture_screen()
-        vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
-        if vestige_coords:
-            fusion_gifts += vestige_coords
-            # Store vestige coords for later identification
-            self.vestige_coords = vestige_coords
-        else:
-            self.vestige_coords = None
+        
+        # Load exceptions to check for keywordless exclusion
+        exception_gifts = self.load_fusion_exceptions()
+        skip_keywordless = any(os.path.basename(p).lower() == "keywordless.png" for p in exception_gifts)
+        
+        if not skip_keywordless:
+            vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+            if vestige_coords:
+                fusion_gifts += vestige_coords
             
         for i in statuses:
             status = mirror_utils.get_status_gift_template(i)
@@ -727,45 +730,58 @@ class Mirror:
             status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if status_coords:
                 fusion_gifts += status_coords
-            else:
-                pass
         
         # Remove duplicate coordinates
-        original_count = len(fusion_gifts)
         fusion_gifts = list(dict.fromkeys(fusion_gifts))
-        if original_count != len(fusion_gifts):
-            pass
         
         # Filter out status detections that are inside exception gift areas
-        fusion_gifts = self.filter_exception_gifts(fusion_gifts)
+        fusion_gifts = self.filter_exception_gifts(fusion_gifts, screenshot, exception_gifts)
         
-        return [x for x in fusion_gifts if x[0] > common.scale_x(1235) and x[1] < common.scale_y(800)] #this is to remove the left side and bottom area 
+        # Strictly filter results to ensure we don't pick up gifts from the fusion slots below
+        return [x for x in fusion_gifts if x[1] < common.scale_y(800)]
     
-    def filter_exception_gifts(self, fusion_gifts):
+    def filter_exception_gifts(self, fusion_gifts, screenshot=None, exception_gifts=None):
         """Remove status detections that are inside exception gift areas"""
         if not fusion_gifts:
             return fusion_gifts
         
-        exception_gifts = self.load_fusion_exceptions()
+        if exception_gifts is None:
+            exception_gifts = self.load_fusion_exceptions()
+            
         if not exception_gifts:
             return fusion_gifts
         
         # Find all exception gift bounding boxes once
-        # Region limitation for performance: (900,300) to (1700,800) in 1080p
-        x1, y1 = common.scale_coordinates_1080p(900, 300)
-        x2, y2 = common.scale_coordinates_1080p(1700, 800)
+        x1 = common.scale_x(1235)
+        y1 = common.scale_y_1080p(300)
+        x2 = common.scale_x_1080p(1700)
+        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for robust matching
         
         all_exception_boxes = []
         for gift_img in exception_gifts:
-            boxes = common.ifexist_match(gift_img, 0.9, area="all", x1=x1, y1=y1, x2=x2, y2=y2)
-            if boxes:
-                all_exception_boxes.extend(boxes)
+            # Skip keywordless.png as it is a logic flag, not a visual template
+            if os.path.basename(gift_img).lower() == "keywordless.png":
+                continue
+
+            try:
+                boxes = common.ifexist_match(gift_img, 0.8, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+                if boxes:
+                    all_exception_boxes.extend(boxes)
+            except Exception as e:
+                # Ignore invalid images (e.g. dummy files used as flags)
+                self.logger.debug(f"Skipping exception matching for {gift_img}: {e}")
+                continue
         
         if not all_exception_boxes:
             return fusion_gifts
         
         # Use enhanced_proximity_check with bounding box mode for exception filtering
+        # Expand detection area to account for small logo images in corners of gift cards
         inside_exception = common.enhanced_proximity_check(all_exception_boxes, fusion_gifts,
+                                                          expand_left=common.scale_x_1080p(150),
+                                                          expand_right=common.scale_x_1080p(150),
+                                                          expand_above=common.scale_y_1080p(150),
+                                                          expand_below=common.scale_y_1080p(150),
                                                           use_bounding_box=True, return_bool=False)
         
         # Filter out gifts that are inside exception areas
@@ -775,30 +791,40 @@ class Mirror:
     
     def load_fusion_exceptions(self):
         """Load fusion exceptions from JSON config file"""
-        fusion_exceptions_path = os.path.join(BASE_PATH, "config", "fusion_exceptions.json")
         exception_gifts = []
         
         try:
-            if os.path.exists(fusion_exceptions_path):
-                with open(fusion_exceptions_path, 'r') as f:
-                    exceptions_data = json.load(f)
+            # Use cached config for performance
+            exceptions_data = shared_vars.ConfigCache.get_config("fusion_exceptions")
                 
-                # Only support list format: ["gift_name1", "gift_name2"]
-                if isinstance(exceptions_data, list):
-                    for name in exceptions_data:
-                        image_path = f"pictures/CustomFuse/{name}.png"
-                        exception_gifts.append(image_path)
-                else:
-                    self.logger.warning(f"FUSION: Expected list format, got {type(exceptions_data)}. Use format: [\"gift_name1\", \"gift_name2\"]")
+            # Only support list format: ["gift_name1", "gift_name2"]
+            if isinstance(exceptions_data, list):
+                for name in exceptions_data:
+                    # Check if it's a folder first
+                    folder_path = os.path.join(BASE_PATH, "pictures", "CustomFuse", name)
+                    if os.path.isdir(folder_path):
+                        # Load all images from folder
+                        for file in os.listdir(folder_path):
+                            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                exception_gifts.append(f"pictures/CustomFuse/{name}/{file}")
+                    else:
+                        # Assume it's a file - check for supported extensions
+                        found_file = False
+                        for ext in ['.png', '.jpg', '.jpeg']:
+                            probe_path = f"pictures/CustomFuse/{name}{ext}"
+                            if os.path.exists(os.path.join(BASE_PATH, probe_path)):
+                                exception_gifts.append(probe_path)
+                                found_file = True
+                                break
+                        if not found_file:
+                            # Don't add if file doesn't exist to avoid FileNotFoundError
+                            self.logger.warning(f"FUSION: Exception image not found for '{name}'")
+            else:
+                self.logger.warning(f"FUSION: Expected list format, got {type(exceptions_data)}. Use format: [\"gift_name1\", \"gift_name2\"]")
                         
         except Exception as e:
             self.logger.warning(f"Error loading fusion exceptions: {e}")
         
-        if exception_gifts:
-            pass
-        else:
-            pass
-            
         return exception_gifts
     
     def fuse_gifts(self):
@@ -814,6 +840,20 @@ class Mirror:
 
         statuses = ["burn","bleed","tremor","rupture","sinking","poise","charge","slash","pierce","blunt"] #List of status to use
         statuses.remove(self.status)
+        
+        # Filter out statuses that are in the exception list
+        try:
+            # Use cached config
+            exceptions_data = shared_vars.ConfigCache.get_config("fusion_exceptions")
+            
+            if isinstance(exceptions_data, list):
+                # Convert to lowercase for comparison
+                exceptions_lower = [e.lower() for e in exceptions_data]
+                # Remove any status that is in the exception list
+                statuses = [s for s in statuses if s not in exceptions_lower]
+        except Exception as e:
+            logger.warning(f"Error filtering fusion statuses: {e}")
+            
         common.click_matching("pictures/mirror/restshop/fusion/fuse.png")
         start_time = time.time()
         duration = 1.5  #  Duration to wait for fuse_menu to appear

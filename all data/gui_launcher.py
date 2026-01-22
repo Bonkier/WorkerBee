@@ -427,17 +427,36 @@ def update_pack_exceptions_from_toggle(floor, pack):
 def load_fuse_exception_images():
     """Scan pictures/CustomFuse directory and return all image files"""
     fuse_dir = os.path.join(BASE_PATH, "pictures", "CustomFuse")
+    
+    # Ensure CustomFuse directory exists
+    if not os.path.exists(fuse_dir):
+        try:
+            os.makedirs(fuse_dir)
+        except OSError:
+            pass
+            
+    # Create CustomEgoGifts folder if it doesn't exist (User feature request)
+    custom_gifts_dir = os.path.join(fuse_dir, "CustomEgoGifts")
+    if not os.path.exists(custom_gifts_dir):
+        try:
+            os.makedirs(custom_gifts_dir)
+        except OSError:
+            pass
+            
     image_extensions = ['.png', '.jpg', '.jpeg']
-    fuse_images = []
+    fuse_items = []
     
     if os.path.exists(fuse_dir):
-        for file in os.listdir(fuse_dir):
-            if any(file.lower().endswith(ext) for ext in image_extensions):
+        for item in os.listdir(fuse_dir):
+            full_path = os.path.join(fuse_dir, item)
+            if os.path.isdir(full_path):
                 # Use forward slashes for cross-platform compatibility
-                full_path = f"pictures/CustomFuse/{file}"
-                fuse_images.append(full_path)
+                fuse_items.append(f"pictures/CustomFuse/{item}")
+            elif any(item.lower().endswith(ext) for ext in image_extensions):
+                # Use forward slashes for cross-platform compatibility
+                fuse_items.append(f"pictures/CustomFuse/{item}")
     
-    return fuse_images
+    return fuse_items
 
 def load_fusion_exceptions():
     """Load fusion exceptions from JSON file"""
@@ -453,9 +472,14 @@ def save_fusion_exceptions():
         if var.get():  # If toggle is ON
             # Extract just the filename without path and extension
             # e.g., "pictures/CustomFuse/poise.png" -> "poise"
+            # e.g., "pictures/CustomFuse/[keywordless]" -> "[keywordless]"
             filename = os.path.basename(image_path)
-            filename_without_ext = os.path.splitext(filename)[0]
-            enabled_exceptions.append(filename_without_ext)
+            full_path = os.path.join(BASE_PATH, image_path)
+            if os.path.isdir(full_path):
+                enabled_exceptions.append(filename)
+            else:
+                filename_without_ext = os.path.splitext(filename)[0]
+                enabled_exceptions.append(filename_without_ext)
     
     # Save to JSON file
     save_json_data(fusion_exceptions_path, enabled_exceptions)
@@ -2827,7 +2851,13 @@ def load_mirror_settings():
         # Create checkboxes for each image
         for image_path in fuse_images:
             filename = os.path.basename(image_path)
-            display_name = os.path.splitext(filename)[0]
+            
+            # Check if it's a directory to determine display name
+            full_path = os.path.join(BASE_PATH, image_path)
+            if os.path.isdir(full_path):
+                display_name = filename
+            else:
+                display_name = os.path.splitext(filename)[0]
             
             # Create toggle variable (default OFF, ON if filename in saved exceptions)
             var = ctk.BooleanVar(value=display_name in fusion_exceptions_data)
