@@ -318,11 +318,12 @@ class Mirror:
         retry_attempt = 10
         while retry_attempt > 0:
             retry_attempt -= 1
+            screenshot = common.capture_screen()
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(2)
-            if found := common.match_image("pictures/mirror/general/refresh.png", 0.9):
+            if found := common.match_image("pictures/mirror/general/refresh.png", 0.9, screenshot=screenshot):
                 x,y = found[0]
-            refresh_btn_available = common.luminence(x,y) >= 70
+            refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
 
             # Detect priority packs
             selectable_priority_packs_pos = []
@@ -334,7 +335,7 @@ class Mirror:
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    selectable_priority_packs_pos.extend(common.match_image(pack_image, 0.8))
+                    selectable_priority_packs_pos.extend(common.match_image(pack_image, 0.8, screenshot=screenshot))
                 selectable_priority_packs_pos = [pos for pos in selectable_priority_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
                 logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
 
@@ -350,7 +351,7 @@ class Mirror:
                 floor_num = floor[-1]
                 image_floor = f"f{floor_num}"
                 pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                except_packs_pos.extend(common.match_image(pack_image, 0.8))
+                except_packs_pos.extend(common.match_image(pack_image, 0.8, screenshot=screenshot))
             except_packs_pos = [pos for pos in except_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
             logger.debug(f"Found {len(except_packs_pos)} packs in exception list: {except_packs_pos}")
 
@@ -359,7 +360,7 @@ class Mirror:
             except_packs_pos = [(pos[0], pos[1]+offset_y) for pos in except_packs_pos]
 
             # Detect selectable pack
-            selectable_packs_pos = common.match_image("pictures/CustomAdded1080p/mirror/packs/inpack.png")
+            selectable_packs_pos = common.match_image("pictures/CustomAdded1080p/mirror/packs/inpack.png", screenshot=screenshot)
             selectable_packs_pos = [pos for pos in selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
             logger.debug(f"Found {len(selectable_packs_pos)} packs in total: {selectable_packs_pos}")
             for _pack in common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_x_1080p(150)):
@@ -371,11 +372,11 @@ class Mirror:
             selectable_packs_pos = [(pos[0]+offset_x, pos[1]+offset_y) for pos in selectable_packs_pos]
 
             # Detect status pack
-            status_gift_pos = common.match_image(status, 0.9)
+            status_gift_pos = common.match_image(status, 0.9, screenshot=screenshot)
             if status == "pictures/mirror/packs/status/pierce_pack.png":
                 status_gift_pos = [x for x in status_gift_pos if x[1] > common.scale_y(1092)]  # Removes poor detections
 
-            owned_gift_pos = common.ifexist_match("pictures/mirror/packs/status/owned.png", 0.9)
+            owned_gift_pos = common.ifexist_match("pictures/mirror/packs/status/owned.png", 0.9, screenshot=screenshot)
             if owned_gift_pos:
                 # Match owned tag to gift position
                 owned_gift_pos = common.proximity_check(status_gift_pos, owned_gift_pos, common.scale_x_1080p(50))
@@ -558,13 +559,14 @@ class Mirror:
 
     def check_nodes(self,nodes):
         """Check which navigation nodes exist on the current floor"""
+        screenshot = common.capture_screen()
         non_exist = [1,1,1]
-        top = common.greyscale_match_image("pictures/mirror/general/node_1.png",0.75)
-        top_alt = common.greyscale_match_image("pictures/mirror/general/node_1_o.png",0.75)
-        middle = common.greyscale_match_image("pictures/mirror/general/node_2.png",0.75)
-        middle_alt = common.greyscale_match_image("pictures/mirror/general/node_2_o.png",0.75)
-        bottom = common.greyscale_match_image("pictures/mirror/general/node_3_o.png",0.75)
-        bottom_alt = common.greyscale_match_image("pictures/mirror/general/node_3.png",0.75)
+        top = common.greyscale_match_image("pictures/mirror/general/node_1.png",0.75, screenshot=screenshot)
+        top_alt = common.greyscale_match_image("pictures/mirror/general/node_1_o.png",0.75, screenshot=screenshot)
+        middle = common.greyscale_match_image("pictures/mirror/general/node_2.png",0.75, screenshot=screenshot)
+        middle_alt = common.greyscale_match_image("pictures/mirror/general/node_2_o.png",0.75, screenshot=screenshot)
+        bottom = common.greyscale_match_image("pictures/mirror/general/node_3_o.png",0.75, screenshot=screenshot)
+        bottom_alt = common.greyscale_match_image("pictures/mirror/general/node_3.png",0.75, screenshot=screenshot)
         if not top and not top_alt:
             non_exist[0] = 0
         if not middle and not middle_alt:
@@ -683,7 +685,8 @@ class Mirror:
         x1, y1 = common.scale_coordinates_1080p(900, 300)
         x2, y2 = common.scale_coordinates_1080p(1700, 800)
         
-        vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", x1=x1, y1=y1, x2=x2, y2=y2)
+        screenshot = common.capture_screen()
+        vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
         if vestige_coords:
             fusion_gifts += vestige_coords
             # Store vestige coords for later identification
@@ -701,7 +704,7 @@ class Mirror:
             else:
                 threshold = 0.75
             
-            status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2)
+            status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if status_coords:
                 fusion_gifts += status_coords
             else:
