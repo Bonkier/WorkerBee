@@ -2848,12 +2848,6 @@ def load_mirror_settings():
         exceptions_container = ctk.CTkFrame(fuse_exception_expand_frame, fg_color="transparent")
         exceptions_container.pack(anchor="w", padx=20, fill="x")
         
-        # Create checkboxes for each image
-        for image_path in fuse_images:
-            filename = os.path.basename(image_path)
-            
-            # Check if it's a directory to determine display name
-            full_path = os.path.join(BASE_PATH, image_path)
         # Helper to create checkbox
         def add_exception_checkbox(path, parent):
             filename = os.path.basename(path)
@@ -2863,14 +2857,10 @@ def load_mirror_settings():
             else:
                 display_name = os.path.splitext(filename)[0]
             
-            # Create toggle variable (default OFF, ON if filename in saved exceptions)
             var = ctk.BooleanVar(value=display_name in fusion_exceptions_data)
-            fuse_exception_vars[image_path] = var
             fuse_exception_vars[path] = var
             
-            # Create checkbox
             checkbox = ctk.CTkCheckBox(
-                exceptions_container,
                 parent,
                 text=display_name,
                 variable=var,
