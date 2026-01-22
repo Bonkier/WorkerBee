@@ -3,8 +3,6 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 
 currentFolder = fso.GetParentFolderName(WScript.ScriptFullName)
 
-dataFolder = currentFolder & "\all data"
-
-shell.CurrentDirectory = dataFolder
+shell.CurrentDirectory = currentFolder
 
 shell.Run "python bootstrapper.py", 0, False
