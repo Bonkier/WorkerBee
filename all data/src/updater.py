@@ -760,6 +760,9 @@ class Updater:
                 gui_launcher_path = os.path.join(self.all_data_dir, "gui_launcher.py")
                 cmd = [sys.executable, gui_launcher_path]
             
+            # Add updated flag to notify the new instance
+            cmd.append("--updated")
+            
             # Create a restart helper script
             restart_script_path = os.path.join(self.temp_path, "restart.py")
             
