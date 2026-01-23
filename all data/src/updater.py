@@ -150,8 +150,18 @@ class Updater:
                 if response.getcode() == 200:
                     repo_version = response.read().decode().strip()
                     if repo_version:
-                        # Use the zipball URL for the main branch
-                        download_url = f"{self.api_url}/zipball/main"
+                        # Try to get the specific commit hash to bypass zipball caching
+                        try:
+                            commits_url = f"{self.api_url}/commits/main"
+                            req_commit = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
+                            with urllib.request.urlopen(req_commit) as response_commit:
+                                commit_data = json.loads(response_commit.read().decode())
+                                commit_hash = commit_data['sha']
+                                download_url = f"{self.api_url}/zipball/{commit_hash}"
+                        except Exception as e:
+                            logger.warning(f"Failed to get commit hash, falling back to main zipball: {e}")
+                            download_url = f"{self.api_url}/zipball/main"
+                            
                         ver_json_info = (repo_version, download_url)
         except Exception as e:
             logger.warning(f"Could not read version.json from repository: {e}")
