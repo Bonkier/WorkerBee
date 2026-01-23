@@ -986,9 +986,10 @@ exit
             
             logger.info(f"Launching batch updater: {batch_script_path}")
             
-            # Launch the batch script detached and hidden
-            # 0x08000000 is CREATE_NO_WINDOW
-            subprocess.Popen(["cmd.exe", "/c", batch_script_path], creationflags=0x08000000)
+            # Launch the batch script detached (no console window)
+            # 0x00000008 is DETACHED_PROCESS
+            # We use this instead of CREATE_NO_WINDOW to ensure it's fully independent
+            subprocess.Popen(["cmd.exe", "/c", batch_script_path], creationflags=0x00000008, close_fds=True)
             
             # Force exit immediately
             os._exit(0)

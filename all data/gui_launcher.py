@@ -5086,11 +5086,13 @@ def on_closing():
         # Nuclear option for Windows to ensure everything dies
         if platform.system() == "Windows":
             try:
-                # Spawn a taskkill command to kill this process tree
-                # We use Popen so it runs independently
-                subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T", 
+                # Spawn a taskkill command to kill this process tree forcefully
+                # We use shell=True with CREATE_NO_WINDOW to hide the command prompt
+                # We add a small delay to ensure this command is dispatched before we exit
+                subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T",
                                shell=True, 
                                creationflags=0x08000000) # CREATE_NO_WINDOW
+                time.sleep(0.2)
             except:
                 pass
         
