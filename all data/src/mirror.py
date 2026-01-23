@@ -380,7 +380,16 @@ class Mirror:
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    matches = common.match_image(pack_image, 0.7, screenshot=screenshot, use_multiscale=True)
+                    matches = common.match_image(
+                        pack_image, 
+                        0.7, 
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    )
                     
                     # Store for stats (pre-offset)
                     _, offset_y_correction = common.scale_offset_1440p(0, -200)
@@ -388,7 +397,6 @@ class Mirror:
                         known_pack_names[(m[0], m[1] + offset_y_correction)] = pack
                         
                     selectable_priority_packs_pos.extend(matches)
-                selectable_priority_packs_pos = [pos for pos in selectable_priority_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
                 logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
 
                 # Correct position for mouse click
@@ -403,8 +411,16 @@ class Mirror:
                 floor_num = floor[-1]
                 image_floor = f"f{floor_num}"
                 pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                except_packs_pos.extend(common.match_image(pack_image, 0.7, screenshot=screenshot, use_multiscale=True))
-            except_packs_pos = [pos for pos in except_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
+                except_packs_pos.extend(common.match_image(
+                    pack_image, 
+                    0.7, 
+                    screenshot=screenshot, 
+                    enable_scaling=True,
+                    x1=min_x_scaled,
+                    y1=min_y_scaled,
+                    x2=max_x_scaled,
+                    y2=max_y_scaled
+                ))
             logger.debug(f"Found {len(except_packs_pos)} packs in exception list: {except_packs_pos}")
 
             # Removed offset to improve proximity check accuracy between pack image and 'inpack' button

@@ -377,7 +377,7 @@ def _get_caller_info():
         pass
     return "unknown"
 
-def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, use_multiscale=False):
+def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, enable_scaling=False):
     """Internal function that handles all template matching logic"""
     
     full_template_path = resource_path(template_path)
@@ -431,9 +431,9 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
         _template_cache[cache_key] = original_template
     
     # Determine scales to test
-    if use_multiscale:
-        # 80% to 120% in 5% increments
-        scales_to_test = [x / 100.0 for x in range(80, 125, 5)]
+    if enable_scaling:
+        # 0.80x to 1.20x in steps of 0.04
+        scales_to_test = [x / 100.0 for x in range(80, 121, 4)]
     else:
         scales_to_test = [1.0]
 
@@ -481,7 +481,7 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     result = best_result
     template_height, template_width = best_template_dims
 
-    if use_multiscale and (debug or shared_vars.debug_image_matches):
+    if enable_scaling and (debug or shared_vars.debug_image_matches):
         logger.debug(f"Multi-scale match for {os.path.basename(template_path)}: Best Scale={best_scale_found:.2f}, Confidence={best_max_val:.4f}", dirty=True)
     
     if scale_factor < 0.75:
@@ -492,25 +492,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     threshold = threshold + total_adjustment
     
     locations = np.where(result >= threshold)
-    
-    # Fallback: Try multi-scale matching if direct match fails
-    if not use_multiscale and len(locations[0]) == 0 and not is_custom_fuse_image(full_template_path):
-        # Try a small range of scales to account for minor rendering differences
-        fallback_scales = [0.98, 1.02, 0.96, 1.04, 0.95, 1.05]
-        for adj in fallback_scales:
-            new_scale = scale_factor * adj
-            new_template = cv2.resize(original_template, None, fx=new_scale, fy=new_scale, interpolation=cv2.INTER_LINEAR)
-            
-            # Ensure template fits in screenshot
-            if new_template.shape[0] <= screenshot_height and new_template.shape[1] <= screenshot_width:
-                res = cv2.matchTemplate(screenshot, new_template, cv2.TM_CCOEFF_NORMED)
-                locs = np.where(res >= threshold)
-                if len(locs[0]) > 0:
-                    result = res
-                    locations = locs
-                    template_height, template_width = new_template.shape[:2]
-                    logger.debug(f"Fallback match successful for {template_path} at scale adjustment {adj}", dirty=True)
-                    break
     
     boxes = []
     match_scores = []
@@ -630,7 +611,7 @@ def get_path_specific_adjustment(template_path):
     image_adjustments = config.get("image_adjustments", {})
     return image_adjustments.get(template_path, 0.0)
 
-def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, use_multiscale=False):
+def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, enable_scaling=False):
     """Finds the image specified and returns coordinates depending on area: center, bottom, left, right, top.
     
     Args:
@@ -638,7 +619,7 @@ def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, 
     """
     if mousegoto200:
         mouse_move(*scale_coordinates_1080p(200, 200))
-    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot, use_multiscale=use_multiscale)
+    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot, enable_scaling=enable_scaling)
 
 def greyscale_match_image(template_path, threshold=0.75, area="center", no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Finds the image specified and returns the center coordinates, regardless of screen resolution,
