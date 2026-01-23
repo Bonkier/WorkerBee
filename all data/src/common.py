@@ -377,7 +377,7 @@ def _get_caller_info():
         pass
     return "unknown"
 
-def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
+def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, use_multiscale=False):
     """Internal function that handles all template matching logic"""
     
     full_template_path = resource_path(template_path)
@@ -430,30 +430,59 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
             raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
         _template_cache[cache_key] = original_template
     
-    # Skip scaling for CustomFuse images - use them at their original resolution
-    if is_custom_fuse_image(full_template_path):
-        template = original_template
+    # Determine scales to test
+    if use_multiscale:
+        # 80% to 120% in 5% increments
+        scales_to_test = [x / 100.0 for x in range(80, 125, 5)]
     else:
-        template = cv2.resize(original_template, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-    
-    template_height, template_width = template.shape[:2]
-    
-    # Ensure both screenshot and template have matching color formats
-    if no_grayscale:
-        # Force color mode - ensure both are BGR
-        if len(screenshot.shape) == 2:
-            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_GRAY2BGR)
-        if len(template.shape) == 2:
-            template = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR)
-    else:
-        # Allow grayscale mode - ensure both are grayscale if conversion is enabled
-        if (grayscale or shared_vars.convert_images_to_grayscale):
-            if len(screenshot.shape) == 3:
-                screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
-            if len(template.shape) == 3:
-                template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-    
-    result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+        scales_to_test = [1.0]
+
+    best_max_val = -1.0
+    best_result = None
+    best_template_dims = (0, 0)
+    best_scale_found = 1.0
+
+    for scale_adj in scales_to_test:
+        # Calculate effective scale
+        if is_custom_fuse_image(full_template_path):
+            # Custom fuse images are not scaled by resolution, but apply multi-scale adjustment if requested
+            effective_scale = scale_adj
+        else:
+            effective_scale = scale_factor * scale_adj
+
+        # Resize template
+        if effective_scale != 1.0:
+            curr_template = cv2.resize(original_template, None, fx=effective_scale, fy=effective_scale, interpolation=cv2.INTER_LINEAR)
+        else:
+            curr_template = original_template
+
+        # Ensure both screenshot and template have matching color formats
+        if no_grayscale:
+            if len(screenshot.shape) == 2: screenshot = cv2.cvtColor(screenshot, cv2.COLOR_GRAY2BGR)
+            if len(curr_template.shape) == 2: curr_template = cv2.cvtColor(curr_template, cv2.COLOR_GRAY2BGR)
+        else:
+            if (grayscale or shared_vars.convert_images_to_grayscale):
+                if len(screenshot.shape) == 3: screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+                if len(curr_template.shape) == 3: curr_template = cv2.cvtColor(curr_template, cv2.COLOR_BGR2GRAY)
+
+        # Check if template fits
+        if curr_template.shape[0] > screenshot.shape[0] or curr_template.shape[1] > screenshot.shape[1]:
+            continue
+
+        res = cv2.matchTemplate(screenshot, curr_template, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
+        if best_result is None or max_val > best_max_val:
+            best_max_val = max_val
+            best_result = res
+            best_template_dims = curr_template.shape[:2]
+            best_scale_found = scale_adj
+
+    result = best_result
+    template_height, template_width = best_template_dims
+
+    if use_multiscale and (debug or shared_vars.debug_image_matches):
+        logger.debug(f"Multi-scale match for {os.path.basename(template_path)}: Best Scale={best_scale_found:.2f}, Confidence={best_max_val:.4f}", dirty=True)
     
     if scale_factor < 0.75:
         threshold = threshold - 0.05
@@ -465,7 +494,7 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     locations = np.where(result >= threshold)
     
     # Fallback: Try multi-scale matching if direct match fails
-    if len(locations[0]) == 0 and not is_custom_fuse_image(full_template_path):
+    if not use_multiscale and len(locations[0]) == 0 and not is_custom_fuse_image(full_template_path):
         # Try a small range of scales to account for minor rendering differences
         fallback_scales = [0.98, 1.02, 0.96, 1.04, 0.95, 1.05]
         for adj in fallback_scales:
@@ -601,7 +630,7 @@ def get_path_specific_adjustment(template_path):
     image_adjustments = config.get("image_adjustments", {})
     return image_adjustments.get(template_path, 0.0)
 
-def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
+def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, use_multiscale=False):
     """Finds the image specified and returns coordinates depending on area: center, bottom, left, right, top.
     
     Args:
@@ -609,7 +638,7 @@ def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, 
     """
     if mousegoto200:
         mouse_move(*scale_coordinates_1080p(200, 200))
-    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot)
+    return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot, use_multiscale=use_multiscale)
 
 def greyscale_match_image(template_path, threshold=0.75, area="center", no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
     """Finds the image specified and returns the center coordinates, regardless of screen resolution,
