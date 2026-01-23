@@ -361,8 +361,14 @@ class Mirror:
                 refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
 
             # Detect selectable pack (Moved up to check if packs are loaded)
-            selectable_packs_pos = common.match_image("pictures/CustomAdded1080p/mirror/packs/inpack.png", screenshot=screenshot)
-            selectable_packs_pos = [pos for pos in selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
+            selectable_packs_pos = common.match_image(
+                "pictures/CustomAdded1080p/mirror/packs/inpack.png", 
+                screenshot=screenshot,
+                x1=min_x_scaled,
+                y1=min_y_scaled,
+                x2=max_x_scaled,
+                y2=max_y_scaled
+            )
             
             if len(selectable_packs_pos) == 0:
                 if retry_attempt > 0:
@@ -391,10 +397,9 @@ class Mirror:
                         y2=max_y_scaled
                     )
                     
-                    # Store for stats (pre-offset)
-                    _, offset_y_correction = common.scale_offset_1440p(0, -200)
+                    # Store for stats
                     for m in matches:
-                        known_pack_names[(m[0], m[1] + offset_y_correction)] = pack
+                        known_pack_names[m] = pack
                         
                     selectable_priority_packs_pos.extend(matches)
                 logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
@@ -438,11 +443,29 @@ class Mirror:
             selectable_packs_pos = [(pos[0]+offset_x, pos[1]+offset_y) for pos in selectable_packs_pos]
 
             # Detect status pack
-            status_gift_pos = common.match_image(status, 0.9, screenshot=screenshot)
+            status_gift_pos = common.match_image(
+                status, 
+                0.9, 
+                screenshot=screenshot,
+                enable_scaling=True,
+                x1=min_x_scaled,
+                y1=min_y_scaled,
+                x2=max_x_scaled,
+                y2=max_y_scaled
+            )
             if status == "pictures/mirror/packs/status/pierce_pack.png":
                 status_gift_pos = [x for x in status_gift_pos if x[1] > common.scale_y(1092)]  # Removes poor detections
 
-            owned_gift_pos = common.ifexist_match("pictures/mirror/packs/status/owned.png", 0.9, screenshot=screenshot)
+            owned_gift_pos = common.match_image(
+                "pictures/mirror/packs/status/owned.png", 
+                0.9, 
+                screenshot=screenshot,
+                enable_scaling=True,
+                x1=min_x_scaled,
+                y1=min_y_scaled,
+                x2=max_x_scaled,
+                y2=max_y_scaled
+            )
             if owned_gift_pos:
                 # Match owned tag to gift position
                 owned_gift_pos = common.proximity_check(status_gift_pos, owned_gift_pos, common.scale_x_1080p(50))
