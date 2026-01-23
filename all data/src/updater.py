@@ -948,7 +948,7 @@ except Exception as e:
             logger.info("Staged updater launched. Current process will exit.")
             
             # Exit current process to allow staged updater to update us
-            sys.exit(0)
+            os._exit(0)
             
         except Exception as e:
             logger.error(f"Error staging self-update: {e}")
