@@ -435,11 +435,10 @@ class Updater:
             
             logger.info(f"Found repository directory: {repo_dir}")
             
-            # Special case: if we're updating the updater itself, stage the update
-            updater_path = os.path.join(repo_dir, "all data", "src", "updater.py")
-            if os.path.exists(updater_path):
-                logger.info("Updater.py update detected - staging self-update")
-                return self._stage_self_update(repo_dir)
+            # Always use batch updater for reliability on Windows
+            # This handles file locking and process termination better than Python
+            if platform.system() == "Windows":
+                return self._run_batch_update(repo_dir)
             
             # Handle config merging BEFORE copying files
             temp_config_backup = self.handle_config_merging(repo_dir)
@@ -934,62 +933,46 @@ except Exception as e:
         thread.start()
         return thread
 
-    def _is_staged_update(self):
-        """Check if this updater instance is running as a staged self-update"""
-        return len(sys.argv) > 1 and sys.argv[1] == "--staged-update"
-
-    def _stage_self_update(self, repo_dir):
-        """Stage a self-update by extracting new updater to temp and calling it"""
+    def _run_batch_update(self, repo_dir):
+        """Create and run a batch script to handle the update process safely"""
         try:
-            # Create temp directory for staged updater
-            temp_updater_dir = os.path.join(self.temp_path, "staged_updater")
-            os.makedirs(temp_updater_dir, exist_ok=True)
+            # Prepare paths
+            batch_script_path = os.path.join(self.temp_path, "install_update.bat")
+            current_pid = os.getpid()
             
-            # Copy new updater to temp
-            new_updater_path = os.path.join(repo_dir, "all data", "src", "updater.py")
-            staged_updater_path = os.path.join(temp_updater_dir, "updater.py")
-            shutil.copy2(new_updater_path, staged_updater_path)
-            
-            # Copy other necessary files (like logger if needed)
-            logger_src = os.path.join(repo_dir, "all data", "src", "logger.py")
-            if os.path.exists(logger_src):
-                shutil.copy2(logger_src, os.path.join(temp_updater_dir, "logger.py"))
-            
-            logger.info(f"Staged updater prepared at {staged_updater_path}")
-            
-            # Call staged updater with special flag and paths
-            cmd = [
-                sys.executable, staged_updater_path,
-                "--staged-update",
-                repo_dir,  # Source path with new files
-                self.parent_dir,  # Target installation directory
-                self.temp_path  # Temp directory for cleanup
-            ]
-            
-            logger.info("Launching staged self-update...")
-            logger.info(f"Command: {' '.join(cmd)}")
-            
-            # Prepare log file for staged updater to prevent console I/O hanging
-            staged_log_path = os.path.join(self.temp_path, "staged_updater.log")
-            staged_log = open(staged_log_path, "w")
-            
-            # Launch staged updater and exit current process
+            # Determine restart command
             if getattr(sys, 'frozen', False):
-                # If frozen, call the executable with the flag
-                # We use the current executable path
-                cmd = [sys.executable, "--staged-update", repo_dir, self.parent_dir, self.temp_path]
-                if platform.system() == "Windows":
-                    subprocess.Popen(cmd, creationflags=0x00000008, stdout=staged_log, stderr=staged_log, close_fds=True)
-                else:
-                    subprocess.Popen(cmd, start_new_session=True, stdout=staged_log, stderr=staged_log, close_fds=True)
+                executable = sys.executable
+                args = "--updated"
             else:
-                # If script, call python with the script
-                if platform.system() == "Windows":
-                    subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=0x00000008, stdout=staged_log, stderr=staged_log, close_fds=True)
-                else:
-                    subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True, stdout=staged_log, stderr=staged_log, close_fds=True)
-                    
-            logger.info("Staged updater launched. Current process will exit.")
+                executable = sys.executable
+                script_path = os.path.join(self.all_data_dir, "gui_launcher.py")
+                args = f'"{script_path}" --updated'
+
+            # Handle config merging BEFORE creating batch script
+            # We do this now because the batch script is dumb and just copies files
+            self.handle_config_merging(repo_dir)
+            
+            # Create the batch script content
+            # /T on taskkill kills child processes (solving the lingering python instance)
+            batch_content = f"""@echo off
+echo Waiting for WorkerBee to close...
+timeout /t 3 /nobreak > NUL
+
+echo Force closing PID {current_pid} and children...
+taskkill /F /PID {current_pid} /T > NUL 2>&1
+
+echo Updating files...
+xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q
+
+echo Restarting WorkerBee...
+start "" "{executable}" {args}
+
+echo Done.
+exit
+"""
+            with open(batch_script_path, "w") as f:
+                f.write(batch_content)
             
             # Run cleanup if provided (to kill logger processes etc)
             if self.pre_exit_callback:
@@ -998,62 +981,21 @@ except Exception as e:
                 except Exception as e:
                     logger.error(f"Error in pre-exit callback: {e}")
             
-            # Exit current process to allow staged updater to update us
+            logger.info(f"Launching batch updater: {batch_script_path}")
+            
+            # Launch the batch script detached
+            subprocess.Popen([batch_script_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            
+            # Force exit immediately
             os._exit(0)
             
         except Exception as e:
-            logger.error(f"Error staging self-update: {e}")
+            logger.error(f"Error running batch update: {e}")
             return False
 
-    def _perform_staged_update(self):
-        """Perform the actual staged update when running as staged updater"""
-        try:
-            if len(sys.argv) < 4:
-                logger.error("Staged update missing required arguments")
-                return False
-                
-            repo_dir = sys.argv[2]
-            target_dir = sys.argv[3]
-            temp_cleanup_dir = sys.argv[4] if len(sys.argv) > 4 else None
-            
-            logger.info("=== PERFORMING STAGED SELF-UPDATE ===")
-            logger.info(f"Source: {repo_dir}")
-            logger.info(f"Target: {target_dir}")
-            
-            # Brief delay to ensure original process has fully exited
-            time.sleep(5.0)
-            
-            # Initialize updater with target directory as parent
-            self.parent_dir = target_dir
-            self.all_data_dir = os.path.join(target_dir, "all data")
-            
-            # Handle config merging BEFORE copying files
-            temp_config_backup = self.handle_config_merging(repo_dir)
-            
-            # Copy all files from repo to target
-            self._copy_directory_with_exclusions(repo_dir, target_dir)
-            
-            # Handle deleted files
-            self._handle_deleted_files(repo_dir)
-            
-            # Merge user settings back into newly installed configs
-            if temp_config_backup:
-                self.merge_configs_from_temp(temp_config_backup)
-            
-            # Clean up temp directories with retry logic
-            if temp_cleanup_dir and os.path.exists(temp_cleanup_dir):
-                try:
-                    self._retry_file_operation(lambda: shutil.rmtree(temp_cleanup_dir), f"remove temp directory {temp_cleanup_dir}")
-                    logger.info(f"Cleaned up temp directory: {temp_cleanup_dir}")
-                except Exception as e:
-                    logger.warning(f"Could not clean up temp directory: {e}")
-            
-            logger.info("Staged self-update completed successfully!")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error performing staged update: {e}")
-            return False
+    def _is_staged_update(self):
+        # No longer used with batch method, but kept for compatibility if called
+        return False
 
 # Helper function to run the updater
 def check_for_updates(repo_owner, repo_name, callback=None):
@@ -1105,17 +1047,6 @@ if __name__ == "__main__":
         datefmt='%d/%m/%Y %H:%M:%S'
     )
     
-    # Check for staged update
-    if len(sys.argv) > 1 and sys.argv[1] == "--staged-update":
-        try:
-            # Initialize with dummy values, _perform_staged_update will overwrite paths from args
-            updater = Updater("Bonkier", "WorkerBee")
-            if updater._perform_staged_update():
-                # Restart application after successful staged update
-                updater.restart_application()
-        except Exception as e:
-            logger.error(f"Staged update failed: {e}")
-        sys.exit(0)
     
     # Example usage
     check_for_updates("Bonkier", "WorkerBee")
