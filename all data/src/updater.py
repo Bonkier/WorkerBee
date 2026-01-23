@@ -21,7 +21,11 @@ EXCLUDED_PATHS = [
     "backups/",    # Backup directory
     "temp/",      # Temporary files
     "*.log",       # Any log files
-    "profiles/"    # User profiles
+    "profiles/",   # User profiles
+    "*.exe",       # Executables
+    "*.lnk",       # Shortcuts
+    "*.url",       # Web shortcuts
+    "bootstrapper.py" # Setup script
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)
@@ -804,7 +808,7 @@ except Exception as e:
             
             # Exit the current process
             logger.info("New process started, exiting current process")
-            sys.exit(0)
+            os._exit(0)
             
         except Exception as e:
             logger.error(f"Error restarting application: {e}")

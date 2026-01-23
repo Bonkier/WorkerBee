@@ -5180,6 +5180,7 @@ if __name__ == "__main__":
                         def update_cb(success, msg):
                             if success:
                                 logger.info(f"Auto-update: {msg}")
+                                os._exit(0)
                             else:
                                 logger.info(f"Auto-update check: {msg}")
                         updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
