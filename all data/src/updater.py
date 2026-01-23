@@ -25,7 +25,8 @@ EXCLUDED_PATHS = [
     "*.exe",       # Executables
     "*.lnk",       # Shortcuts
     "*.url",       # Web shortcuts
-    "bootstrapper.py" # Setup script
+    "bootstrapper.py", # Setup script
+    "setup.vbs"    # Setup script VBS
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)
@@ -756,11 +757,8 @@ class Updater:
             
             # Get the command to restart
             if getattr(sys, 'frozen', False):
-                # If running as exe, use the executable path
-                if platform.system() == "Windows":
-                    cmd = [os.path.join(self.all_data_dir, "gui_launcher.exe")]
-                else:
-                    cmd = [os.path.join(self.all_data_dir, "gui_launcher")]
+                # If running as exe, use the executable path (restart the same exe)
+                cmd = [sys.executable]
             else:
                 # If running as script, use the Python interpreter
                 gui_launcher_path = os.path.join(self.all_data_dir, "gui_launcher.py")
@@ -806,9 +804,9 @@ except Exception as e:
                              stdin=subprocess.DEVNULL,
                              start_new_session=True)
             
-            # Exit the current process
-            logger.info("New process started, exiting current process")
-            os._exit(0)
+            # Return True to allow callback to handle exit
+            logger.info("Restart script launched")
+            return True
             
         except Exception as e:
             logger.error(f"Error restarting application: {e}")
