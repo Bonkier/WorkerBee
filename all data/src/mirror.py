@@ -342,15 +342,18 @@ class Mirror:
             # Retry floor detection if missing (essential for pack priority on later floors)
             if not floor:
                 floor = self.floor_id()
-                if floor and floor != self.current_floor_tracker:
-                    self.current_floor_tracker = floor
-                    self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
+                if floor:
+                    logger.info(f"Floor detected on retry: {floor}")
+                    if floor != self.current_floor_tracker:
+                        self.current_floor_tracker = floor
+                        self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
             
             # Load priorities based on current floor (inside loop to catch updates)
             floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
             exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
-            is_floor_without_priority = len(floor_priorities) == 0
             
+            # Debug logging
+            logger.debug(f"Pack Selection - Floor: '{floor}', Priorities: {list(floor_priorities.keys())}")
             
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
@@ -376,16 +379,20 @@ class Mirror:
                     common.sleep(0.5)
                     continue
 
-            # Detect priority packs
-            selectable_priority_packs_pos = []
-            try:
-                priority_sorted_packs = sorted(floor_priorities.items(), key=lambda x: x[1])
-                selectable_packs = [pack for pack, _ in priority_sorted_packs if pack not in exception_packs]
-
-                for pack in selectable_packs:
+            # --- 1. Identify Priority Packs ---
+            found_priority_packs = [] # List of (rank, coordinates, name)
+            
+            if floor and floor_priorities:
+                sorted_priorities = sorted(floor_priorities.items(), key=lambda x: x[1])
+                
+                for pack, rank in sorted_priorities:
+                    if pack in exception_packs:
+                        continue
+                        
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                    
                     matches = common.match_image(
                         pack_image, 
                         0.7, 
@@ -397,52 +404,39 @@ class Mirror:
                         y2=max_y_scaled
                     )
                     
-                    # Store for stats
-                    for m in matches:
-                        known_pack_names[m] = pack
-                        
-                    selectable_priority_packs_pos.extend(matches)
-                logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
+                    if matches:
+                        logger.debug(f"Found priority pack '{pack}' (Rank {rank})")
+                        for m in matches:
+                            known_pack_names[m] = pack
+                            found_priority_packs.append((rank, m, pack))
 
-                # Correct position for mouse click
-                # Removed offset as it might be moving clicks off-target. Clicking the matched image center is usually safer.
-                # selectable_priority_packs_pos = [(pos[0], pos[1]+offset_y) for pos in selectable_priority_packs_pos]
-            except Exception as e:
-                self.logger.warning(f"Error checking pack list matches: {e}. False back to select whatever available.")
-
-            # Detect except packs
+            # --- 2. Identify Exception Packs ---
             except_packs_pos = []
-            for pack in exception_packs:
-                floor_num = floor[-1]
-                image_floor = f"f{floor_num}"
-                pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                except_packs_pos.extend(common.match_image(
-                    pack_image, 
-                    0.7, 
-                    screenshot=screenshot, 
-                    enable_scaling=True,
-                    x1=min_x_scaled,
-                    y1=min_y_scaled,
-                    x2=max_x_scaled,
-                    y2=max_y_scaled
-                ))
-            logger.debug(f"Found {len(except_packs_pos)} packs in exception list: {except_packs_pos}")
+            if floor:
+                for pack in exception_packs:
+                    floor_num = floor[-1]
+                    image_floor = f"f{floor_num}"
+                    pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                    except_packs_pos.extend(common.match_image(
+                        pack_image, 
+                        0.7, 
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    ))
 
-            # Removed offset to improve proximity check accuracy between pack image and 'inpack' button
-            # except_packs_pos = [(pos[0], pos[1]+offset_y) for pos in except_packs_pos]
+            # Filter selectable packs (remove exceptions)
+            packs_to_remove = common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_y_1080p(450))
+            selectable_packs_pos = [p for p in selectable_packs_pos if p not in packs_to_remove]
 
-            # Filter selectable packs
-            logger.debug(f"Found {len(selectable_packs_pos)} packs in total: {selectable_packs_pos}")
-            # Increased threshold for proximity check to account for distance between pack image and button
-            for _pack in common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_y_1080p(450)):
-                selectable_packs_pos.remove(_pack)
-                logger.debug(f"Remove pack {_pack} since it is except pack")
-
-            # Correct position for mouse click
+            # Correct position for mouse click (Shift from button to card center)
             offset_x, offset_y = common.scale_offset_1440p(-100, 150)
             selectable_packs_pos = [(pos[0]+offset_x, pos[1]+offset_y) for pos in selectable_packs_pos]
 
-            # Detect status pack
+            # --- 3. Identify Status Packs ---
             status_gift_pos = common.match_image(
                 status, 
                 0.9, 
@@ -470,110 +464,79 @@ class Mirror:
                 # Match owned tag to gift position
                 owned_gift_pos = common.proximity_check(status_gift_pos, owned_gift_pos, common.scale_x_1080p(50))
                 if owned_gift_pos:
-                    if len(status_gift_pos) <= len(owned_gift_pos):
-                        logger.warning(f"Unexpected: status pack list (len {len(status_gift_pos)}) should be larger than number of pack list returned by proximity check (return {len(owned_gift_pos)})")
                     for i in owned_gift_pos:
-                        status_gift_pos.remove(i)
-                        logger.debug(f"Remove gift {i} since it's owned")
+                        if i in status_gift_pos:
+                            status_gift_pos.remove(i)
 
             status_selectable_packs_pos = common.proximity_check(selectable_packs_pos, status_gift_pos, common.scale_x_1080p(432))
             status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
-            logger.debug(f"Found {len(status_selectable_packs_pos)} packs contain current status which haven't owned yet: {status_selectable_packs_pos}")
 
-            def record_pack(x, y, source="unknown"):
-                # Try to find exact match in known packs
-                pack_name = "Unknown"
+            # --- Helper for Selection ---
+            def select_pack(coords, name="Unknown", source="unknown"):
+                pack_name = name
                 
-                # Check known priority packs (exact match expected due to coordinate reuse)
-                if (x, y) in known_pack_names:
-                    pack_name = known_pack_names[(x, y)]
-                elif source == "status":
-                    # Extract status name from path
+                if source == "status":
                     pack_name = os.path.basename(status).replace("_pack.png", "").capitalize() + " (Status)"
+                elif coords in known_pack_names:
+                    pack_name = known_pack_names[coords]
                 
-                # Avoid consecutive duplicates in stats
                 if not self.run_stats["packs"] or self.run_stats["packs"][-1] != pack_name:
                     self.run_stats["packs"].append(pack_name)
+                
+                x, y = coords
+                common.mouse_move(x, y)
+                common.mouse_drag(x, y + 350)
 
-            # 1. Check prioritized packs first (if enabled)
-            if shared_vars.prioritize_list_over_status and not is_floor_without_priority:
-                if len(selectable_priority_packs_pos) > 0:
-                    x, y = selectable_priority_packs_pos[0]
-                    common.mouse_move(x, y)
-                    common.mouse_drag(x, y + 350)
-                    record_pack(x, y)
-                    return
-                elif refresh_btn_available:
-                    # Refresh available --> click it to look for desired priority pack
+            # --- DECISION LOGIC ---
+
+            # A. Priority Packs (Highest Priority)
+            if found_priority_packs:
+                # Sort by rank (lowest number first)
+                found_priority_packs.sort(key=lambda x: x[0])
+                best_pack = found_priority_packs[0]
+                logger.info(f"Selecting priority pack: {best_pack[2]}")
+                select_pack(best_pack[1], best_pack[2])
+                return
+
+            # B. Status Packs (If enabled or no priority list)
+            should_check_status = not shared_vars.prioritize_list_over_status or not floor_priorities
+            
+            if should_check_status and status_selectable_packs_pos and floor != "floor5":
+                logger.info("Selecting status pack")
+                select_pack(status_selectable_packs_pos[0], source="status")
+                return
+
+            # C. Refresh Logic
+            if floor and refresh_btn_available:
+                # If we have priorities defined but found none -> Refresh
+                if floor_priorities:
+                    logger.info("Priority packs defined but none found. Refreshing.")
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                     common.sleep(1.5)
-                    continue
-
-            # 2. Check status packs (Floor < 5)
-            if floor != "floor5":
-                if len(status_selectable_packs_pos) > 0:
-                    x, y = status_selectable_packs_pos[0]
-                    common.mouse_move(x, y)
-                    common.mouse_drag(x, y + 350)
-                    record_pack(x, y, "status")
-                    return
-
-            # 3. Check prioritized packs (if not enabled above, but list exists)
-            if not is_floor_without_priority:
-                if len(selectable_priority_packs_pos) > 0:
-                    x, y = selectable_priority_packs_pos[0]
-                    common.mouse_move(x, y)
-                    common.mouse_drag(x, y + 350)
-                    record_pack(x, y)
-                    return
-                elif refresh_btn_available:
-                    # Refresh available --> click it to look for desired priority pack
-                    common.click_matching("pictures/mirror/general/refresh.png", 0.9)
-                    common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(1.5)
-                    continue
-
-            # 4. Refresh for status packs (if no priority list, and status missing)
-            if floor != "floor5" and is_floor_without_priority and refresh_btn_available:
-                # Refresh available --> click it to look for desired status pack
-                common.click_matching("pictures/mirror/general/refresh.png", 0.9)
-                common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                common.sleep(1.5)
-                continue
-
-            # Fallback: select whatever available
-            if len(status_selectable_packs_pos) > 0:
-                x, y = status_selectable_packs_pos[0]
-                common.mouse_move(x, y)
-                common.mouse_drag(x, y + 350)
-                record_pack(x, y, "status")
-                return
-            elif len(selectable_priority_packs_pos) > 0:
-                x, y = selectable_priority_packs_pos[0]
-                common.mouse_move(x, y)
-                common.mouse_drag(x, y + 350)
-                record_pack(x, y)
-                return
-            elif len(selectable_packs_pos) > 0:
-                x, y = selectable_packs_pos[0]
-                common.mouse_move(x, y)
-                common.mouse_drag(x, y + 350)
-                record_pack(x, y, "random")
-                return
-            else:
-                if retry_attempt > 0:
-                    logger.info("No packs found, retrying...")
                     continue
                 
-                logger.info("No available option, have to choose from except pack")
-                if len(except_packs_pos) == 0:
-                    raise ValueError("No exception pack to choose")
-                x, y = except_packs_pos[0]
-                common.mouse_move(x, y)
-                common.mouse_drag(x, y + 350)
-                record_pack(x, y, "exception")
+                # If we have NO priorities, but want status packs, and found none -> Refresh
+                if floor != "floor5" and not status_selectable_packs_pos:
+                    logger.info("No priority list and no status pack found. Refreshing.")
+                    common.click_matching("pictures/mirror/general/refresh.png", 0.9)
+                    common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                    common.sleep(1.5)
+                    continue
+            elif not floor and refresh_btn_available:
+                 logger.warning("Floor not detected, skipping refresh to avoid infinite loop.")
+
+            # D. Fallback Selection
+            if selectable_packs_pos:
+                logger.info("Fallback: Selecting random available pack")
+                select_pack(selectable_packs_pos[0], "Random")
                 return
+            
+            # E. Exception Fallback (Last Resort)
+            if not selectable_packs_pos and packs_to_remove:
+                 logger.info("Fallback: Forced to select exception pack")
+                 select_pack(list(packs_to_remove)[0], "Exception")
+                 return
 
         if retry_attempt == 0:
             logger.error("Something went wrong, not fixable after 10 retries.")
