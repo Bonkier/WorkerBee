@@ -141,7 +141,9 @@ class Updater:
             version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
             
             try:
-                with urllib.request.urlopen(version_file_url) as response:
+                # Add User-Agent to prevent 403 Forbidden from GitHub
+                req = urllib.request.Request(version_file_url, headers={'User-Agent': 'WorkerBee-Updater'})
+                with urllib.request.urlopen(req) as response:
                     if response.getcode() == 200:
                         repo_version = response.read().decode().strip()
                         if repo_version:
@@ -155,7 +157,9 @@ class Updater:
             release_url = f"{self.api_url}/releases/latest"
             
             try:
-                with urllib.request.urlopen(release_url) as response:
+                # Add User-Agent to prevent 403 Forbidden from GitHub API
+                req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
+                with urllib.request.urlopen(req) as response:
                     if response.getcode() == 200:
                         release_data = json.loads(response.read().decode())
                         return release_data['tag_name'], release_data['zipball_url']
@@ -166,7 +170,8 @@ class Updater:
                     
             # Priority 3: Final fallback to latest commit on main branch
             commits_url = f"{self.api_url}/commits/main"
-            with urllib.request.urlopen(commits_url) as response:
+            req = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
+            with urllib.request.urlopen(req) as response:
                 commit_data = json.loads(response.read().decode())
                 commit_hash = commit_data['sha']
                 # Generate a version number based on the commit date
@@ -216,6 +221,7 @@ class Updater:
         # Semantic version comparison
         curr_tuple = self.parse_version(current_clean)
         lat_tuple = self.parse_version(latest_clean)
+        logger.debug(f"Comparing versions: Local {curr_tuple} vs Remote {lat_tuple}")
         
         # Check if we need to update (Remote > Local)
         if lat_tuple > curr_tuple:
@@ -278,7 +284,9 @@ class Updater:
             zip_path = os.path.join(self.temp_path, 'update.zip')
             logger.info(f"Downloading update from {download_url}")
             
-            with urllib.request.urlopen(download_url) as response, open(zip_path, 'wb') as out_file:
+            # Add User-Agent here too
+            req = urllib.request.Request(download_url, headers={'User-Agent': 'WorkerBee-Updater'})
+            with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
                 shutil.copyfileobj(response, out_file)
                 
             logger.info(f"Download completed: {zip_path}")
