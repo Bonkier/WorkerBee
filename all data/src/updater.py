@@ -178,6 +178,26 @@ class Updater:
             logger.error(f"Error checking for updates: {e}")
             return None, None
     
+    def parse_version(self, version_str):
+        """Parse version string into a comparable tuple"""
+        # Remove 'v' prefix if present
+        clean_ver = version_str.lower().strip()
+        if clean_ver.startswith('v'):
+            clean_ver = clean_ver[1:]
+            
+        # Handle commit-date style versions
+        if clean_ver.startswith('commit-'):
+            return (0, 0, 0) 
+            
+        # Split by dots
+        parts = clean_ver.split('.')
+        try:
+            # Convert to integers
+            return tuple(int(p) for p in parts)
+        except ValueError:
+            # Fallback for non-numeric versions
+            return (0, 0, 0)
+
     def check_for_updates(self):
         current_version = self.get_current_version()
         latest_version, download_url = self.get_latest_version()
@@ -193,12 +213,19 @@ class Updater:
         # Debug logging
         logger.info(f"Checking for updates... Local: '{current_clean}', Remote: '{latest_clean}'")
             
-        # Check if we need to update (simple string comparison)
-        if current_clean != latest_clean:
+        # Semantic version comparison
+        curr_tuple = self.parse_version(current_clean)
+        lat_tuple = self.parse_version(latest_clean)
+        
+        # Check if we need to update (Remote > Local)
+        if lat_tuple > curr_tuple:
             logger.info(f"Update available: {current_clean} -> {latest_clean}")
             return True, latest_clean, download_url
         else:
-            logger.info(f"Versions match ({current_clean}), no update needed")
+            if lat_tuple < curr_tuple:
+                logger.info(f"Local version ({current_clean}) is newer than remote ({latest_clean}). Skipping update.")
+            else:
+                logger.info(f"Versions match ({current_clean}), no update needed")
             return False, latest_clean, None
 
     def should_exclude(self, file_path, dest_file_path=None):
@@ -435,6 +462,27 @@ class Updater:
             
             logger.info(f"Found repository directory: {repo_dir}")
             
+            # Verify the version inside the downloaded zip to prevent update loops
+            # This handles cases where GitHub raw file is updated but zipball cache is stale
+            new_version_path = os.path.join(repo_dir, "all data", "version.json")
+            if os.path.exists(new_version_path):
+                try:
+                    with open(new_version_path, 'r') as f:
+                        new_version = f.read().strip()
+                    
+                    current_version = self.get_current_version()
+                    
+                    # Parse versions
+                    new_ver_tuple = self.parse_version(new_version)
+                    curr_ver_tuple = self.parse_version(current_version)
+                    
+                    # If new version is not greater than current, abort
+                    if new_ver_tuple <= curr_ver_tuple:
+                        logger.warning(f"Downloaded update version ({new_version}) is not newer than current version ({current_version}). Aborting update to prevent loop.")
+                        return False
+                except Exception as e:
+                    logger.warning(f"Failed to verify version in update package: {e}")
+
             # Always use batch updater for reliability on Windows
             # This handles file locking and process termination better than Python
             if platform.system() == "Windows":
