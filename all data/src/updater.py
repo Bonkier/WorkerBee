@@ -957,9 +957,10 @@ except Exception as e:
             
             # Create the batch script content
             # /T on taskkill kills child processes (solving the lingering python instance)
+            # Use ping for delay as timeout doesn't work well in hidden windows
             batch_content = f"""@echo off
 echo Waiting for WorkerBee to close...
-timeout /t 3 /nobreak > NUL
+ping 127.0.0.1 -n 4 > NUL
 
 echo Force closing PID {current_pid} and children...
 taskkill /F /PID {current_pid} /T > NUL 2>&1
@@ -985,8 +986,9 @@ exit
             
             logger.info(f"Launching batch updater: {batch_script_path}")
             
-            # Launch the batch script detached
-            subprocess.Popen([batch_script_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            # Launch the batch script detached and hidden
+            # 0x08000000 is CREATE_NO_WINDOW
+            subprocess.Popen([batch_script_path], creationflags=0x08000000)
             
             # Force exit immediately
             os._exit(0)
