@@ -997,7 +997,7 @@ except Exception as e:
             logger.info(f"Target: {target_dir}")
             
             # Brief delay to ensure original process has fully exited
-            time.sleep(0.5)
+            time.sleep(3.0)
             
             # Initialize updater with target directory as parent
             self.parent_dir = target_dir

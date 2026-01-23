@@ -2055,7 +2055,7 @@ def apply_theme():
             subprocess.Popen([sys.executable, THEME_RESTART_PATH, theme_name, "Settings"])
             
             # Exit immediately - no delay needed
-            sys.exit(0)
+            os._exit(0)
         except Exception as e:
             error(f"Error applying theme: {e}")
             messagebox.showerror("Error", f"Failed to apply theme: {e}")
@@ -5054,62 +5054,68 @@ def check_processes():
 
 def on_closing():
     """Handle application exit cleanup"""
+    # Hide window immediately to give instant feedback
     try:
+        root.withdraw()
+    except:
+        pass
         
+    try:
+        cleanup_processes()
+    except Exception as e:
+        print(f"Error during application close: {e}")
+    finally:
+        # Clean up PID file if it exists
+        try:
+            if os.path.exists(PID_FILE):
+                os.remove(PID_FILE)
+        except:
+            pass  # Ignore cleanup errors
+            
+        os._exit(0)
+
+# Set the callback for window close
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
+# =======================
+# APPLICATION STARTUP
+# =======================
+
+def cleanup_processes():
+    """Clean up all running processes and resources"""
+    try:
         # Stop async logging process FIRST
         try:
-            from src.logger import stop_async_logging
-            stop_async_logging()
+            # Fast kill logging process without waiting
+            import src.logger as logger_module
+            if logger_module._log_process and logger_module._log_process.is_alive():
+                logger_module._log_process.terminate()
         except Exception:
             pass  # Ignore cleanup errors
         
         try:
             # Kill multiprocessing processes with force if needed
-            if process and process.is_alive():
-                process.terminate()
-                process.join(timeout=2)
-                if process.is_alive():
-                    process.kill()
-                    process.join(timeout=1)
-            if exp_process and exp_process.is_alive():
-                exp_process.terminate()
-                exp_process.join(timeout=2)
-                if exp_process.is_alive():
-                    exp_process.kill()
-                    exp_process.join(timeout=1)
-            if threads_process and threads_process.is_alive():
-                threads_process.terminate()
-                threads_process.join(timeout=2)
-                if threads_process.is_alive():
-                    threads_process.kill()
-                    threads_process.join(timeout=1)
-            if battlepass_process and battlepass_process.is_alive():
-                battlepass_process.terminate()
-                battlepass_process.join(timeout=2)
-                if battlepass_process.is_alive():
-                    battlepass_process.kill()
-                    battlepass_process.join(timeout=1)
+            global process, exp_process, threads_process, battlepass_process
+            for p in [process, exp_process, threads_process, battlepass_process]:
+                if p and p.is_alive():
+                    p.terminate()
+                    # No join needed, we are exiting immediately
             
             # Kill subprocess processes with force
+            global battle_process, function_process_list
             if battle_process and battle_process.poll() is None:
                 try:
                     os.kill(battle_process.pid, signal.SIGTERM)
-                    time.sleep(0.5)
-                    if battle_process.poll() is None:
-                        os.kill(battle_process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
             for proc in function_process_list:
                 if proc and proc.poll() is None:
                     try:
                         os.kill(proc.pid, signal.SIGTERM)
-                        time.sleep(0.5)
-                        if proc.poll() is None:
-                            os.kill(proc.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
         except Exception as e:
-            error(f"Error killing processes: {e}")
+            print(f"Error killing processes: {e}")
         
         try:
             if 'log_handler' in globals() and log_handler:
@@ -5121,7 +5127,6 @@ def on_closing():
             keyboard_handler.stop()
         except Exception:
             pass  # Ignore cleanup errors
-        
         
         # Stop background threads from running processes
         try:
@@ -5138,23 +5143,7 @@ def on_closing():
             pass  # Ignore cleanup errors
             
     except Exception as e:
-        error(f"Error during application close: {e}")
-    finally:
-        # Clean up PID file if it exists
-        try:
-            if os.path.exists(PID_FILE):
-                os.remove(PID_FILE)
-        except:
-            pass  # Ignore cleanup errors
-            
-        sys.exit(0)
-
-# Set the callback for window close
-root.protocol("WM_DELETE_WINDOW", on_closing)
-
-# =======================
-# APPLICATION STARTUP
-# =======================
+        error(f"Error during cleanup: {e}")
 
 if __name__ == "__main__":
     # Check for staged update flag (for frozen executable updates)
@@ -5169,7 +5158,7 @@ if __name__ == "__main__":
             # We can't log to the main log easily here as it might be locked or paths might be wrong
             # Just print to stderr
             print(f"Staged update failed: {e}", file=sys.stderr)
-        sys.exit(0)
+        os._exit(0)
 
     def start_application():
         """Initialize the application after GUI is loaded"""
@@ -5194,6 +5183,7 @@ if __name__ == "__main__":
                         def update_cb(success, msg):
                             if success:
                                 logger.info(f"Auto-update: {msg}")
+                                cleanup_processes()
                                 os._exit(0)
                             else:
                                 logger.info(f"Auto-update check: {msg}")
