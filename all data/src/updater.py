@@ -136,20 +136,7 @@ class Updater:
             
     def get_latest_version(self):
         try:
-            # First try to get the latest release
-            release_url = f"{self.api_url}/releases/latest"
-            
-            try:
-                with urllib.request.urlopen(release_url) as response:
-                    if response.getcode() == 200:
-                        release_data = json.loads(response.read().decode())
-                        return release_data['tag_name'], release_data['zipball_url']
-            except urllib.error.HTTPError as e:
-                # If no releases found (404), check the version.json file directly
-                if e.code != 404:
-                    raise
-                    
-            # Fall back to checking version.json file in the repository
+            # Priority 1: Check version.json file in the repository (Main Branch)
             # Add timestamp to prevent caching
             version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
             
@@ -163,8 +150,21 @@ class Updater:
                             return repo_version, download_url
             except Exception as e:
                 logger.warning(f"Could not read version.json from repository: {e}")
+
+            # Priority 2: Try to get the latest release
+            release_url = f"{self.api_url}/releases/latest"
+            
+            try:
+                with urllib.request.urlopen(release_url) as response:
+                    if response.getcode() == 200:
+                        release_data = json.loads(response.read().decode())
+                        return release_data['tag_name'], release_data['zipball_url']
+            except urllib.error.HTTPError as e:
+                # If no releases found (404), ignore
+                if e.code != 404:
+                    raise
                     
-            # Final fallback to latest commit on main branch
+            # Priority 3: Final fallback to latest commit on main branch
             commits_url = f"{self.api_url}/commits/main"
             with urllib.request.urlopen(commits_url) as response:
                 commit_data = json.loads(response.read().decode())
@@ -868,12 +868,14 @@ except Exception as e:
             logger.error(f"Error cleaning up old backups: {e}")
     
     def perform_update(self, create_backup=True, auto_restart=True, preserve_only_last_3=True):
-        # SAFETY: Always create backup regardless of parameter (for safety)
-        # If create_backup is True, we'll keep the backup
-        # If create_backup is False, we'll delete it after successful update
-        backup_path = self.backup_current_version()
-        if not backup_path:
-            return False, "Failed to create safety backup"
+        # Only create backup if requested
+        backup_path = None
+        if create_backup:
+            backup_path = self.backup_current_version()
+            if not backup_path:
+                return False, "Failed to create safety backup"
+        else:
+            logger.info("Skipping backup creation as requested")
             
         # Check for updates
         update_available, latest_version, download_url = self.check_for_updates()
@@ -922,7 +924,7 @@ except Exception as e:
         
         return True, f"Successfully updated to {latest_version}"
     
-    def check_and_update_async(self, callback=None, create_backup=True, auto_restart=True, preserve_only_last_3=True):
+    def check_and_update_async(self, callback=None, create_backup=False, auto_restart=True, preserve_only_last_3=True):
         def update_thread():
             result, message = self.perform_update(create_backup, auto_restart, preserve_only_last_3)
             if callback:
@@ -1025,7 +1027,7 @@ def check_for_updates(repo_owner, repo_name, callback=None):
             callback(False, f"Error: {e}", False)
         return False
 
-def auto_update(repo_owner, repo_name, create_backup=True, preserve_only_last_3=True, callback=None, pre_exit_callback=None):
+def auto_update(repo_owner, repo_name, create_backup=False, preserve_only_last_3=True, callback=None, pre_exit_callback=None):
     # Force update from Bonkier/WorkerBee
     repo_owner = "Bonkier"
     repo_name = "WorkerBee"
