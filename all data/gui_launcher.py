@@ -4378,52 +4378,58 @@ def refresh_statistics():
         # Create scrollable frame for history table
         history_frame = ctk.CTkScrollableFrame(history_card, height=300, fg_color="transparent")
         history_frame.pack(fill="x", padx=10, pady=(0, 15))
-        
-        # Header
-        header_frame = ctk.CTkFrame(history_frame, fg_color="transparent")
-        header_frame.pack(fill="x", pady=2)
-        ctk.CTkLabel(header_frame, text="Result", width=60, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
-        ctk.CTkLabel(header_frame, text="Duration", width=80, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
-        ctk.CTkLabel(header_frame, text="Packs / Floor Times", font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
-        
+
         for run in md_history:
-            row = ctk.CTkFrame(history_frame, fg_color="#252525")
-            row.pack(fill="x", pady=2)
+            # Create a card-like look for each run
+            run_frame = ctk.CTkFrame(history_frame, fg_color="#252525", corner_radius=6)
+            run_frame.pack(fill="x", pady=4, padx=5)
             
-            # Result
+            # Top row: Result and Total Time
+            top_row = ctk.CTkFrame(run_frame, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(8, 2))
+            
             result = run.get("result", "Unknown")
-            color = "#4caf50" if result == "Win" else "#f44336"
-            ctk.CTkLabel(row, text=result, width=60, font=UIStyle.SMALL_FONT, text_color=color, anchor="w").pack(side="left", padx=5)
+            res_color = "#4caf50" if result == "Win" else "#f44336"
             
-            # Duration
             duration = run.get("duration", 0)
             mins, secs = divmod(int(duration), 60)
-            time_str = f"{mins}m {secs}s"
-            ctk.CTkLabel(row, text=time_str, width=80, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
+            total_time_str = f"{mins}:{secs:02d}"
             
-            # Details (Packs and Floor Times)
-            details_frame = ctk.CTkFrame(row, fg_color="transparent")
-            details_frame.pack(side="left", expand=True, fill="x", padx=5, pady=2)
+            # "Win | Time | 20:00"
+            ctk.CTkLabel(top_row, text=result, font=(UIStyle.FONT_FAMILY, 13, "bold"), text_color=res_color).pack(side="left")
+            ctk.CTkLabel(top_row, text=" | ", font=UIStyle.SMALL_FONT, text_color="gray").pack(side="left")
+            ctk.CTkLabel(top_row, text=f"Time | {total_time_str}", font=UIStyle.SMALL_FONT, text_color="#e0e0e0").pack(side="left")
             
-            # Format packs
-            packs = run.get("packs", [])
-            packs_str = ", ".join(packs) if packs else "None"
+            # Bottom row: Packs details
+            bottom_row = ctk.CTkFrame(run_frame, fg_color="transparent")
+            bottom_row.pack(fill="x", padx=10, pady=(0, 8))
             
-            # Format floor times
+            # Calculate details
             floor_times = run.get("floor_times", {})
-            floors_str_parts = []
-            # Sort floors by key (floor1, floor2...)
-            for f_key in sorted(floor_times.keys()):
-                f_time = floor_times[f_key]
-                f_mins, f_secs = divmod(int(f_time), 60)
-                # Shorten floor name: floor1 -> F1
-                short_name = f_key.replace("floor", "F")
-                floors_str_parts.append(f"{short_name}: {f_mins}m{f_secs}s")
+            packs = run.get("packs", [])
             
-            floors_str = " | ".join(floors_str_parts)
+            # Sort floors numerically (floor1, floor2, etc.)
+            sorted_floors = sorted(floor_times.keys(), key=lambda x: int(x.replace("floor", "")) if x.replace("floor", "").isdigit() else 99)
             
-            ctk.CTkLabel(details_frame, text=f"Packs: {packs_str}", font=(UIStyle.FONT_FAMILY, 10), anchor="w", text_color="#cccccc").pack(fill="x")
-            ctk.CTkLabel(details_frame, text=f"Floors: {floors_str}", font=(UIStyle.FONT_FAMILY, 10), anchor="w", text_color="#999999").pack(fill="x")
+            pack_details = []
+            for idx, floor_key in enumerate(sorted_floors):
+                start_t = floor_times[floor_key]
+                # Determine end time (next floor start or total duration)
+                end_t = floor_times[sorted_floors[idx+1]] if idx + 1 < len(sorted_floors) else duration
+                
+                # Calculate duration for this specific pack/floor
+                floor_dur = max(0, end_t - start_t)
+                f_mins, f_secs = divmod(int(floor_dur), 60)
+                time_str = f"{f_mins}:{f_secs:02d}"
+                
+                # Get pack name
+                pack_name = packs[idx] if idx < len(packs) else "Unknown"
+                
+                pack_details.append(f"{pack_name} - {time_str}")
+            
+            packs_str = " | ".join(pack_details) if pack_details else "No pack data"
+            
+            ctk.CTkLabel(bottom_row, text=f"Packs | {packs_str}", font=(UIStyle.FONT_FAMILY, 11), text_color="#a0a0a0", anchor="w", justify="left", wraplength=500).pack(fill="x")
 
     ctk.CTkButton(stats_scroll, text="Refresh Stats", command=refresh_statistics, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=20)
 

@@ -154,6 +154,11 @@ def update_stats(win, run_data=None):
             with open(stats_path, 'r') as f:
                 data = json.load(f)
         
+        # Ensure structure exists
+        if "mirror" not in data: data["mirror"] = {"runs": 0, "wins": 0, "losses": 0}
+        if "exp" not in data: data["exp"] = {"runs": 0}
+        if "threads" not in data: data["threads"] = {"runs": 0}
+        
         data["mirror"]["runs"] += 1
         if win: data["mirror"]["wins"] += 1
         else: data["mirror"]["losses"] += 1
@@ -176,6 +181,7 @@ def update_stats(win, run_data=None):
         
         with open(stats_path, 'w') as f:
             json.dump(data, f, indent=4)
+        logger.info(f"Statistics updated: Win={win}")
     except Exception as e:
         logger.error(f"Failed to update stats: {e}")
 
