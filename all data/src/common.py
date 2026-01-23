@@ -6,6 +6,7 @@ import ctypes
 import logging
 import secrets
 import platform
+from logging.handlers import RotatingFileHandler
 import threading
 import inspect
 from functools import partial
@@ -84,7 +85,7 @@ class NoMillisecondsFormatter(logging.Formatter):
 LOG_FILENAME = os.path.join(BASE_PATH, "Logs.log")
 
 # Create custom handler with no-milliseconds formatter
-handler = logging.FileHandler(LOG_FILENAME)
+handler = RotatingFileHandler(LOG_FILENAME, maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
 formatter = NoMillisecondsFormatter(
     fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
