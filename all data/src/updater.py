@@ -13,6 +13,7 @@ import threading
 import fnmatch
 import configparser  # Config modification lib
 from datetime import datetime
+import filecmp  # File comparison lib
 
 # Configure log
 logger = logging.getLogger("updater")
@@ -392,6 +393,8 @@ class Updater:
             return None
     
     def apply_update(self, zip_path):
+        updater_path = os.path.join(repo_dir, "all data", "src", "updater.py")
+        current_updater = os.path.abspath(__file__)
         # Check if this is a staged self-update
         if self._is_staged_update():
             return self._perform_staged_update()
