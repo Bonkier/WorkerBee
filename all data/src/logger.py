@@ -3,6 +3,7 @@ import time
 import queue
 import logging
 import threading
+from logging.handlers import RotatingFileHandler
 import multiprocessing
 from typing import Optional, Dict, Any
 
@@ -41,7 +42,7 @@ class NoMillisecondsFormatter(logging.Formatter):
 def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
     """Worker process that handles async log writing to file"""
     # Setup logging in the worker process
-    handler = logging.FileHandler(log_filename)
+    handler = RotatingFileHandler(log_filename, maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
     formatter = NoMillisecondsFormatter(
         fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
         datefmt='%d/%m/%Y %H:%M:%S'
