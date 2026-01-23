@@ -5157,6 +5157,20 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 # =======================
 
 if __name__ == "__main__":
+    # Check for staged update flag (for frozen executable updates)
+    if len(sys.argv) > 1 and sys.argv[1] == "--staged-update":
+        try:
+            import updater
+            # Initialize updater with dummy values, _perform_staged_update will use sys.argv
+            u = updater.Updater("Bonkier", "WorkerBee")
+            if u._perform_staged_update():
+                u.restart_application()
+        except Exception as e:
+            # We can't log to the main log easily here as it might be locked or paths might be wrong
+            # Just print to stderr
+            print(f"Staged update failed: {e}", file=sys.stderr)
+        sys.exit(0)
+
     def start_application():
         """Initialize the application after GUI is loaded"""
         try:

@@ -412,14 +412,24 @@ class Updater:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.temp_path)
                 
-            # GitHub zip files contain a top-level folder with the repo name and commit hash
-            # We need to get the name of this folder
-            subdirs = [d for d in os.listdir(self.temp_path) if os.path.isdir(os.path.join(self.temp_path, d)) and d != "extracted"]
-            if not subdirs:
-                logger.error("No repository directories found in extracted zip")
+            # Find the directory that contains 'all data'
+            repo_dir = None
+            
+            # Check if temp_path directly contains 'all data'
+            if "all data" in os.listdir(self.temp_path) and os.path.isdir(os.path.join(self.temp_path, "all data")):
+                repo_dir = self.temp_path
+            else:
+                # Check subdirectories (standard GitHub zip structure)
+                subdirs = [d for d in os.listdir(self.temp_path) if os.path.isdir(os.path.join(self.temp_path, d)) and d != "extracted"]
+                for d in subdirs:
+                    if "all data" in os.listdir(os.path.join(self.temp_path, d)):
+                        repo_dir = os.path.join(self.temp_path, d)
+                        break
+            
+            if not repo_dir:
+                logger.error("Invalid update structure: 'all data' folder not found in update")
                 return False
-                
-            repo_dir = os.path.join(self.temp_path, subdirs[0])
+            
             logger.info(f"Found repository directory: {repo_dir}")
             
             # Special case: if we're updating the updater itself, stage the update
@@ -947,10 +957,21 @@ except Exception as e:
             logger.info(f"Command: {' '.join(cmd)}")
             
             # Launch staged updater and exit current process
-            if platform.system() == "Windows":
-                subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            if getattr(sys, 'frozen', False):
+                # If frozen, call the executable with the flag
+                # We use the current executable path
+                cmd = [sys.executable, "--staged-update", repo_dir, self.parent_dir, self.temp_path]
+                if platform.system() == "Windows":
+                    subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                else:
+                    subprocess.Popen(cmd, start_new_session=True)
             else:
-                subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True)
+                # If script, call python with the script
+                if platform.system() == "Windows":
+                    subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                else:
+                    subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True)
+                    
             logger.info("Staged updater launched. Current process will exit.")
             
             # Exit current process to allow staged updater to update us
