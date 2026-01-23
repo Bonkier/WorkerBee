@@ -5187,7 +5187,7 @@ if __name__ == "__main__":
                                 os._exit(0)
                             else:
                                 logger.info(f"Auto-update check: {msg}")
-                        updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
+                        updater.auto_update("Bonkier", "WorkerBee", callback=update_cb, pre_exit_callback=cleanup_processes)
                     except Exception as e:
                         logger.error(f"Failed to initialize auto-updater: {e}")
             
