@@ -43,6 +43,14 @@ class Mirror:
         self.squad_set = False
         self.vestige_coords = None
         self.logger.debug(f"Mirror initialized - resolution: {self.res_x}x{self.res_y}, aspect ratio: {self.aspect_ratio}")
+        
+        # Statistics tracking
+        self.run_stats = {
+            "start_time": time.time(),
+            "floor_times": {},
+            "packs": []
+        }
+        self.current_floor_tracker = None
 
     @staticmethod
     def floor_id():
@@ -128,7 +136,13 @@ class Mirror:
             run_complete = 1
             win_flag = 1
 
-        return win_flag,run_complete
+        # Add duration to stats
+        if run_complete:
+            self.run_stats["duration"] = time.time() - self.run_stats["start_time"]
+            # Ensure last floor time is recorded if we finish
+            # (This is approximate as we don't have a precise "floor end" event other than run end)
+            
+        return win_flag, run_complete, self.run_stats
 
     def mirror_loop(self):
         """Handles all the mirror dungeon logic in this"""
@@ -291,6 +305,12 @@ class Mirror:
         """Prioritises the status gifts for packs if not follows a list"""
         status = mirror_utils.pack_choice(self.status) or "pictures/mirror/packs/status/poise_pack.png"
         floor = self.floor_id()
+        
+        # Track floor times
+        if floor and floor != self.current_floor_tracker:
+            self.current_floor_tracker = floor
+            self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
+            
         if floor == "floor1":
             common.sleep(0.5)
 
@@ -311,14 +331,27 @@ class Mirror:
         min_x_scaled = common.scale_x_1080p(150)
         max_x_scaled = common.scale_x_1080p(1730)
 
-        # Use cached configs instead of file I/O
-        floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
-        exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
-        is_floor_without_priority = len(floor_priorities) == 0
+
+        # Track known pack locations for statistics
+        known_pack_names = {} # (x, y) -> pack_name
 
         retry_attempt = 10
         while retry_attempt > 0:
             retry_attempt -= 1
+            
+            # Retry floor detection if missing (essential for pack priority on later floors)
+            if not floor:
+                floor = self.floor_id()
+                if floor and floor != self.current_floor_tracker:
+                    self.current_floor_tracker = floor
+                    self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
+            
+            # Load priorities based on current floor (inside loop to catch updates)
+            floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
+            exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
+            is_floor_without_priority = len(floor_priorities) == 0
+            
+            
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
             screenshot = common.capture_screen()
@@ -347,7 +380,14 @@ class Mirror:
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    selectable_priority_packs_pos.extend(common.match_image(pack_image, 0.8, screenshot=screenshot))
+                    matches = common.match_image(pack_image, 0.8, screenshot=screenshot)
+                    
+                    # Store for stats (pre-offset)
+                    _, offset_y_correction = common.scale_offset_1440p(0, -200)
+                    for m in matches:
+                        known_pack_names[(m[0], m[1] + offset_y_correction)] = pack
+                        
+                    selectable_priority_packs_pos.extend(matches)
                 selectable_priority_packs_pos = [pos for pos in selectable_priority_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
                 logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
 
@@ -401,12 +441,26 @@ class Mirror:
             status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
             logger.debug(f"Found {len(status_selectable_packs_pos)} packs contain current status which haven't owned yet: {status_selectable_packs_pos}")
 
+            def record_pack(x, y, source="unknown"):
+                # Try to find exact match in known packs
+                pack_name = "Unknown"
+                
+                # Check known priority packs (exact match expected due to coordinate reuse)
+                if (x, y) in known_pack_names:
+                    pack_name = known_pack_names[(x, y)]
+                elif source == "status":
+                    # Extract status name from path
+                    pack_name = os.path.basename(status).replace("_pack.png", "").capitalize() + " (Status)"
+                
+                self.run_stats["packs"].append(pack_name)
+
             # 1. Check prioritized packs first (if enabled)
             if shared_vars.prioritize_list_over_status and not is_floor_without_priority:
                 if len(selectable_priority_packs_pos) > 0:
                     x, y = selectable_priority_packs_pos[0]
                     common.mouse_move(x, y)
                     common.mouse_drag(x, y + 350)
+                    record_pack(x, y)
                     return
                 elif refresh_btn_available:
                     # Refresh available --> click it to look for desired priority pack
@@ -421,6 +475,7 @@ class Mirror:
                     x, y = status_selectable_packs_pos[0]
                     common.mouse_move(x, y)
                     common.mouse_drag(x, y + 350)
+                    record_pack(x, y, "status")
                     return
 
             # 3. Check prioritized packs (if not enabled above, but list exists)
@@ -429,6 +484,7 @@ class Mirror:
                     x, y = selectable_priority_packs_pos[0]
                     common.mouse_move(x, y)
                     common.mouse_drag(x, y + 350)
+                    record_pack(x, y)
                     return
                 elif refresh_btn_available:
                     # Refresh available --> click it to look for desired priority pack
@@ -450,16 +506,19 @@ class Mirror:
                 x, y = status_selectable_packs_pos[0]
                 common.mouse_move(x, y)
                 common.mouse_drag(x, y + 350)
+                record_pack(x, y, "status")
                 return
             elif len(selectable_priority_packs_pos) > 0:
                 x, y = selectable_priority_packs_pos[0]
                 common.mouse_move(x, y)
                 common.mouse_drag(x, y + 350)
+                record_pack(x, y)
                 return
             elif len(selectable_packs_pos) > 0:
                 x, y = selectable_packs_pos[0]
                 common.mouse_move(x, y)
                 common.mouse_drag(x, y + 350)
+                record_pack(x, y, "random")
                 return
             else:
                 if retry_attempt > 0:
@@ -472,6 +531,7 @@ class Mirror:
                 x, y = except_packs_pos[0]
                 common.mouse_move(x, y)
                 common.mouse_drag(x, y + 350)
+                record_pack(x, y, "exception")
                 return
 
         if retry_attempt == 0:
@@ -810,10 +870,11 @@ class Mirror:
         # Use enhanced_proximity_check with bounding box mode for exception filtering
         # Expand detection area to account for small logo images in corners of gift cards
         inside_exception = common.enhanced_proximity_check(all_exception_boxes, fusion_gifts,
-                                                          expand_left=common.scale_x_1080p(150),
-                                                          expand_right=common.scale_x_1080p(150),
-                                                          expand_above=common.scale_y_1080p(150),
-                                                          expand_below=common.scale_y_1080p(150),
+                                                          # Increased expansion (especially Left/Above) to handle bottom-right corner logos
+                                                          expand_left=common.scale_x_1080p(300),
+                                                          expand_right=common.scale_x_1080p(100),
+                                                          expand_above=common.scale_y_1080p(400),
+                                                          expand_below=common.scale_y_1080p(100),
                                                           use_bounding_box=True, return_bool=False)
         
         # Filter out gifts that are inside exception areas
