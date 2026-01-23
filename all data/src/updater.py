@@ -785,7 +785,10 @@ cmd = {repr(cmd)}
 print(f"Launching application with command: {{cmd}}")
 
 try:
-    subprocess.Popen(cmd)
+    if sys.platform == 'win32':
+        subprocess.Popen(cmd, creationflags=0x00000008) # DETACHED_PROCESS
+    else:
+        subprocess.Popen(cmd, start_new_session=True)
     print("Application launched successfully")
 except Exception as e:
     print(f"Error launching application: {{e}}")
@@ -793,9 +796,9 @@ except Exception as e:
             
             # Launch the restart script
             if platform.system() == "Windows":
-                # Use CREATE_NEW_PROCESS_GROUP to detach on Windows
+                # Use DETACHED_PROCESS (0x8) to ensure it survives parent console closure
                 subprocess.Popen([sys.executable, restart_script_path], 
-                              creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                              creationflags=0x00000008)
             else:
                 # Use subprocess.DEVNULL to detach on Unix
                 subprocess.Popen([sys.executable, restart_script_path], 
@@ -944,7 +947,10 @@ except Exception as e:
             logger.info(f"Command: {' '.join(cmd)}")
             
             # Launch staged updater and exit current process
-            subprocess.Popen(cmd, cwd=temp_updater_dir)
+            if platform.system() == "Windows":
+                subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True)
             logger.info("Staged updater launched. Current process will exit.")
             
             # Exit current process to allow staged updater to update us
