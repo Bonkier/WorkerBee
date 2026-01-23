@@ -966,7 +966,7 @@ echo Force closing PID {current_pid} and children...
 taskkill /F /PID {current_pid} /T > NUL 2>&1
 
 echo Updating files...
-xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q
+xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q > NUL
 
 echo Restarting WorkerBee...
 start "" "{executable}" {args}
@@ -988,7 +988,7 @@ exit
             
             # Launch the batch script detached and hidden
             # 0x08000000 is CREATE_NO_WINDOW
-            subprocess.Popen([batch_script_path], creationflags=0x08000000)
+            subprocess.Popen(["cmd.exe", "/c", batch_script_path], creationflags=0x08000000)
             
             # Force exit immediately
             os._exit(0)
