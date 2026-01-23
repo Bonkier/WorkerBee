@@ -119,7 +119,7 @@ def stop_async_logging():
     if _log_process is not None:
         # Send shutdown signal
         _log_queue.put(None)
-        _log_process.join(timeout=5.0)
+        _log_process.join(timeout=1.0)
         if _log_process.is_alive():
             _log_process.terminate()
         _log_process = None
