@@ -135,40 +135,57 @@ class Updater:
             return 'v0'
             
     def get_latest_version(self):
+        # Initialize candidates
+        ver_json_info = None
+        release_info = None
+        
+        # 1. Check version.json in the repository (Main Branch)
         try:
-            # Priority 1: Check version.json file in the repository (Main Branch)
             # Add timestamp to prevent caching
             version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
             
-            try:
-                # Add User-Agent to prevent 403 Forbidden from GitHub
-                req = urllib.request.Request(version_file_url, headers={'User-Agent': 'WorkerBee-Updater'})
-                with urllib.request.urlopen(req) as response:
-                    if response.getcode() == 200:
-                        repo_version = response.read().decode().strip()
-                        if repo_version:
-                            # Use the zipball URL for the main branch
-                            download_url = f"{self.api_url}/zipball/main"
-                            return repo_version, download_url
-            except Exception as e:
-                logger.warning(f"Could not read version.json from repository: {e}")
+            # Add User-Agent to prevent 403 Forbidden from GitHub
+            req = urllib.request.Request(version_file_url, headers={'User-Agent': 'WorkerBee-Updater'})
+            with urllib.request.urlopen(req) as response:
+                if response.getcode() == 200:
+                    repo_version = response.read().decode().strip()
+                    if repo_version:
+                        # Use the zipball URL for the main branch
+                        download_url = f"{self.api_url}/zipball/main"
+                        ver_json_info = (repo_version, download_url)
+        except Exception as e:
+            logger.warning(f"Could not read version.json from repository: {e}")
 
-            # Priority 2: Try to get the latest release
+        # 2. Check Releases
+        try:
             release_url = f"{self.api_url}/releases/latest"
             
-            try:
-                # Add User-Agent to prevent 403 Forbidden from GitHub API
-                req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
-                with urllib.request.urlopen(req) as response:
-                    if response.getcode() == 200:
-                        release_data = json.loads(response.read().decode())
-                        return release_data['tag_name'], release_data['zipball_url']
-            except urllib.error.HTTPError as e:
-                # If no releases found (404), ignore
-                if e.code != 404:
-                    raise
+            # Add User-Agent to prevent 403 Forbidden from GitHub API
+            req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
+            with urllib.request.urlopen(req) as response:
+                if response.getcode() == 200:
+                    release_data = json.loads(response.read().decode())
+                    release_info = (release_data['tag_name'], release_data['zipball_url'])
+        except Exception as e:
+            # If no releases found (404), ignore
+            pass
+            
+        # Compare and return the best one
+        if ver_json_info and release_info:
+            v_json = self.parse_version(ver_json_info[0])
+            v_rel = self.parse_version(release_info[0])
+            
+            if v_rel > v_json:
+                return release_info
+            else:
+                return ver_json_info
+        elif ver_json_info:
+            return ver_json_info
+        elif release_info:
+            return release_info
                     
-            # Priority 3: Final fallback to latest commit on main branch
+        # 3. Final fallback to latest commit on main branch
+        try:
             commits_url = f"{self.api_url}/commits/main"
             req = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req) as response:
@@ -178,7 +195,6 @@ class Updater:
                 commit_date = commit_data['commit']['committer']['date'].split('T')[0].replace('-', '.')
                 download_url = f"{self.api_url}/zipball/{commit_hash}"
                 return f"commit-{commit_date}", download_url
-                
         except Exception as e:
             logger.error(f"Error checking for updates: {e}")
             return None, None
@@ -196,12 +212,19 @@ class Updater:
             
         # Split by dots
         parts = clean_ver.split('.')
-        try:
-            # Convert to integers
-            return tuple(int(p) for p in parts)
-        except ValueError:
-            # Fallback for non-numeric versions
-            return (0, 0, 0)
+        parsed_parts = []
+        
+        for p in parts:
+            # Extract numbers from start of string (e.g. '4-beta' -> 4)
+            num_str = ""
+            for char in p:
+                if char.isdigit():
+                    num_str += char
+                else:
+                    break
+            parsed_parts.append(int(num_str) if num_str else 0)
+                
+        return tuple(parsed_parts)
 
     def check_for_updates(self):
         current_version = self.get_current_version()
