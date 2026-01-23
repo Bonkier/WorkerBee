@@ -380,7 +380,7 @@ class Mirror:
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    matches = common.match_image(pack_image, 0.8, screenshot=screenshot)
+                    matches = common.match_image(pack_image, 0.75, screenshot=screenshot)
                     
                     # Store for stats (pre-offset)
                     _, offset_y_correction = common.scale_offset_1440p(0, -200)
@@ -452,7 +452,9 @@ class Mirror:
                     # Extract status name from path
                     pack_name = os.path.basename(status).replace("_pack.png", "").capitalize() + " (Status)"
                 
-                self.run_stats["packs"].append(pack_name)
+                # Avoid consecutive duplicates in stats
+                if not self.run_stats["packs"] or self.run_stats["packs"][-1] != pack_name:
+                    self.run_stats["packs"].append(pack_name)
 
             # 1. Check prioritized packs first (if enabled)
             if shared_vars.prioritize_list_over_status and not is_floor_without_priority:
@@ -856,7 +858,7 @@ class Mirror:
                 continue
 
             try:
-                boxes = common.ifexist_match(gift_img, 0.8, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+                boxes = common.ifexist_match(gift_img, 0.75, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
                 if boxes:
                     all_exception_boxes.extend(boxes)
             except Exception as e:
@@ -864,17 +866,19 @@ class Mirror:
                 self.logger.debug(f"Skipping exception matching for {gift_img}: {e}")
                 continue
         
+        self.logger.debug(f"Found {len(all_exception_boxes)} exception areas for filtering")
+        
         if not all_exception_boxes:
             return fusion_gifts
         
         # Use enhanced_proximity_check with bounding box mode for exception filtering
         # Expand detection area to account for small logo images in corners of gift cards
         inside_exception = common.enhanced_proximity_check(all_exception_boxes, fusion_gifts,
-                                                          # Increased expansion (especially Left/Above) to handle bottom-right corner logos
-                                                          expand_left=common.scale_x_1080p(300),
-                                                          expand_right=common.scale_x_1080p(100),
-                                                          expand_above=common.scale_y_1080p(400),
-                                                          expand_below=common.scale_y_1080p(100),
+                                                          # Increased expansion to ensure coverage of the gift center from corner logos
+                                                          expand_left=common.scale_x_1080p(350),
+                                                          expand_right=common.scale_x_1080p(150),
+                                                          expand_above=common.scale_y_1080p(450),
+                                                          expand_below=common.scale_y_1080p(150),
                                                           use_bounding_box=True, return_bool=False)
         
         # Filter out gifts that are inside exception areas

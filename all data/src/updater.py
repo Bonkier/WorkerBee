@@ -28,7 +28,10 @@ EXCLUDED_PATHS = [
     "bootstrapper.py", # Setup script
     "setup.vbs",   # Setup script VBS
     "update.zip",  # Update package
-    "staged_updater" # Staged updater directory
+    "staged_updater", # Staged updater directory
+    "pictures/CustomFuse/CustomEgoGifts/", # User custom images
+    "config/stats.json", # User statistics
+    "config/schedule.json" # User schedule
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)
@@ -42,7 +45,10 @@ CONFIG_MERGE_FILES = [
     "config/delayed_squad_order.json",
     "config/status_selection.json",
     "config/fusion_exceptions.json",
-    "config/grace_selection.json"
+    "config/grace_selection.json",
+    "config/exp_team_selection.json",
+    "config/threads_team_selection.json",
+    "config/image_thresholds.json"
 ]
 
 class Updater:
