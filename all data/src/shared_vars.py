@@ -186,42 +186,26 @@ class ScaledCoordinates:
         logger.info(f"Preloaded {len(coord_sets)} coordinate sets")
 
 def _get_gui_values():
-    """Extract current variable values from GUI module"""
-    try:
-        # Import the GUI module
-        import sys
-        gui_path = os.path.join(BASE_PATH, "gui_launcher.py")
-        if os.path.exists(gui_path):
-            old_path = sys.path[:]
-            sys.path.insert(0, os.path.dirname(gui_path))
-            
-            try:
-                import gui_launcher
-                
-                # Use the actual shared_vars instance from GUI if it exists
-                if hasattr(gui_launcher, 'shared_vars') and gui_launcher.shared_vars:
-                    shared_vars_instance = gui_launcher.shared_vars
-                else:
-                    # Create instance to get the variable structure
-                    shared_vars_instance = gui_launcher.SharedVars()
-                
-                current_values = {}
-                for attr_name in dir(shared_vars_instance):
-                    if not attr_name.startswith('_'):
-                        attr_value = getattr(shared_vars_instance, attr_name)
-                        if hasattr(attr_value, 'value'):
-                            current_values[attr_name] = attr_value.value
-                
-                logger.info(f"Got {len(current_values)} variables from GUI SharedVars")
-                return current_values
-                
-            finally:
-                sys.path[:] = old_path
-                
-    except Exception as e:
-        logger.warning(f"Could not get GUI SharedVars values: {e}")
-    
-    return {}
+    """Return default variable values directly to avoid circular imports"""
+    return {
+        'x_offset': 0,
+        'y_offset': 0,
+        'game_monitor': 1,
+        'skip_restshop': False,
+        'skip_ego_check': False,
+        'skip_ego_fusion': False,
+        'skip_sinner_healing': False,
+        'skip_ego_enhancing': False,
+        'skip_ego_buying': False,
+        'prioritize_list_over_status': False,
+        'debug_image_matches': False,
+        'hard_mode': False,
+        'convert_images_to_grayscale': True,
+        'reconnection_delay': 6,
+        'reconnect_when_internet_reachable': False,
+        'good_pc_mode': True,
+        'click_delay': 0.5
+    }
 
 def _load_shared_vars():
     """Load shared variables from config file and GUI defaults"""
