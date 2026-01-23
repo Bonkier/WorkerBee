@@ -335,7 +335,7 @@ class Mirror:
         # Track known pack locations for statistics
         known_pack_names = {} # (x, y) -> pack_name
         refresh_count = 0
-        MAX_REFRESHES = 5
+        MAX_REFRESHES = 7
 
         retry_attempt = 10
         while retry_attempt > 0:
@@ -360,14 +360,6 @@ class Mirror:
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
             screenshot = common.capture_screen()
-            
-            # 1. Relaxed Refresh Detection
-            refresh_pos = None
-            refresh_matches = common.match_image("pictures/mirror/general/refresh.png", 0.6, screenshot=screenshot, enable_scaling=False)
-            if refresh_matches:
-                refresh_pos = refresh_matches[0]
-            
-            self.logger.info(f"Refresh detection: Found={bool(refresh_pos)}, Count={refresh_count}")
 
             # Detect selectable pack (Moved up to check if packs are loaded)
             selectable_packs_pos = common.match_image(
@@ -507,55 +499,43 @@ class Mirror:
                     logger.info(f"Selecting priority pack: {best_pack[2]}")
                     select_pack(best_pack[1], best_pack[2])
                     return
+
+            # 2. Refresh Logic
+            should_refresh = False
+            if floor_priorities and refresh_count < MAX_REFRESHES:
+                if shared_vars.prioritize_list_over_status:
+                    # Strict priority: Refresh if priority pack not found
+                    should_refresh = True
+                else:
+                    # Loose priority: Refresh only if neither priority nor status pack found
+                    if not status_selectable_packs_pos or floor == "floor5":
+                        should_refresh = True
+
+            if should_refresh:
+                logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
                 
-                # 2. Refresh (Strict: if list exists and missing, refresh before status)
-                if floor_priorities:
-                    if refresh_pos and refresh_count < MAX_REFRESHES:
-                        logger.info(f"Priority packs defined but none found. Refreshing ({refresh_count + 1}/{MAX_REFRESHES}).")
-                        common.mouse_move_click(refresh_pos[0], refresh_pos[1])
-                        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                        common.sleep(1.5)
-                        refresh_count += 1
-                        continue
-                    
-                    # Explicit "Why" Logging
-                    if not refresh_pos:
-                        self.logger.warning(f"Skipping refresh. Button Found: {bool(refresh_pos)}, Count: {refresh_count}/{MAX_REFRESHES}")
-                    elif refresh_count >= MAX_REFRESHES:
-                        logger.info("Refresh limit reached. Falling through to status/random.")
+                # Attempt 1: Image Detection
+                refresh_btn = common.match_image("pictures/mirror/general/refresh.png", 0.6, screenshot=screenshot, enable_scaling=False)
+                if refresh_btn:
+                    x, y = refresh_btn[0]
+                    common.mouse_move_click(x, y)
+                    logger.info("Refreshed via image detection.")
+                else:
+                    # Attempt 2: Blind Fallback
+                    logger.info("Forcing Refresh (Blind)")
+                    rx, ry = common.scale_coordinates_1080p(1560, 230)
+                    common.mouse_move_click(rx, ry)
                 
-                # 3. Status Pack (Fallback if refresh unavailable)
-                if status_selectable_packs_pos and floor != "floor5":
-                    logger.info("Selecting status pack (Priority list missing/exhausted)")
-                    select_pack(status_selectable_packs_pos[0], source="status")
-                    return
+                common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                common.sleep(1.5)
+                refresh_count += 1
+                continue
 
-            # Branch 2: Status > Prioritize List
-            else:
-                # 1. Status Pack
-                if status_selectable_packs_pos and floor != "floor5":
-                    logger.info("Selecting status pack")
-                    select_pack(status_selectable_packs_pos[0], source="status")
-                    return
-
-                # 2. Priority Pack
-                if found_priority_packs:
-                    best_pack = found_priority_packs[0]
-                    logger.info(f"Selecting priority pack: {best_pack[2]}")
-                    select_pack(best_pack[1], best_pack[2])
-                    return
-
-                # 3. Refresh (If list exists but missing)
-                if floor_priorities:
-                    if refresh_pos and refresh_count < MAX_REFRESHES:
-                        logger.info(f"No status/priority packs found. Refreshing ({refresh_count + 1}/{MAX_REFRESHES}).")
-                        common.mouse_move_click(refresh_pos[0], refresh_pos[1])
-                        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                        common.sleep(1.5)
-                        refresh_count += 1
-                        continue
-                    else:
-                        logger.info("Refresh limit reached. Falling through to random.")
+            # 3. Status Pack
+            if status_selectable_packs_pos and floor != "floor5":
+                logger.info("Selecting status pack")
+                select_pack(status_selectable_packs_pos[0], source="status")
+                return
 
             # Fallback: Random / Exception
             if selectable_packs_pos:
