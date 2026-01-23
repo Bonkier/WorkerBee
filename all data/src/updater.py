@@ -26,7 +26,9 @@ EXCLUDED_PATHS = [
     "*.lnk",       # Shortcuts
     "*.url",       # Web shortcuts
     "bootstrapper.py", # Setup script
-    "setup.vbs"    # Setup script VBS
+    "setup.vbs",   # Setup script VBS
+    "update.zip",  # Update package
+    "staged_updater" # Staged updater directory
 ]
 
 # Config files that need smart merging (user settings preserved + new defaults added)
@@ -780,6 +782,9 @@ class Updater:
             
             # Create a restart helper script
             restart_script_path = os.path.join(self.temp_path, "restart.py")
+            restart_log_path = os.path.join(self.temp_path, "restart.log")
+            # Escape backslashes for python string
+            restart_log_path_esc = restart_log_path.replace('\\', '\\\\')
             
             with open(restart_script_path, "w") as f:
                 f.write(f"""
@@ -787,6 +792,13 @@ import os
 import sys
 import time
 import subprocess
+
+# Redirect output to file to prevent hanging on closed console
+try:
+    sys.stdout = open('{restart_log_path_esc}', 'w')
+    sys.stderr = sys.stdout
+except:
+    pass
 
 # Wait a moment to ensure files are fully written
 time.sleep(3)
@@ -797,9 +809,9 @@ print(f"Launching application with command: {{cmd}}")
 
 try:
     if sys.platform == 'win32':
-        subprocess.Popen(cmd, creationflags=0x00000008) # DETACHED_PROCESS
+        subprocess.Popen(cmd, creationflags=0x00000008, close_fds=True) # DETACHED_PROCESS
     else:
-        subprocess.Popen(cmd, start_new_session=True)
+        subprocess.Popen(cmd, start_new_session=True, close_fds=True)
     print("Application launched successfully")
 except Exception as e:
     print(f"Error launching application: {{e}}")
@@ -809,7 +821,7 @@ except Exception as e:
             if platform.system() == "Windows":
                 # Use DETACHED_PROCESS (0x8) to ensure it survives parent console closure
                 subprocess.Popen([sys.executable, restart_script_path], 
-                              creationflags=0x00000008)
+                              creationflags=0x00000008, close_fds=True)
             else:
                 # Use subprocess.DEVNULL to detach on Unix
                 subprocess.Popen([sys.executable, restart_script_path], 
@@ -957,21 +969,25 @@ except Exception as e:
             logger.info("Launching staged self-update...")
             logger.info(f"Command: {' '.join(cmd)}")
             
+            # Prepare log file for staged updater to prevent console I/O hanging
+            staged_log_path = os.path.join(self.temp_path, "staged_updater.log")
+            staged_log = open(staged_log_path, "w")
+            
             # Launch staged updater and exit current process
             if getattr(sys, 'frozen', False):
                 # If frozen, call the executable with the flag
                 # We use the current executable path
                 cmd = [sys.executable, "--staged-update", repo_dir, self.parent_dir, self.temp_path]
                 if platform.system() == "Windows":
-                    subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                    subprocess.Popen(cmd, creationflags=0x00000008, stdout=staged_log, stderr=staged_log, close_fds=True)
                 else:
-                    subprocess.Popen(cmd, start_new_session=True)
+                    subprocess.Popen(cmd, start_new_session=True, stdout=staged_log, stderr=staged_log, close_fds=True)
             else:
                 # If script, call python with the script
                 if platform.system() == "Windows":
-                    subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                    subprocess.Popen(cmd, cwd=temp_updater_dir, creationflags=0x00000008, stdout=staged_log, stderr=staged_log, close_fds=True)
                 else:
-                    subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True)
+                    subprocess.Popen(cmd, cwd=temp_updater_dir, start_new_session=True, stdout=staged_log, stderr=staged_log, close_fds=True)
                     
             logger.info("Staged updater launched. Current process will exit.")
             
@@ -1005,7 +1021,7 @@ except Exception as e:
             logger.info(f"Target: {target_dir}")
             
             # Brief delay to ensure original process has fully exited
-            time.sleep(3.0)
+            time.sleep(5.0)
             
             # Initialize updater with target directory as parent
             self.parent_dir = target_dir

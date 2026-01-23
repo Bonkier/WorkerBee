@@ -5124,8 +5124,11 @@ def cleanup_processes():
             pass  # Ignore cleanup errors
         
         try:
-            keyboard_handler.stop()
-        except Exception:
+            # Only try to stop keyboard handler if it's running, and don't wait too long
+            if keyboard_handler.running:
+                keyboard_handler.running = False
+                keyboard.unhook_all()
+        except Exception as e:
             pass  # Ignore cleanup errors
         
         # Stop background threads from running processes
@@ -5161,6 +5164,30 @@ if __name__ == "__main__":
         os._exit(0)
 
     def start_application():
+        # Singleton check to prevent multiple instances
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(("127.0.0.1", 47329)) # Arbitrary port for lock
+            # Keep socket open until exit
+            globals()['_singleton_socket'] = s
+        except socket.error:
+            # Another instance is likely running
+            # Check if we are the "updated" instance, if so, we should take precedence
+            # But we can't easily kill the other one from here without PID
+            # For now, just log and continue, but this might explain multiple instances
+            logger.warning("Another instance of WorkerBee appears to be running.")
+            
+            # If we are the updated instance, give the old one a moment to die
+            if "--updated" in sys.argv:
+                time.sleep(2)
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.bind(("127.0.0.1", 47329))
+                    globals()['_singleton_socket'] = s
+                except:
+                    pass
+
         """Initialize the application after GUI is loaded"""
         try:
             # Load checkbox data at startup (before any automation can run)
