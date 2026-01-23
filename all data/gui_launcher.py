@@ -2314,6 +2314,17 @@ compact_btn = ctk.CTkButton(
 )
 compact_btn.pack(fill="x", pady=(10, 0))
 
+exit_btn = ctk.CTkButton(
+    sidebar_footer,
+    text="Exit Application",
+    command=lambda: on_closing(),
+    height=30,
+    fg_color="#c42b1c",
+    hover_color="#8f1f14",
+    font=UIStyle.SMALL_FONT
+)
+exit_btn.pack(fill="x", pady=(10, 0))
+
 # =====================================================================
 # DASHBOARD TAB
 # =====================================================================
@@ -5072,6 +5083,17 @@ def on_closing():
         except:
             pass  # Ignore cleanup errors
             
+        # Nuclear option for Windows to ensure everything dies
+        if platform.system() == "Windows":
+            try:
+                # Spawn a taskkill command to kill this process tree
+                # We use Popen so it runs independently
+                subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T", 
+                               shell=True, 
+                               creationflags=0x08000000) # CREATE_NO_WINDOW
+            except:
+                pass
+        
         os._exit(0)
 
 # Set the callback for window close
