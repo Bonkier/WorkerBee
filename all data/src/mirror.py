@@ -489,50 +489,62 @@ class Mirror:
 
             # --- DECISION LOGIC ---
 
-            # A. Priority Packs (Highest Priority)
+            # Sort priority packs by rank (lowest number first)
             if found_priority_packs:
-                # Sort by rank (lowest number first)
                 found_priority_packs.sort(key=lambda x: x[0])
-                best_pack = found_priority_packs[0]
-                logger.info(f"Selecting priority pack: {best_pack[2]}")
-                select_pack(best_pack[1], best_pack[2])
-                return
 
-            # B. Status Packs (If enabled or no priority list)
-            should_check_status = not shared_vars.prioritize_list_over_status or not floor_priorities
-            
-            if should_check_status and status_selectable_packs_pos and floor != "floor5":
-                logger.info("Selecting status pack")
-                select_pack(status_selectable_packs_pos[0], source="status")
-                return
-
-            # C. Refresh Logic
-            if floor and refresh_btn_available:
-                # If we have priorities defined but found none -> Refresh
-                if floor_priorities:
+            # Branch 1: Prioritize List > Status
+            if shared_vars.prioritize_list_over_status:
+                # 1. Priority Pack
+                if found_priority_packs:
+                    best_pack = found_priority_packs[0]
+                    logger.info(f"Selecting priority pack: {best_pack[2]}")
+                    select_pack(best_pack[1], best_pack[2])
+                    return
+                
+                # 2. Refresh (Strict: if list exists and missing, refresh before status)
+                if floor_priorities and refresh_btn_available:
                     logger.info("Priority packs defined but none found. Refreshing.")
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                     common.sleep(1.5)
                     continue
                 
-                # If we have NO priorities, but want status packs, and found none -> Refresh
-                if floor != "floor5" and not status_selectable_packs_pos:
-                    logger.info("No priority list and no status pack found. Refreshing.")
+                # 3. Status Pack (Fallback if refresh unavailable)
+                if status_selectable_packs_pos and floor != "floor5":
+                    logger.info("Selecting status pack (Priority list missing/exhausted)")
+                    select_pack(status_selectable_packs_pos[0], source="status")
+                    return
+
+            # Branch 2: Status > Prioritize List
+            else:
+                # 1. Status Pack
+                if status_selectable_packs_pos and floor != "floor5":
+                    logger.info("Selecting status pack")
+                    select_pack(status_selectable_packs_pos[0], source="status")
+                    return
+
+                # 2. Priority Pack
+                if found_priority_packs:
+                    best_pack = found_priority_packs[0]
+                    logger.info(f"Selecting priority pack: {best_pack[2]}")
+                    select_pack(best_pack[1], best_pack[2])
+                    return
+
+                # 3. Refresh (If list exists but missing)
+                if floor_priorities and refresh_btn_available:
+                    logger.info("No status/priority packs found. Refreshing.")
                     common.click_matching("pictures/mirror/general/refresh.png", 0.9)
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                     common.sleep(1.5)
                     continue
-            elif not floor and refresh_btn_available:
-                 logger.warning("Floor not detected, skipping refresh to avoid infinite loop.")
 
-            # D. Fallback Selection
+            # Fallback: Random / Exception
             if selectable_packs_pos:
                 logger.info("Fallback: Selecting random available pack")
                 select_pack(selectable_packs_pos[0], "Random")
                 return
             
-            # E. Exception Fallback (Last Resort)
             if not selectable_packs_pos and packs_to_remove:
                  logger.info("Fallback: Forced to select exception pack")
                  select_pack(list(packs_to_remove)[0], "Exception")
