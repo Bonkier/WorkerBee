@@ -380,7 +380,7 @@ class Mirror:
                     floor_num = floor[-1]
                     image_floor = f"f{floor_num}"
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    matches = common.match_image(pack_image, 0.75, screenshot=screenshot)
+                    matches = common.match_image(pack_image, 0.7, screenshot=screenshot)
                     
                     # Store for stats (pre-offset)
                     _, offset_y_correction = common.scale_offset_1440p(0, -200)
@@ -392,8 +392,8 @@ class Mirror:
                 logger.debug(f"Found {len(selectable_priority_packs_pos)} packs which prioritized: {selectable_priority_packs_pos}")
 
                 # Correct position for mouse click
-                _, offset_y = common.scale_offset_1440p(0, -200)
-                selectable_priority_packs_pos = [(pos[0], pos[1]+offset_y) for pos in selectable_priority_packs_pos]
+                # Removed offset as it might be moving clicks off-target. Clicking the matched image center is usually safer.
+                # selectable_priority_packs_pos = [(pos[0], pos[1]+offset_y) for pos in selectable_priority_packs_pos]
             except Exception as e:
                 self.logger.warning(f"Error checking pack list matches: {e}. False back to select whatever available.")
 
@@ -403,17 +403,17 @@ class Mirror:
                 floor_num = floor[-1]
                 image_floor = f"f{floor_num}"
                 pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                except_packs_pos.extend(common.match_image(pack_image, 0.8, screenshot=screenshot))
+                except_packs_pos.extend(common.match_image(pack_image, 0.7, screenshot=screenshot))
             except_packs_pos = [pos for pos in except_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
             logger.debug(f"Found {len(except_packs_pos)} packs in exception list: {except_packs_pos}")
 
-            # Correct position for mouse click
-            _, offset_y = common.scale_offset_1440p(0, -200)
-            except_packs_pos = [(pos[0], pos[1]+offset_y) for pos in except_packs_pos]
+            # Removed offset to improve proximity check accuracy between pack image and 'inpack' button
+            # except_packs_pos = [(pos[0], pos[1]+offset_y) for pos in except_packs_pos]
 
             # Filter selectable packs
             logger.debug(f"Found {len(selectable_packs_pos)} packs in total: {selectable_packs_pos}")
-            for _pack in common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_x_1080p(150)):
+            # Increased threshold for proximity check to account for distance between pack image and button
+            for _pack in common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_y_1080p(450)):
                 selectable_packs_pos.remove(_pack)
                 logger.debug(f"Remove pack {_pack} since it is except pack")
 
