@@ -46,7 +46,7 @@ CONFIG_MERGE_FILES = [
 class Updater:
     
     def __init__(self, repo_owner, repo_name, current_version_file="version.json", 
-                 backup_folder="backups", temp_folder="temp", api_url=None):
+                 backup_folder="backups", temp_folder="temp", api_url=None, pre_exit_callback=None):
         """Initialize updater with repository info and file paths"""
         self.repo_owner = repo_owner
         self.repo_name = repo_name
@@ -54,6 +54,7 @@ class Updater:
         self.backup_folder = backup_folder
         self.temp_folder = temp_folder
         self.exclusions = EXCLUDED_PATHS
+        self.pre_exit_callback = pre_exit_callback
         
         # Default GitHub API URL fallback
         if api_url is None:
@@ -788,7 +789,7 @@ import time
 import subprocess
 
 # Wait a moment to ensure files are fully written
-time.sleep(1)
+time.sleep(3)
 
 # Launch the application
 cmd = {repr(cmd)}
@@ -974,6 +975,13 @@ except Exception as e:
                     
             logger.info("Staged updater launched. Current process will exit.")
             
+            # Run cleanup if provided (to kill logger processes etc)
+            if self.pre_exit_callback:
+                try:
+                    self.pre_exit_callback()
+                except Exception as e:
+                    logger.error(f"Error in pre-exit callback: {e}")
+            
             # Exit current process to allow staged updater to update us
             os._exit(0)
             
@@ -1059,13 +1067,13 @@ def check_for_updates(repo_owner, repo_name, callback=None):
             callback(False, f"Error: {e}", False)
         return False
 
-def auto_update(repo_owner, repo_name, create_backup=True, preserve_only_last_3=True, callback=None):
+def auto_update(repo_owner, repo_name, create_backup=True, preserve_only_last_3=True, callback=None, pre_exit_callback=None):
     # Force update from Bonkier/WorkerBee
     repo_owner = "Bonkier"
     repo_name = "WorkerBee"
         
     try:
-        updater = Updater(repo_owner, repo_name)
+        updater = Updater(repo_owner, repo_name, pre_exit_callback=pre_exit_callback)
         return updater.check_and_update_async(callback, create_backup, preserve_only_last_3=preserve_only_last_3)
     except Exception as e:
         logger.error(f"Error starting auto-update: {e}")
