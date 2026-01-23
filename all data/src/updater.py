@@ -940,6 +940,7 @@ except Exception as e:
         try:
             # Prepare paths
             batch_script_path = os.path.join(self.temp_path, "install_update.bat")
+            vbs_script_path = os.path.join(self.temp_path, "silent_updater.vbs")
             current_pid = os.getpid()
             
             # Determine restart command
@@ -977,6 +978,14 @@ exit
             with open(batch_script_path, "w") as f:
                 f.write(batch_content)
             
+            # Create VBS script to run batch file hidden and detached
+            # This ensures the update continues even after Python exits
+            with open(vbs_script_path, "w") as f:
+                f.write('Set WshShell = CreateObject("WScript.Shell")\n')
+                # Run with window style 0 (Hide) and waitOnReturn=False
+                f.write(f'WshShell.Run chr(34) & "{batch_script_path}" & chr(34), 0, False\n')
+                f.write('Set WshShell = Nothing\n')
+            
             # Run cleanup if provided (to kill logger processes etc)
             if self.pre_exit_callback:
                 try:
@@ -984,12 +993,11 @@ exit
                 except Exception as e:
                     logger.error(f"Error in pre-exit callback: {e}")
             
-            logger.info(f"Launching batch updater: {batch_script_path}")
+            logger.info(f"Launching silent updater: {vbs_script_path}")
             
-            # Launch the batch script detached (no console window)
-            # 0x00000008 is DETACHED_PROCESS
-            # We use this instead of CREATE_NO_WINDOW to ensure it's fully independent
-            subprocess.Popen(["cmd.exe", "/c", batch_script_path], creationflags=0x00000008, close_fds=True)
+            # Launch the VBS script detached
+            # wscript.exe runs scripts without a console window
+            subprocess.Popen(["wscript.exe", vbs_script_path], shell=False, close_fds=True)
             
             # Force exit immediately
             os._exit(0)
