@@ -5180,6 +5180,8 @@ if __name__ == "__main__":
                         def update_cb(success, msg):
                             if success:
                                 logger.info(f"Auto-update: {msg}")
+                            else:
+                                logger.info(f"Auto-update check: {msg}")
                         updater.auto_update("Bonkier", "WorkerBee", callback=update_cb)
                     except Exception as e:
                         logger.error(f"Failed to initialize auto-updater: {e}")
