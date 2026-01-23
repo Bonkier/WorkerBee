@@ -143,7 +143,7 @@ def sync_shared_vars(shared_vars_instance):
         except Exception:
             break
 
-def update_stats(win):
+def update_stats(win, run_data=None):
     """Update statistics in stats.json"""
     try:
         base_path = get_base_path()
@@ -157,6 +157,22 @@ def update_stats(win):
         data["mirror"]["runs"] += 1
         if win: data["mirror"]["wins"] += 1
         else: data["mirror"]["losses"] += 1
+        
+        # Update history if run_data provided
+        if run_data:
+            if "history" not in data["mirror"]:
+                data["mirror"]["history"] = []
+            
+            history_entry = {
+                "timestamp": time.time(),
+                "result": "Win" if win else "Loss",
+                "duration": run_data.get("duration", 0),
+                "floor_times": run_data.get("floor_times", {}),
+                "packs": run_data.get("packs", [])
+            }
+            
+            data["mirror"]["history"].insert(0, history_entry)
+            data["mirror"]["history"] = data["mirror"]["history"][:50]  # Keep last 50
         
         with open(stats_path, 'w') as f:
             json.dump(data, f, indent=4)
@@ -200,7 +216,7 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                 
                 while run_complete != 1:
                     if connection_manager.connection_event.is_set():
-                        win_flag, run_complete = MD.mirror_loop()
+                        win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
                         # Connection lost, wait for it to be restored
                         connection_manager.connection_event.wait()
@@ -211,11 +227,11 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                 if win_flag == 1:
                     win_count += 1
                     logger.info(f"Run {run_count + 1} completed with a win")
-                    update_stats(True)
+                    update_stats(True, run_stats)
                 else:
                     lose_count += 1
                     logger.info(f"Run {run_count + 1} completed with a loss")
-                    update_stats(False)
+                    update_stats(False, run_stats)
                 run_count += 1
                 
             except Exception as e:

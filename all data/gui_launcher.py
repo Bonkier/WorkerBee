@@ -4345,6 +4345,7 @@ def refresh_statistics():
     md_runs = stats.get("mirror", {}).get("runs", 0)
     md_wins = stats.get("mirror", {}).get("wins", 0)
     md_losses = stats.get("mirror", {}).get("losses", 0)
+    md_history = stats.get("mirror", {}).get("history", [])
     win_rate = (md_wins / md_runs * 100) if md_runs > 0 else 0
     
     ctk.CTkLabel(md_grid, text=f"Total Runs: {md_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
@@ -4366,6 +4367,64 @@ def refresh_statistics():
     ctk.CTkLabel(other_grid, text=f"Exp Runs: {exp_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
     ctk.CTkLabel(other_grid, text=f"Thread Runs: {threads_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
     
+    # Recent MD Runs History
+    history_card = CardFrame(stats_scroll)
+    history_card.pack(fill="x", padx=10, pady=10)
+    ctk.CTkLabel(history_card, text="Recent MD Runs (Last 50)", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 10))
+    
+    if not md_history:
+        ctk.CTkLabel(history_card, text="No run history available", font=UIStyle.BODY_FONT, text_color="gray").pack(pady=10)
+    else:
+        # Create scrollable frame for history table
+        history_frame = ctk.CTkScrollableFrame(history_card, height=300, fg_color="transparent")
+        history_frame.pack(fill="x", padx=10, pady=(0, 15))
+        
+        # Header
+        header_frame = ctk.CTkFrame(history_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=2)
+        ctk.CTkLabel(header_frame, text="Result", width=60, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
+        ctk.CTkLabel(header_frame, text="Duration", width=80, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
+        ctk.CTkLabel(header_frame, text="Packs / Floor Times", font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
+        
+        for run in md_history:
+            row = ctk.CTkFrame(history_frame, fg_color="#252525")
+            row.pack(fill="x", pady=2)
+            
+            # Result
+            result = run.get("result", "Unknown")
+            color = "#4caf50" if result == "Win" else "#f44336"
+            ctk.CTkLabel(row, text=result, width=60, font=UIStyle.SMALL_FONT, text_color=color, anchor="w").pack(side="left", padx=5)
+            
+            # Duration
+            duration = run.get("duration", 0)
+            mins, secs = divmod(int(duration), 60)
+            time_str = f"{mins}m {secs}s"
+            ctk.CTkLabel(row, text=time_str, width=80, font=UIStyle.SMALL_FONT, anchor="w").pack(side="left", padx=5)
+            
+            # Details (Packs and Floor Times)
+            details_frame = ctk.CTkFrame(row, fg_color="transparent")
+            details_frame.pack(side="left", expand=True, fill="x", padx=5, pady=2)
+            
+            # Format packs
+            packs = run.get("packs", [])
+            packs_str = ", ".join(packs) if packs else "None"
+            
+            # Format floor times
+            floor_times = run.get("floor_times", {})
+            floors_str_parts = []
+            # Sort floors by key (floor1, floor2...)
+            for f_key in sorted(floor_times.keys()):
+                f_time = floor_times[f_key]
+                f_mins, f_secs = divmod(int(f_time), 60)
+                # Shorten floor name: floor1 -> F1
+                short_name = f_key.replace("floor", "F")
+                floors_str_parts.append(f"{short_name}: {f_mins}m{f_secs}s")
+            
+            floors_str = " | ".join(floors_str_parts)
+            
+            ctk.CTkLabel(details_frame, text=f"Packs: {packs_str}", font=(UIStyle.FONT_FAMILY, 10), anchor="w", text_color="#cccccc").pack(fill="x")
+            ctk.CTkLabel(details_frame, text=f"Floors: {floors_str}", font=(UIStyle.FONT_FAMILY, 10), anchor="w", text_color="#999999").pack(fill="x")
+
     ctk.CTkButton(stats_scroll, text="Refresh Stats", command=refresh_statistics, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=20)
 
 # Initial load
