@@ -359,9 +359,11 @@ class Mirror:
             common.sleep(0.2)
             screenshot = common.capture_screen()
             refresh_btn_available = False
-            if found := common.match_image("pictures/mirror/general/refresh.png", 0.9, screenshot=screenshot):
-                x,y = found[0]
+            refresh_btn = common.match_image("pictures/mirror/general/refresh.png", 0.75, screenshot=screenshot, enable_scaling=False)
+            if refresh_btn:
+                x,y = refresh_btn[0]
                 refresh_btn_available = common.luminence(x,y, screenshot=screenshot) >= 70
+            self.logger.info(f"Refresh detection: {bool(refresh_btn)}")
 
             # Detect selectable pack (Moved up to check if packs are loaded)
             selectable_packs_pos = common.match_image(
