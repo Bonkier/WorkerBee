@@ -42,8 +42,15 @@ EXPECTED_WIDTH: int | None = None
 EXPECTED_HEIGHT: int | None = None
 IS_NON_STANDARD_RATIO: bool | None = None  # Whether current monitor size follow standard 16:9 ratio, e.g. 16:10
 
-# Global MSS instance for performance
-_sct = mss()
+# Thread-local storage for MSS instances to prevent threading errors
+_thread_local = threading.local()
+
+def get_sct():
+    """Get thread-local MSS instance"""
+    if not hasattr(_thread_local, "sct"):
+        _thread_local.sct = mss()
+    return _thread_local.sct
+
 # Template cache to reduce disk I/O
 _template_cache = {}
 
@@ -161,7 +168,7 @@ def detect_monitor_resolution():
     
     # Use monitor 1 as default if shared_vars.game_monitor doesn't exist yet
     monitor_index = getattr(shared_vars, 'game_monitor', 1)
-    monitor = _sct.monitors[monitor_index]
+    monitor = get_sct().monitors[monitor_index]
     MONITOR_WIDTH = monitor['width']
     MONITOR_HEIGHT = monitor['height']
     
@@ -199,7 +206,7 @@ def mouse_scroll(amount):
 
 def _validate_monitor_index(monitor_index, fallback=1):
     """Validate and return a safe monitor index"""
-    if monitor_index >= len(_sct.monitors):
+    if monitor_index >= len(get_sct().monitors):
         logger.warning(f"Monitor index {monitor_index} out of range")
         return fallback
     return monitor_index
@@ -208,7 +215,7 @@ def get_monitor_info(monitor_index=None):
     """Get information about the specified monitor or the game monitor"""
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
-    return _sct.monitors[mon_idx]
+    return get_sct().monitors[mon_idx]
 
 def get_MonCords(x, y):
     """Convert local coordinates to global monitor coordinates"""
@@ -268,10 +275,10 @@ def capture_screen(monitor_index=None):
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
         
-    monitor = _sct.monitors[mon_idx]
+    monitor = get_sct().monitors[mon_idx]
     
     # Capture the screen with the current resolution
-    screenshot = _sct.grab(monitor)
+    screenshot = get_sct().grab(monitor)
     img = np.array(screenshot)
     
     # Convert the color from BGRA to BGR for OpenCV compatibility
@@ -1025,8 +1032,8 @@ def error_screenshot():
     """Take a screenshot for error debugging"""
     error_dir = os.path.join(BASE_PATH, "error")
     os.makedirs(error_dir, exist_ok=True)
-    monitor = _sct.monitors[shared_vars.game_monitor]  # Use the configured game monitor
-    screenshot = _sct.grab(monitor)
+    monitor = get_sct().monitors[shared_vars.game_monitor]  # Use the configured game monitor
+    screenshot = get_sct().grab(monitor)
     png = to_png(screenshot.rgb, screenshot.size)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     with open(os.path.join(error_dir, timestamp + ".png"), "wb") as f:
@@ -1034,7 +1041,7 @@ def error_screenshot():
 
 def set_game_monitor(monitor_index):
     """Set which monitor the game is running on"""
-    if monitor_index < 1 or monitor_index >= len(_sct.monitors):
+    if monitor_index < 1 or monitor_index >= len(get_sct().monitors):
         logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(_sct.monitors)-1})")
         shared_vars.game_monitor = 1
     else:
@@ -1047,7 +1054,7 @@ def set_game_monitor(monitor_index):
 def list_available_monitors():
     """List all available monitors and their properties"""
     monitors = []
-    for i, monitor in enumerate(_sct.monitors):
+    for i, monitor in enumerate(get_sct().monitors):
         if i == 0:  # Skip the "all monitors" entry
             continue
         monitors.append({
