@@ -305,10 +305,20 @@ class Mirror:
     def pack_selection(self) -> None:
         """Prioritises the status gifts for packs if not follows a list"""
         status = mirror_utils.pack_choice(self.status) or "pictures/mirror/packs/status/poise_pack.png"
-        floor = self.floor_id()
         
+        # Count-Based Floor Calculation
+        pack_count = len(self.run_stats["packs"])
+        floor_num = min(pack_count + 1, 5)
+        floor = f"floor{floor_num}"
+        self.logger.info(f"Calculated Floor: {floor_num} (based on {pack_count} previous packs)")
+        
+        # Verify with visual detection if possible (Safety)
+        visual_floor = self.floor_id()
+        if visual_floor and visual_floor != floor:
+             self.logger.warning(f"Visual floor detection ({visual_floor}) mismatch with calculated ({floor}). Trusting calculation.")
+
         # Track floor times
-        if floor and floor != self.current_floor_tracker:
+        if floor != self.current_floor_tracker:
             self.current_floor_tracker = floor
             self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
             
@@ -318,13 +328,11 @@ class Mirror:
         if common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", 0.9):
             if shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
                 common.click_matching("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", threshold=0.9, recursive=False)
-                floor = self.floor_id()
 
         elif common.element_exist("pictures/mirror/packs/floor_hard.png", 0.9): #accounts for cost additions or hard mode swap
             common.sleep(0.5) # the ego gift crediting blocks the refresh button
             if not shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
                 common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.9, recursive=False)
-                floor = self.floor_id()
 
         # Filter for coordinate in specific area, to avoid noise
         min_y_scaled = common.scale_y_1080p(260)
@@ -342,14 +350,6 @@ class Mirror:
         while retry_attempt > 0:
             retry_attempt -= 1
             
-            # Retry floor detection if missing (essential for pack priority on later floors)
-            if not floor:
-                floor = self.floor_id()
-                if floor:
-                    logger.info(f"Floor detected on retry: {floor}")
-                    if floor != self.current_floor_tracker:
-                        self.current_floor_tracker = floor
-                        self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
             
             # Load priorities based on current floor (inside loop to catch updates)
             floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
@@ -357,6 +357,8 @@ class Mirror:
             
             # Debug logging
             logger.debug(f"Pack Selection - Floor: '{floor}', Priorities: {list(floor_priorities.keys())}")
+            # Explicit Debug Logging
+            self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {list(floor_priorities.keys())}")
             
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
@@ -471,6 +473,16 @@ class Mirror:
             status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
 
             # --- Helper for Selection ---
+            def robust_drag_pack(x, y):
+                common.mouse_move(x, y)
+                common.sleep(0.15)
+                pyautogui.mouseDown()
+                common.sleep(0.15)
+                dest_x, dest_y = common.get_MonCords(x, y + 350)
+                pyautogui.moveTo(dest_x, dest_y, duration=0.6)
+                common.sleep(0.15)
+                pyautogui.mouseUp()
+
             def select_pack(coords, name="Unknown", source="unknown"):
                 pack_name = name
                 
@@ -483,17 +495,7 @@ class Mirror:
                     self.run_stats["packs"].append(pack_name)
                 
                 x, y = coords
-                robust_drag(x, y)
-
-            def robust_drag(x, y):
-                common.mouse_move(x, y)
-                common.sleep(0.15)
-                pyautogui.mouseDown()
-                common.sleep(0.15)
-                dest_x, dest_y = common.get_MonCords(x, y + 350)
-                pyautogui.moveTo(dest_x, dest_y, duration=0.6)
-                common.sleep(0.15)
-                pyautogui.mouseUp()
+                robust_drag_pack(x, y)
 
             # --- DECISION LOGIC ---
 
@@ -508,8 +510,7 @@ class Mirror:
                 select_pack(best_pack[1], best_pack[2])
                 return
 
-            # 2. Refresh Logic (Force Priority)
-            # If priorities exist but none found, FORCE refresh (ignore status packs for now)
+            # 2. Refresh Logic (Strict Priority)
             if floor_priorities and refresh_count < MAX_REFRESHES:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
                 
