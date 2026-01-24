@@ -8,6 +8,7 @@ import common
 import copy
 import shared_vars
 import mirror_utils
+import pyautogui
 from core import (skill_check, battle_check, battle, check_loading, 
                   transition_loading, post_run_load)
 
@@ -482,8 +483,17 @@ class Mirror:
                     self.run_stats["packs"].append(pack_name)
                 
                 x, y = coords
+                robust_drag(x, y)
+
+            def robust_drag(x, y):
                 common.mouse_move(x, y)
-                common.mouse_drag(x, y + 350)
+                common.sleep(0.15)
+                pyautogui.mouseDown()
+                common.sleep(0.15)
+                dest_x, dest_y = common.get_MonCords(x, y + 350)
+                pyautogui.moveTo(dest_x, dest_y, duration=0.6)
+                common.sleep(0.15)
+                pyautogui.mouseUp()
 
             # --- DECISION LOGIC ---
 
@@ -491,27 +501,16 @@ class Mirror:
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
 
-            # Branch 1: Prioritize List > Status
-            if shared_vars.prioritize_list_over_status:
-                # 1. Priority Pack
-                if found_priority_packs:
-                    best_pack = found_priority_packs[0]
-                    logger.info(f"Selecting priority pack: {best_pack[2]}")
-                    select_pack(best_pack[1], best_pack[2])
-                    return
+            # 1. Priority Pack (Highest Priority)
+            if found_priority_packs:
+                best_pack = found_priority_packs[0]
+                logger.info(f"Selecting priority pack: {best_pack[2]}")
+                select_pack(best_pack[1], best_pack[2])
+                return
 
-            # 2. Refresh Logic
-            should_refresh = False
+            # 2. Refresh Logic (Force Priority)
+            # If priorities exist but none found, FORCE refresh (ignore status packs for now)
             if floor_priorities and refresh_count < MAX_REFRESHES:
-                if shared_vars.prioritize_list_over_status:
-                    # Strict priority: Refresh if priority pack not found
-                    should_refresh = True
-                else:
-                    # Loose priority: Refresh only if neither priority nor status pack found
-                    if not status_selectable_packs_pos or floor == "floor5":
-                        should_refresh = True
-
-            if should_refresh:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
                 
                 # Attempt 1: Image Detection
