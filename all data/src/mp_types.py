@@ -20,3 +20,6 @@ class SharedVars:
         self.reconnect_when_internet_reachable = Value('b', False)
         self.good_pc_mode = Value('b', True)
         self.click_delay = Value('f', 0.5)
+        self.retry_count = Value('i', 0)
+        self.claim_on_defeat = Value('b', False)
+        self.pack_refreshes = Value('i', 7)

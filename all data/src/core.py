@@ -114,6 +114,15 @@ def battle():
             logger.warning("Server error detected during battle")
             common.mouse_up()
             reconnect()
+            
+        # Check for defeat screens
+        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True)):
+            logger.info("Defeat detected during battle")
+            return # Exit battle loop, let check_run handle it
 
         if common.element_exist("pictures/general/loading.png") and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png"): #Checks for loading screen to end the while loop
             common.mouse_up()

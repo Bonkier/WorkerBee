@@ -613,6 +613,7 @@ TEAM_ORDER = [
 
 
 shared_vars = SharedVars()
+settings_ui_vars = {}
 
 # Global variables for data storage and state tracking
 squad_data = {}
@@ -828,7 +829,10 @@ def load_gui_config():
         'reconnection_delay': 6,
         'reconnect_when_internet_reachable': True,
         'click_delay': 0.5,
-        'auto_update': False
+        'auto_update': False,
+        'claim_on_defeat': False,
+        'retry_count': 0,
+        'pack_refreshes': 7
     }
     
     # Default log filter values
@@ -934,6 +938,9 @@ def save_gui_config(config=None):
                 'good_pc_mode': bool(shared_vars.good_pc_mode.value) if 'shared_vars' in globals() else True,
                 'click_delay': float(shared_vars.click_delay.value) if 'shared_vars' in globals() else 0.5,
                 'auto_update': bool(auto_update_var.get()) if 'auto_update_var' in globals() else False,
+                'claim_on_defeat': bool(shared_vars.claim_on_defeat.value) if 'shared_vars' in globals() else False,
+                'retry_count': int(shared_vars.retry_count.value) if 'shared_vars' in globals() else 0,
+                'pack_refreshes': int(shared_vars.pack_refreshes.value) if 'shared_vars' in globals() else 7,
             }
         except Exception as e:
             pass
@@ -1073,6 +1080,9 @@ try:
     shared_vars.convert_images_to_grayscale.value = config['Settings'].get('convert_images_to_grayscale', True)
     shared_vars.reconnection_delay.value = config['Settings'].get('reconnection_delay', 6)
     shared_vars.good_pc_mode.value = config['Settings'].get('good_pc_mode', True)
+    shared_vars.retry_count.value = config['Settings'].get('retry_count', 0)
+    shared_vars.claim_on_defeat.value = config['Settings'].get('claim_on_defeat', False)
+    shared_vars.pack_refreshes.value = config['Settings'].get('pack_refreshes', 7)
 except Exception as e:
     error(f"Error loading automation settings: {e}")
 
@@ -2490,6 +2500,7 @@ def load_mirror_settings():
     def update_hard_mode():
         shared_vars.hard_mode.value = hard_mode_var.get()
         save_gui_config()
+    settings_ui_vars['hard_mode'] = hard_mode_var
     hard_mode_checkbox = ctk.CTkCheckBox(
         basic_settings_container, 
         text="Hard Mode", 
@@ -2504,6 +2515,7 @@ def load_mirror_settings():
     def update_skip_restshop():
         shared_vars.skip_restshop.value = skip_restshop_var.get()
         save_gui_config()
+    settings_ui_vars['skip_restshop'] = skip_restshop_var
     skip_restshop_cb = ctk.CTkCheckBox(
         basic_settings_container, 
         text="Skip Rest Shop in Mirror Dungeon", 
@@ -2518,6 +2530,7 @@ def load_mirror_settings():
     def update_skip_ego_fusion():
         shared_vars.skip_ego_fusion.value = skip_ego_fusion_var.get()
         save_gui_config()
+    settings_ui_vars['skip_ego_fusion'] = skip_ego_fusion_var
     skip_ego_fusion_cb = ctk.CTkCheckBox(
         basic_settings_container,
         text="Skip EGO gift fusion",
@@ -2532,6 +2545,7 @@ def load_mirror_settings():
     def update_skip_sinner_healing():
         shared_vars.skip_sinner_healing.value = skip_sinner_healing_var.get()
         save_gui_config()
+    settings_ui_vars['skip_sinner_healing'] = skip_sinner_healing_var
     skip_sinner_healing_cb = ctk.CTkCheckBox(
         basic_settings_container,
         text="Skip sinner healing",
@@ -2546,6 +2560,7 @@ def load_mirror_settings():
     def update_skip_ego_enhancing():
         shared_vars.skip_ego_enhancing.value = skip_ego_enhancing_var.get()
         save_gui_config()
+    settings_ui_vars['skip_ego_enhancing'] = skip_ego_enhancing_var
     skip_ego_enhancing_cb = ctk.CTkCheckBox(
         basic_settings_container,
         text="Skip EGO gift enhancing",
@@ -2560,6 +2575,7 @@ def load_mirror_settings():
     def update_skip_ego_buying():
         shared_vars.skip_ego_buying.value = skip_ego_buying_var.get()
         save_gui_config()
+    settings_ui_vars['skip_ego_buying'] = skip_ego_buying_var
     skip_ego_buying_cb = ctk.CTkCheckBox(
         basic_settings_container,
         text="Skip EGO gift buying",
@@ -2574,6 +2590,7 @@ def load_mirror_settings():
     def update_prioritize_list():
         shared_vars.prioritize_list_over_status.value = prioritize_list_var.get()
         save_gui_config()
+    settings_ui_vars['prioritize_list_over_status'] = prioritize_list_var
     prioritize_list_cb = ctk.CTkCheckBox(
         basic_settings_container, 
         text="Prioritize Pack List Over Status Gifts", 
@@ -2583,6 +2600,67 @@ def load_mirror_settings():
     )
     prioritize_list_cb.pack(anchor="w", padx=10, pady=5)
     
+    # Claim on Defeat checkbox
+    claim_on_defeat_var = ctk.BooleanVar(value=config['Settings'].get('claim_on_defeat', False))
+    def update_claim_on_defeat():
+        shared_vars.claim_on_defeat.value = claim_on_defeat_var.get()
+        save_gui_config()
+    settings_ui_vars['claim_on_defeat'] = claim_on_defeat_var
+    claim_on_defeat_cb = ctk.CTkCheckBox(
+        basic_settings_container, 
+        text="Claim Rewards on Defeat", 
+        variable=claim_on_defeat_var,
+        command=update_claim_on_defeat,
+        font=UIStyle.BODY_FONT
+    )
+    claim_on_defeat_cb.pack(anchor="w", padx=10, pady=5)
+
+    # Retry Count
+    retry_count_row = ctk.CTkFrame(basic_settings_container, fg_color="transparent")
+    retry_count_row.pack(anchor="w", padx=10, pady=5)
+    
+    ctk.CTkLabel(retry_count_row, text="Retry Count on Defeat:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
+    retry_count_entry = ctk.CTkEntry(retry_count_row, width=60, font=UIStyle.BODY_FONT)
+    retry_count_entry.pack(side="left")
+    retry_count_entry.insert(0, str(shared_vars.retry_count.value))
+    settings_ui_vars['retry_count'] = retry_count_entry
+    
+    def save_retry_count(event=None):
+        try:
+            val = int(retry_count_entry.get())
+            if val < 0: val = 0
+            shared_vars.retry_count.value = val
+            save_gui_config()
+        except ValueError:
+            retry_count_entry.delete(0, 'end')
+            retry_count_entry.insert(0, str(shared_vars.retry_count.value))
+            
+    retry_count_entry.bind('<FocusOut>', save_retry_count)
+    retry_count_entry.bind('<Return>', save_retry_count)
+
+    # Pack Refreshes
+    pack_refreshes_row = ctk.CTkFrame(basic_settings_container, fg_color="transparent")
+    pack_refreshes_row.pack(anchor="w", padx=10, pady=5)
+    
+    ctk.CTkLabel(pack_refreshes_row, text="Pack Refreshes:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
+    pack_refreshes_entry = ctk.CTkEntry(pack_refreshes_row, width=60, font=UIStyle.BODY_FONT)
+    pack_refreshes_entry.pack(side="left")
+    pack_refreshes_entry.insert(0, str(shared_vars.pack_refreshes.value))
+    settings_ui_vars['pack_refreshes'] = pack_refreshes_entry
+    
+    def save_pack_refreshes(event=None):
+        try:
+            val = int(pack_refreshes_entry.get())
+            if val < 0: val = 0
+            shared_vars.pack_refreshes.value = val
+            save_gui_config()
+        except ValueError:
+            pack_refreshes_entry.delete(0, 'end')
+            pack_refreshes_entry.insert(0, str(shared_vars.pack_refreshes.value))
+            
+    pack_refreshes_entry.bind('<FocusOut>', save_pack_refreshes)
+    pack_refreshes_entry.bind('<Return>', save_pack_refreshes)
+
     # Grace Selection section
     ctk.CTkLabel(master_expand_frame, text="Grace Selection", font=UIStyle.SUBHEADER_FONT).pack(anchor="center", pady=(8, 0))
 
@@ -3623,6 +3701,7 @@ def _setup_mouse_offsets(parent):
     x_offset_entry = ctk.CTkEntry(x_offset_row, width=100, font=UIStyle.BODY_FONT, fg_color="transparent")
     x_offset_entry.pack(side="left", padx=(0, 10))
     x_offset_entry.insert(0, str(shared_vars.x_offset.value))
+    settings_ui_vars['x_offset'] = x_offset_entry
     
     # Y Offset
     y_offset_row = ctk.CTkFrame(mouse_offsets_frame)
@@ -3631,6 +3710,7 @@ def _setup_mouse_offsets(parent):
     y_offset_entry = ctk.CTkEntry(y_offset_row, width=100, font=UIStyle.BODY_FONT, fg_color="transparent")
     y_offset_entry.pack(side="left", padx=(0, 10))
     y_offset_entry.insert(0, str(shared_vars.y_offset.value))
+    settings_ui_vars['y_offset'] = y_offset_entry
     
     # Auto-save timers for offsets
     offset_timers = {}
@@ -3687,6 +3767,7 @@ def _setup_misc_settings(parent):
     def update_debug_image_matches():
         shared_vars.debug_image_matches.value = debug_image_var.get()
         save_gui_config()
+    settings_ui_vars['debug_image_matches'] = debug_image_var
     debug_image_checkbox = ctk.CTkCheckBox(
         misc_frame, 
         text="Debug Image Matches", 
@@ -3700,6 +3781,7 @@ def _setup_misc_settings(parent):
     def update_convert_images_to_grayscale():
         shared_vars.convert_images_to_grayscale.value = convert_images_to_grayscale_var.get()
         save_gui_config()
+    settings_ui_vars['convert_images_to_grayscale'] = convert_images_to_grayscale_var
     convert_images_to_grayscale_checkbox = ctk.CTkCheckBox(
         misc_frame, 
         text="Convert images to grayscale (30%~ speed boost)", 
@@ -3717,6 +3799,7 @@ def _setup_misc_settings(parent):
     reconnection_delay_entry = ctk.CTkEntry(reconnection_delay_row, width=80, font=UIStyle.BODY_FONT)
     reconnection_delay_entry.pack(side="left", padx=(0, 10))
     reconnection_delay_entry.insert(0, str(shared_vars.reconnection_delay.value))
+    settings_ui_vars['reconnection_delay'] = reconnection_delay_entry
     
     # Auto-save for reconnection delay
     reconnection_timer = None
@@ -3753,6 +3836,7 @@ def _setup_misc_settings(parent):
     def update_reconnect_internet():
         shared_vars.reconnect_when_internet_reachable.value = reconnect_internet_var.get()
         save_gui_config()
+    settings_ui_vars['reconnect_when_internet_reachable'] = reconnect_internet_var
     reconnect_internet_checkbox = ctk.CTkCheckBox(
         misc_frame, 
         text="Reconnect only When Internet Is Reachable", 
@@ -3766,6 +3850,7 @@ def _setup_misc_settings(parent):
     def update_auto_update():
         save_gui_config()
         
+    settings_ui_vars['auto_update'] = auto_update_var
     auto_update_checkbox = ctk.CTkCheckBox(
         misc_frame, 
         text="Auto Update on Startup", 
@@ -3783,6 +3868,7 @@ def _setup_misc_settings(parent):
     click_delay_entry = ctk.CTkEntry(click_delay_row, width=80, font=UIStyle.BODY_FONT)
     click_delay_entry.pack(side="left", padx=(0, 10))
     click_delay_entry.insert(0, str(shared_vars.click_delay.value))
+    settings_ui_vars['click_delay'] = click_delay_entry
     
     # Auto-save for click delay
     click_delay_timer = None
@@ -4168,6 +4254,7 @@ def _setup_automation_settings(parent):
     def update_skip_ego_check():
         shared_vars.skip_ego_check.value = skip_ego_check_var.get()
         save_gui_config()
+    settings_ui_vars['skip_ego_check'] = skip_ego_check_var
     skip_ego_check_cb = ctk.CTkCheckBox(
         automation_frame, 
         text="Skip using EGO in Battle", 
@@ -4182,6 +4269,7 @@ def _setup_automation_settings(parent):
     def update_good_pc_mode():
         shared_vars.good_pc_mode.value = good_pc_mode_var.get()
         save_gui_config()
+    settings_ui_vars['good_pc_mode'] = good_pc_mode_var
     good_pc_mode_cb = ctk.CTkCheckBox(
         automation_frame, 
         text="I have a good pc", 
@@ -4290,6 +4378,132 @@ def _setup_theme(parent):
     )
     theme_dropdown.pack(pady=(0, 15))
 
+def reload_configuration():
+    global config, squad_data, slow_squad_data, pack_priority_data, pack_exceptions_data, fusion_exceptions_data, grace_selection_data
+    
+    # 1. Reload GUI Config
+    config = load_gui_config()
+    
+    # Update Shared Vars
+    try:
+        shared_vars.x_offset.value = config['Settings'].get('x_offset', 0)
+        shared_vars.y_offset.value = config['Settings'].get('y_offset', 0)
+        shared_vars.game_monitor.value = config['Settings'].get('game_monitor', 1)
+        shared_vars.skip_restshop.value = config['Settings'].get('skip_restshop', False)
+        shared_vars.skip_ego_check.value = config['Settings'].get('skip_ego_check', False)
+        shared_vars.skip_ego_fusion.value = config['Settings'].get('skip_ego_fusion', False)
+        shared_vars.skip_sinner_healing.value = config['Settings'].get('skip_sinner_healing', False)
+        shared_vars.skip_ego_enhancing.value = config['Settings'].get('skip_ego_enhancing', False)
+        shared_vars.skip_ego_buying.value = config['Settings'].get('skip_ego_buying', False)
+        shared_vars.prioritize_list_over_status.value = config['Settings'].get('prioritize_list_over_status', False)
+        shared_vars.debug_image_matches.value = config['Settings'].get('debug_image_matches', False)
+        shared_vars.hard_mode.value = config['Settings'].get('hard_mode', False)
+        shared_vars.convert_images_to_grayscale.value = config['Settings'].get('convert_images_to_grayscale', True)
+        shared_vars.reconnection_delay.value = config['Settings'].get('reconnection_delay', 6)
+        shared_vars.reconnect_when_internet_reachable.value = config['Settings'].get('reconnect_when_internet_reachable', False)
+        shared_vars.good_pc_mode.value = config['Settings'].get('good_pc_mode', True)
+        shared_vars.click_delay.value = config['Settings'].get('click_delay', 0.5)
+        shared_vars.retry_count.value = config['Settings'].get('retry_count', 0)
+        shared_vars.pack_refreshes.value = config['Settings'].get('pack_refreshes', 7)
+    except Exception as e:
+        error(f"Error updating shared vars: {e}")
+
+    # Update Global UI Elements (Run configurations)
+    if 'entry' in globals(): entry.delete(0, 'end'); entry.insert(0, str(config['Settings'].get('mirror_runs', 1)))
+    if 'exp_entry' in globals(): exp_entry.delete(0, 'end'); exp_entry.insert(0, str(config['Settings'].get('exp_runs', 1)))
+    if 'exp_stage_var' in globals(): exp_stage_var.set(str(config['Settings'].get('exp_stage', '1')))
+    if 'threads_entry' in globals(): threads_entry.delete(0, 'end'); threads_entry.insert(0, str(config['Settings'].get('threads_runs', 1)))
+    if 'threads_difficulty_var' in globals(): threads_difficulty_var.set(str(config['Settings'].get('threads_difficulty', '20')))
+    if 'chain_threads_entry' in globals(): chain_threads_entry.delete(0, 'end'); chain_threads_entry.insert(0, str(config['Settings'].get('chain_threads_runs', 3)))
+    if 'chain_exp_entry' in globals(): chain_exp_entry.delete(0, 'end'); chain_exp_entry.insert(0, str(config['Settings'].get('chain_exp_runs', 2)))
+    if 'chain_mirror_entry' in globals(): chain_mirror_entry.delete(0, 'end'); chain_mirror_entry.insert(0, str(config['Settings'].get('chain_mirror_runs', 1)))
+    if 'launch_game_var' in globals(): launch_game_var.set(config['Settings'].get('launch_game_before_runs', False))
+    if 'collect_rewards_var' in globals(): collect_rewards_var.set(config['Settings'].get('collect_rewards_when_finished', False))
+
+    # Update Settings Tab UI Elements
+    if 'settings_ui_vars' in globals():
+        vars_map = {
+            'hard_mode': shared_vars.hard_mode.value,
+            'skip_restshop': shared_vars.skip_restshop.value,
+            'skip_ego_fusion': shared_vars.skip_ego_fusion.value,
+            'skip_sinner_healing': shared_vars.skip_sinner_healing.value,
+            'skip_ego_enhancing': shared_vars.skip_ego_enhancing.value,
+            'skip_ego_buying': shared_vars.skip_ego_buying.value,
+            'prioritize_list_over_status': shared_vars.prioritize_list_over_status.value,
+            'debug_image_matches': shared_vars.debug_image_matches.value,
+            'convert_images_to_grayscale': shared_vars.convert_images_to_grayscale.value,
+            'reconnect_when_internet_reachable': shared_vars.reconnect_when_internet_reachable.value,
+            'good_pc_mode': shared_vars.good_pc_mode.value,
+            'skip_ego_check': shared_vars.skip_ego_check.value,
+            'auto_update': config['Settings'].get('auto_update', False),
+            'claim_on_defeat': config['Settings'].get('claim_on_defeat', False)
+        }
+        
+        for key, value in vars_map.items():
+            if key in settings_ui_vars:
+                settings_ui_vars[key].set(value)
+        
+        # Entries in settings
+        if 'x_offset' in settings_ui_vars: settings_ui_vars['x_offset'].delete(0, 'end'); settings_ui_vars['x_offset'].insert(0, str(shared_vars.x_offset.value))
+        if 'y_offset' in settings_ui_vars: settings_ui_vars['y_offset'].delete(0, 'end'); settings_ui_vars['y_offset'].insert(0, str(shared_vars.y_offset.value))
+        if 'reconnection_delay' in settings_ui_vars: settings_ui_vars['reconnection_delay'].delete(0, 'end'); settings_ui_vars['reconnection_delay'].insert(0, str(shared_vars.reconnection_delay.value))
+        if 'click_delay' in settings_ui_vars: settings_ui_vars['click_delay'].delete(0, 'end'); settings_ui_vars['click_delay'].insert(0, str(shared_vars.click_delay.value))
+        if 'retry_count' in settings_ui_vars: settings_ui_vars['retry_count'].delete(0, 'end'); settings_ui_vars['retry_count'].insert(0, str(shared_vars.retry_count.value))
+        if 'pack_refreshes' in settings_ui_vars: settings_ui_vars['pack_refreshes'].delete(0, 'end'); settings_ui_vars['pack_refreshes'].insert(0, str(shared_vars.pack_refreshes.value))
+
+    # 2. Reload Squad Data
+    squad_data = load_json_data(JSON_PATH)
+    slow_squad_data = json.loads(json.dumps(squad_data))
+    for status, vars_list in dropdown_vars.items():
+        current_squad = squad_data.get(status, {})
+        reverse_map = {v: k for k, v in current_squad.items()}
+        for i, var in enumerate(vars_list):
+            raw_name = reverse_map.get(i + 1)
+            pretty = next((x for x in SINNER_LIST if sinner_key(x) == raw_name), "None") if raw_name else "None"
+            var.set(pretty)
+
+    # 3. Reload Team Selections
+    for tab, vars_dict in [("mirror", mirror_checkbox_vars), ("exp", exp_checkbox_vars), ("threads", threads_checkbox_vars)]:
+        if not vars_dict: continue
+        selected = load_initial_selections(tab)
+        for name, var in vars_dict.items():
+            var.set(name in selected)
+
+    # 4. Reload Pack Priority
+    pack_priority_data = load_pack_priority()
+    for floor, vars_list in pack_dropdown_vars.items():
+        current_prio = pack_priority_data.get(floor, {})
+        reverse_map = {v: k for k, v in current_prio.items()}
+        for i, var in enumerate(vars_list):
+            raw_name = reverse_map.get(i + 1)
+            pretty = raw_name if raw_name else "None"
+            var.set(pretty)
+
+    # 5. Reload Pack Exceptions
+    pack_exceptions_data = load_pack_exceptions()
+    for floor, vars_dict in pack_exception_vars.items():
+        exceptions = pack_exceptions_data.get(floor, [])
+        for pack, var in vars_dict.items():
+            var.set(pack in exceptions)
+
+    # 6. Reload Fusion Exceptions
+    fusion_exceptions_data = load_fusion_exceptions()
+    for path, var in fuse_exception_vars.items():
+        filename = os.path.basename(path)
+        display_name = filename if os.path.isdir(os.path.join(BASE_PATH, path)) else os.path.splitext(filename)[0]
+        var.set(display_name in fusion_exceptions_data)
+
+    # 7. Reload Grace Selection
+    grace_selection_data = load_grace_selection()
+    current_grace = grace_selection_data.get("order", {})
+    reverse_map = {v: k for k, v in current_grace.items()}
+    for i, var in enumerate(grace_dropdown_vars):
+        raw_name = reverse_map.get(i + 1)
+        pretty = raw_name if raw_name else "None"
+        var.set(pretty)
+        
+    messagebox.showinfo("Success", "Configuration reloaded successfully.")
+
 def load_settings_tab():
     """Lazy load the Settings tab content"""
     global settings_tab_loaded
@@ -4319,6 +4533,8 @@ def load_settings_tab():
 stats_scroll = ctk.CTkScrollableFrame(master=tab_stats, corner_radius=UIStyle.CORNER_RADIUS)
 stats_scroll.pack(fill="both", expand=True, padx=UIStyle.INNER_PADDING, pady=UIStyle.INNER_PADDING)
 
+last_stats_mtime = 0
+
 def load_stats():
     try:
         if os.path.exists(STATS_PATH):
@@ -4329,6 +4545,13 @@ def load_stats():
     return {"mirror": {"runs": 0, "wins": 0, "losses": 0}, "exp": {"runs": 0}, "threads": {"runs": 0}}
 
 def refresh_statistics():
+    global last_stats_mtime
+    try:
+        if os.path.exists(STATS_PATH):
+            last_stats_mtime = os.path.getmtime(STATS_PATH)
+    except:
+        pass
+
     for widget in stats_scroll.winfo_children():
         widget.destroy()
         
@@ -4435,6 +4658,21 @@ def refresh_statistics():
 
 # Initial load
 refresh_statistics()
+
+def check_stats_update():
+    """Check if stats file has changed and refresh UI if on Stats tab"""
+    global last_stats_mtime
+    if sidebar.current_page == "Statistics":
+        try:
+            if os.path.exists(STATS_PATH):
+                current_mtime = os.path.getmtime(STATS_PATH)
+                if current_mtime != last_stats_mtime:
+                    refresh_statistics()
+        except Exception:
+            pass
+    root.after(2000, check_stats_update)
+
+check_stats_update()
 
 # =====================================================================
 # SCHEDULE TAB
