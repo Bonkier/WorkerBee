@@ -355,7 +355,7 @@ class Mirror:
                 common.click_matching("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", threshold=0.9, recursive=False)
 
         elif common.element_exist("pictures/mirror/packs/floor_hard.png", 0.9): #accounts for cost additions or hard mode swap
-            common.sleep(2.5) # the ego gift crediting blocks the refresh button
+            common.sleep(5) # the ego gift crediting blocks the refresh button
             if not shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
                 common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.9, recursive=False)
 
@@ -407,38 +407,7 @@ class Mirror:
             
             self.logger.debug(f"Found {len(selectable_packs_pos)} selectable packs")
 
-            # --- 1. Identify Priority Packs ---
-            found_priority_packs = [] # List of (rank, coordinates, name)
-            
-            if floor and floor_priorities:
-                sorted_priorities = sorted(floor_priorities.items(), key=lambda x: x[1])
-                
-                for pack, rank in sorted_priorities:
-                    if pack in exception_packs:
-                        continue
-                        
-                    floor_num = floor[-1]
-                    image_floor = f"f{floor_num}"
-                    pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
-                    
-                    matches = common.match_image(
-                        pack_image, 
-                        0.65, 
-                        screenshot=screenshot, 
-                        enable_scaling=True,
-                        x1=min_x_scaled,
-                        y1=min_y_scaled,
-                        x2=max_x_scaled,
-                        y2=max_y_scaled
-                    )
-                    
-                    if matches:
-                        logger.debug(f"Found priority pack '{pack}' (Rank {rank})")
-                        for m in matches:
-                            known_pack_names[m] = pack
-                            found_priority_packs.append((rank, m, pack))
-
-            # --- 2. Identify Exception Packs ---
+            # --- 1. Identify Exception Packs (Moved up for filtering) ---
             except_packs_pos = []
             if floor:
                 for pack in exception_packs:
@@ -457,6 +426,88 @@ class Mirror:
                     ))
             
             self.logger.debug(f"Found {len(except_packs_pos)} exception packs")
+
+            # --- 2. Identify Priority Packs ---
+            found_priority_packs = [] # List of (rank, coordinates, name)
+            
+            if floor and floor_priorities:
+                sorted_priorities = sorted(floor_priorities.items(), key=lambda x: x[1])
+                
+                for pack, rank in sorted_priorities:
+                    if pack in exception_packs:
+                        continue
+                        
+                    floor_num = floor[-1]
+                    image_floor = f"f{floor_num}"
+                    pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                    
+                    # Check High Confidence First (Trust these over exceptions)
+                    high_conf_matches = common.match_image(
+                        pack_image, 
+                        0.85, 
+                        grayscale=True,
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    )
+
+                    matches = common.match_image(
+                        pack_image, 
+                        0.65, 
+                        grayscale=True,
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    )
+
+                    # Fallback to color matching if grayscale fails (e.g. bad lighting/tint)
+                    if not matches:
+                        matches = common.match_image(
+                            pack_image, 
+                            0.60, 
+                            grayscale=False,
+                            screenshot=screenshot, 
+                            enable_scaling=True,
+                            x1=min_x_scaled,
+                            y1=min_y_scaled,
+                            x2=max_x_scaled,
+                            y2=max_y_scaled
+                        )
+                    
+                    if matches:
+                        # Identify high confidence matches
+                        high_conf_set = set()
+                        if high_conf_matches:
+                            high_conf_overlaps = common.proximity_check(matches, high_conf_matches, common.scale_x_1080p(10))
+                            high_conf_set = set(high_conf_overlaps)
+
+                        # Filter out matches that overlap with known exceptions
+                        overlaps = common.proximity_check(matches, except_packs_pos, common.scale_x_1080p(100))
+                        
+                        valid_matches = []
+                        for m in matches:
+                            if m in high_conf_set:
+                                # High confidence: Keep it even if it overlaps exception (Trust Priority > Exception false positive)
+                                valid_matches.append(m)
+                                if m in overlaps:
+                                    logger.debug(f"Keeping high confidence priority pack '{pack}' despite exception overlap")
+                            elif m not in overlaps:
+                                # Normal confidence: Keep only if NO overlap
+                                valid_matches.append(m)
+                            else:
+                                logger.debug(f"Filtered low confidence priority pack '{pack}' due to exception overlap")
+
+                        if valid_matches:
+                            logger.debug(f"Found priority pack '{pack}' (Rank {rank})")
+                            for m in valid_matches:
+                                known_pack_names[m] = pack
+                                found_priority_packs.append((rank, m, pack))
 
             # Filter selectable packs (remove exceptions)
             packs_to_remove = common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_y_1080p(450))
@@ -561,7 +612,7 @@ class Mirror:
                     # Fallback: Try searching wider top right area if restricted search fails
                     refresh_btn = common.match_image(
                         "pictures/mirror/general/refresh.png", 
-                        0.55, 
+                        0.6, 
                         screenshot=screenshot, 
                         enable_scaling=True,
                         x1=common.scale_x_1080p(1000), y1=0, 
@@ -574,17 +625,17 @@ class Mirror:
                     logger.info("Refreshed via image detection.")
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(1.5)
+                    common.sleep(3.5)
                     refresh_count += 1
                     continue
                 else:
                     # Blind click fallback if image detection fails
                     logger.warning("Refresh button not found via image. Attempting blind click.")
                     # Approximate location of refresh button in 1080p (Top Right)
-                    common.mouse_move_click(*common.scale_coordinates_1080p(1550, 150))
+                    common.mouse_move_click(*common.scale_coordinates_1080p(1600, 50))
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(1.5)
+                    common.sleep(3.5)
                     refresh_count += 1
                     continue
 
