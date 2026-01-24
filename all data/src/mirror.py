@@ -355,7 +355,7 @@ class Mirror:
                 common.click_matching("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", threshold=0.9, recursive=False)
 
         elif common.element_exist("pictures/mirror/packs/floor_hard.png", 0.9): #accounts for cost additions or hard mode swap
-            common.sleep(1.5) # the ego gift crediting blocks the refresh button
+            common.sleep(2.5) # the ego gift crediting blocks the refresh button
             if not shared_vars.hard_mode: #Accounting for previous hard run and toggling back.
                 common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.9, recursive=False)
 
@@ -423,7 +423,7 @@ class Mirror:
                     
                     matches = common.match_image(
                         pack_image, 
-                        0.60, 
+                        0.65, 
                         screenshot=screenshot, 
                         enable_scaling=True,
                         x1=min_x_scaled,
@@ -561,7 +561,7 @@ class Mirror:
                     # Fallback: Try searching wider top right area if restricted search fails
                     refresh_btn = common.match_image(
                         "pictures/mirror/general/refresh.png", 
-                        0.7, 
+                        0.55, 
                         screenshot=screenshot, 
                         enable_scaling=True,
                         x1=common.scale_x_1080p(1000), y1=0, 
@@ -578,13 +578,15 @@ class Mirror:
                     refresh_count += 1
                     continue
                 else:
-                    # If button not found, it might be blocked by animation
-                    if retry_attempt > 1:
-                        logger.warning("Refresh button not found (likely blocked). Waiting...")
-                        common.sleep(1.0)
-                        continue
-                    else:
-                        logger.warning("Refresh button not found after retries. Skipping refresh.")
+                    # Blind click fallback if image detection fails
+                    logger.warning("Refresh button not found via image. Attempting blind click.")
+                    # Approximate location of refresh button in 1080p (Top Right)
+                    common.mouse_move_click(*common.scale_coordinates_1080p(1550, 150))
+                    
+                    common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                    common.sleep(1.5)
+                    refresh_count += 1
+                    continue
 
             # 3. Status Pack
             if status_selectable_packs_pos and floor != "floor5":
