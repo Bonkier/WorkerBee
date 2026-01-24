@@ -52,6 +52,7 @@ class Mirror:
             "packs": []
         }
         self.current_floor_tracker = None
+        self.retries_used = 0
 
     @staticmethod
     def floor_id():
@@ -136,12 +137,20 @@ class Mirror:
         """Check if run ended and return win status and completion flag"""
         run_complete = 0
         win_flag = 0
-        if common.element_exist("pictures/general/defeat.png"):
-            self.defeat()
-            run_complete = 1
-            #win_flag = 0
+        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True)):
+            self.logger.info("Defeat detected in check_run")
+            run_ended = self.defeat()
+            if run_ended:
+                run_complete = 1
+            else:
+                run_complete = 0
 
         if common.element_exist("pictures/general/victory.png"):
+            self.logger.info("Victory detected in check_run")
             self.victory()
             run_complete = 1
             win_flag = 1
@@ -369,7 +378,7 @@ class Mirror:
         # Track known pack locations for statistics
         known_pack_names = {} # (x, y) -> pack_name
         refresh_count = 0
-        MAX_REFRESHES = 7
+        MAX_REFRESHES = getattr(shared_vars, 'pack_refreshes', 7)
 
         retry_attempt = 10
         while retry_attempt > 0:
@@ -565,7 +574,7 @@ class Mirror:
                 common.sleep(0.15)
                 pyautogui.mouseUp()
 
-            def select_pack(coords, name="Unknown", source="unknown"):
+            def select_pack(coords, name="unknown_pack", source="unknown"):
                 pack_name = name
                 
                 if source == "status":
@@ -573,6 +582,10 @@ class Mirror:
                 elif coords in known_pack_names:
                     pack_name = known_pack_names[coords]
                 
+                # Clean up pack name (remove extension if present)
+                if pack_name.lower().endswith('.png'):
+                    pack_name = pack_name[:-4]
+
                 if not self.run_stats["packs"] or self.run_stats["packs"][-1] != pack_name:
                     self.run_stats["packs"].append(pack_name)
                 
@@ -648,12 +661,12 @@ class Mirror:
             # Fallback: Random / Exception
             if selectable_packs_pos:
                 logger.info("Fallback: Selecting random available pack")
-                select_pack(selectable_packs_pos[0], "Random")
+                select_pack(selectable_packs_pos[0], "unknown_pack")
                 return
             
             if not selectable_packs_pos and packs_to_remove:
                  logger.info("Fallback: Forced to select exception pack")
-                 select_pack(list(packs_to_remove)[0], "Exception")
+                 select_pack(list(packs_to_remove)[0], "unknown_pack")
                  return
 
         if retry_attempt == 0:
@@ -862,7 +875,12 @@ class Mirror:
             self.logger.info(f"Found {len(node_location)} possible navigation nodes")
 
             while(not common.element_exist("pictures/mirror/general/nav_enter.png")):
-                if common.element_exist("pictures/general/defeat.png") or common.element_exist("pictures/general/victory.png"):
+                if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/general/victory.png")):
                     return
                 nav_found = False
                 for x,y in node_location:
@@ -1436,11 +1454,143 @@ class Mirror:
 
     def defeat(self):
         """Handle defeat screen and cleanup"""
-        common.click_matching("pictures/general/confirm_w.png", recursive=False)
-        common.click_matching("pictures/general/beeg_confirm.png")
+        # Step 1: Detection & Retry
+        self.logger.info("Defeat detected. Checking for retry or forfeit options...")
+        while True:
+            # Check for retry stage (PNG or JPG)
+            retry_img = None
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True):
+                retry_img = "pictures/CustomAdded1080p/mirror/general/retrystage.png"
+            elif common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True):
+                retry_img = "pictures/CustomAdded1080p/mirror/general/retrystage.jpg"
+
+            if retry_img:
+                # Use getattr to safely access retry_count, defaulting to 0 if not present
+                retry_limit = getattr(shared_vars, 'retry_count', 0)
+                if self.retries_used < retry_limit:
+                    self.logger.info(f"Retry stage button detected. Retrying ({self.retries_used + 1}/{retry_limit})...")
+                    
+                    # Retry click loop
+                    retry_start = time.time()
+                    while time.time() - retry_start < 15:
+                        if common.click_matching(retry_img, threshold=0.6, quiet_failure=True):
+                            # Wait for confirmation
+                            wait_start = time.time()
+                            while time.time() - wait_start < 4:
+                                if common.click_matching("pictures/general/confirm_w.png", threshold=0.6, quiet_failure=True):
+                                    self.retries_used += 1
+                                    common.sleep(3) # Wait for transition to prevent double counting
+                                    return False # Exit function to retry, run NOT complete
+                                common.sleep(0.2)
+                        common.sleep(0.5)
+                            
+                else:
+                    # Log once per check to avoid spam, or just rely on the loop finding acceptdefeat
+                    self.logger.debug("Retry button found but retries exhausted/disabled.")
+                    pass
+            
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True):
+                self.logger.info("Battle defeat detected. Proceeding to forfeit...")
+                break # Proceed to forfeit
+            
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True):
+                self.logger.info("Accept defeat detected. Proceeding to forfeit...")
+                break # Proceed to forfeit
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True):
+                self.logger.info("Accept defeat detected (JPG). Proceeding to forfeit...")
+                break # Proceed to forfeit
+            
+            self.logger.debug("Waiting for retry/forfeit buttons...")
+            common.sleep(0.5)
+
+        # Step 2: Confirmed Forfeit
+        self.logger.info("Attempting to click Accept Defeat...")
+        start_time = time.time()
+        while True:
+            if time.time() - start_time > 30:
+                self.logger.warning("Timed out waiting for confirm_w after accept defeat")
+                break
+            
+            # 1. Click acceptdefeat to open dialog
+            accept_clicked = False
+            if common.click_matching("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.5, quiet_failure=True, recursive=False, grayscale=True):
+                self.logger.info("Clicked acceptdefeat button (PNG)")
+                accept_clicked = True
+            elif common.click_matching("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.5, quiet_failure=True, recursive=False, grayscale=True):
+                self.logger.info("Clicked acceptdefeat button (JPG)")
+                accept_clicked = True
+            else:
+                # Fallback with scaling if simple click fails
+                matches = common.match_image("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.4, quiet_failure=True, enable_scaling=True, grayscale=True)
+                if not matches:
+                    matches = common.match_image("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.4, quiet_failure=True, enable_scaling=True, grayscale=True)
+                
+                if matches:
+                    common.mouse_move_click(matches[0][0], matches[0][1])
+                    self.logger.info("Clicked acceptdefeat button (scaled)")
+                    accept_clicked = True
+                else:
+                    # Last resort: Try to find retrystage and click to its right
+                    retry_matches = common.match_image("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.5, quiet_failure=True, enable_scaling=True, grayscale=True)
+                    if not retry_matches:
+                        retry_matches = common.match_image("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.5, quiet_failure=True, enable_scaling=True, grayscale=True)
+                        
+                    if retry_matches:
+                        # Assuming Accept Defeat is to the right of Retry Stage
+                        # Standard offset estimation: ~300-400 pixels right in 1080p
+                        rx, ry = retry_matches[0]
+                        offset_x = common.scale_x_1080p(350)
+                        common.mouse_move_click(rx + offset_x, ry)
+                        self.logger.info("Clicked estimated acceptdefeat position (relative to retrystage)")
+                        accept_clicked = True
+                    else:
+                        self.logger.debug("acceptdefeat button not found")
+            
+            # 2. Click confirm_w ONLY if accept was clicked
+            if accept_clicked:
+                self.logger.debug("Waiting for confirm_w...")
+                wait_lit_start = time.time()
+                while time.time() - wait_lit_start < 2:
+                    if common.click_matching("pictures/general/confirm_w.png", threshold=0.6, quiet_failure=True, recursive=False):
+                        self.logger.info("Clicked confirm_w")
+                        break
+                    else:
+                        self.logger.debug("confirm_w not found yet")
+                    common.sleep(0.2)
+                else:
+                    common.sleep(0.5)
+                    continue
+                break
+
+            common.sleep(0.5)
+
+        common.sleep(1) # Wait for transition
+        
+        common.click_matching("pictures/general/beeg_confirm.png", quiet_failure=True)
         common.mouse_move(*common.scale_coordinates_1080p(200,200))
-        common.click_matching("pictures/general/claim_rewards.png")
+        common.click_matching("pictures/general/claim_rewards.png", quiet_failure=True)
         common.sleep(1)
-        common.click_matching("pictures/general/give_up.png")
-        common.click_matching("pictures/general/confirm_w.png")
+
+        # Step 3: Conditional Reward Selection
+        if getattr(shared_vars, 'claim_on_defeat', False):
+            self.logger.info("Claiming rewards on defeat (Enabled).")
+            common.click_matching("pictures/general/md_claim.png")
+            if common.click_matching("pictures/general/confirm_w.png", recursive=False):
+                # Handle potential rewards prompts (Weekly / Battle Pass)
+                # Attempt to clear prompts for up to 5 seconds
+                end_time = time.time() + 5
+                while time.time() < end_time:
+                    if common.element_exist("pictures/mirror/general/weekly_reward.png"):
+                        common.key_press("enter")
+                    if common.element_exist("pictures/mirror/general/pass_level.png"):
+                        common.key_press("enter")
+                    if common.element_exist("pictures/general/module.png"):
+                        break
+                    common.sleep(0.5)
+        else:
+            self.logger.info("Giving up without claiming rewards (Disabled).")
+            common.click_matching("pictures/general/give_up.png")
+            common.click_matching("pictures/general/confirm_w.png")
+        
         post_run_load()
+        return True # Run complete

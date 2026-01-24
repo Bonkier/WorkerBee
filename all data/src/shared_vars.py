@@ -204,7 +204,10 @@ def _get_gui_values():
         'reconnection_delay': 6,
         'reconnect_when_internet_reachable': False,
         'good_pc_mode': True,
-        'click_delay': 0.5
+        'click_delay': 0.5,
+        'claim_on_defeat': False,
+        'retry_count': 0,
+        'pack_refreshes': 7
     }
 
 def _load_shared_vars():

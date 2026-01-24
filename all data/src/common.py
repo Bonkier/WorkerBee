@@ -434,6 +434,8 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     else:
         original_template = cv2.imread(full_template_path, color_flag)
         if original_template is None:
+            if quiet_failure:
+                return []
             raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
         _template_cache[cache_key] = original_template
     
@@ -954,11 +956,18 @@ def wait_skip(img_path, threshold=0.8):
         
     click_matching(img_path, threshold)
 
-def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None):
+def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False):
     """Find and click on image match. Returns True if clicked, False if not found."""
+    
+    # If quiet_failure is True and recursive is True, check if file exists to avoid infinite loop
+    if quiet_failure and recursive:
+        full_path = resource_path(image_path)
+        if not os.path.exists(full_path):
+            return False
+
     # Iterative implementation to avoid recursion depth issues and improve performance
     while True:
-        found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot)
+        found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot, quiet_failure=quiet_failure)
         if found:
             x, y = found[0]
             mouse_move_click(x, y, log_click=False)
@@ -980,9 +989,9 @@ def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, gra
     result = match_image(img_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
     return result
 
-def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
+def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False):
     """checks if exists and returns the image location if found"""
-    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, False, x1, y1, x2, y2, screenshot)
+    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
     return result
 
 def squad_order(status):
@@ -1042,7 +1051,7 @@ def error_screenshot():
 def set_game_monitor(monitor_index):
     """Set which monitor the game is running on"""
     if monitor_index < 1 or monitor_index >= len(get_sct().monitors):
-        logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(_sct.monitors)-1})")
+        logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(get_sct().monitors)-1})")
         shared_vars.game_monitor = 1
     else:
         shared_vars.game_monitor = monitor_index

@@ -3,6 +3,7 @@ import logging
 import os
 import threading
 import json
+import time
 import mirror
 
 logger = None
@@ -137,6 +138,9 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.skip_ego_buying = shared_vars_instance.skip_ego_buying.value
             sv_module.prioritize_list_over_status = shared_vars_instance.prioritize_list_over_status.value
             sv_module.hard_mode = shared_vars_instance.hard_mode.value
+            sv_module.retry_count = shared_vars_instance.retry_count.value
+            sv_module.claim_on_defeat = shared_vars_instance.claim_on_defeat.value
+            sv_module.pack_refreshes = shared_vars_instance.pack_refreshes.value
             time.sleep(1)
         except AttributeError:
             pass # Ignore if shared_vars_instance is missing attributes during shutdown
