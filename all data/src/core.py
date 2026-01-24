@@ -102,7 +102,7 @@ def reconnect():
 
 def battle():
     """Main battle loop handling winrate, ego checks, and skill events"""
-    logger.info("Starting battle")
+    logger.info("Starting battle loop")
     battle_finished = 0
     winrate_visible_start = None
     winrate_timeout = 5
@@ -128,16 +128,16 @@ def battle():
             
         common.mouse_move(*common.scale_coordinates_1080p(20, 1060))
         if common.element_exist("pictures/events/skip.png"): #Checks for special battle skill checks prompt then calls skill check functions
-            logger.debug("Skip button found, handling skill check")
+            logger.info("Skip button found, handling skill check")
             common.mouse_up()
             while(True):
                 common.click_skip(1) 
                 if common.element_exist("pictures/mirror/general/event.png", 0.7):
-                    logger.debug("Battle check event detected")
+                    logger.info("Battle check event detected")
                     battle_check()
                     break
                 if common.element_exist("pictures/events/skill_check.png"):
-                    logger.debug("Skill check event detected")
+                    logger.info("Skill check event detected")
                     skill_check()
                     break
 
@@ -158,7 +158,7 @@ def battle():
                 ego_check()
                 common.key_press("enter")
             else:
-                logger.debug("Processing winrate normally")
+                logger.info("Clicking Winrate (P)")
                 common.mouse_up()
                 common.key_press("p")
                 if not shared_vars.good_pc_mode:
@@ -189,25 +189,25 @@ def battle():
 
 def ego_check():
     """Check for bad clashes and use EGO skills to counter them"""
-    logger.debug("Starting ego check")
+    logger.info("Starting ego check")
     if shared_vars.skip_ego_check:
-        logger.debug("Skipping ego check due to settings")
+        logger.info("Skipping ego check due to settings")
         return
         
     bad_clashes = []
     hopeless_matches = common.ifexist_match("pictures/battle/ego/hopeless.png",0.79, no_grayscale=True)
     if hopeless_matches:
-        logger.debug(f"Found {len(hopeless_matches)} hopeless clashes")
+        logger.info(f"Found {len(hopeless_matches)} hopeless clashes")
         bad_clashes += hopeless_matches
         
     struggling_matches = common.ifexist_match("pictures/battle/ego/struggling.png",0.79, no_grayscale=True)
     if struggling_matches:
-        logger.debug(f"Found {len(struggling_matches)} struggling clashes")
+        logger.info(f"Found {len(struggling_matches)} struggling clashes")
         bad_clashes += struggling_matches
     
     bad_clashes = [i for i in bad_clashes if i]
     if len(bad_clashes):
-        logger.debug(f"Processing {len(bad_clashes)} bad clashes for EGO usage")
+        logger.info(f"Processing {len(bad_clashes)} bad clashes for EGO usage")
         bad_clashes = [x for x in bad_clashes if x[1] > common.scale_y(1023)]
         for x,y in bad_clashes:
             offset_x, offset_y = common.scale_offset_1440p(-55, 100)
@@ -255,15 +255,15 @@ def ego_check():
         common.key_press("p")
         if not shared_vars.good_pc_mode:
             common.sleep(0.5)
-        logger.debug("EGO check completed")
+        logger.info("EGO check completed")
     else:
         logger.debug("No bad clashes found, EGO not needed")
     return
     
 def battle_check():
-
     """Handle special battle events and skill checks"""
     if common.click_matching("pictures/battle/investigate.png", recursive=False):
+        logger.info("Investigate button clicked")
         common.wait_skip("pictures/events/continue.png")
         return 0
         
@@ -288,10 +288,10 @@ def battle_check():
             common.sleep(0.1)
         # Fuck PM for inconsistency
         if common.element_exist("pictures/battle/rose_refuse.png"):
-            logger.info("[LINE 2] ROSE")
+            logger.info("Event: [LINE 2] ROSE")
             common.wait_skip("pictures/events/continue.png")
         else:
-            logger.info("PINK SHOES")
+            logger.info("Event: PINK SHOES")
             common.wait_skip("pictures/events/proceed.png")
             skill_check()
         return 0
@@ -313,6 +313,7 @@ def battle_check():
         return 0
     
     elif common.element_exist("pictures/battle/offer_sinner.png"):
+        logger.info("Event: Offer Sinner")
         found = common.match_image("pictures/battle/offer_clay.png")
         if found:
             x,y = found[0]
@@ -328,6 +329,7 @@ def battle_check():
         return 0
 
     elif common.click_matching("pictures/battle/hug_bear.png", recursive=False):
+        logger.info("Event: Hug Bear")
         while(not common.click_matching("pictures/events/proceed.png", recursive=False)):
             common.sleep(0.5)
         skill_check()
@@ -354,7 +356,7 @@ def battle_check():
         return 0
 
     elif common.click_matching("pictures/battle/violet_hp.png", recursive=False):
-        logger.info("Noon event - Chosoe HP recover")
+        logger.info("Noon event - Choose HP recover")
         common.wait_skip("pictures/events/continue.png")
         return 0
     
@@ -367,6 +369,7 @@ def battle_check():
 
 def skill_check():
     """Handle skill check events by selecting appropriate difficulty level"""
+    logger.info("Handling Skill Check")
     check_images = [
         "pictures/CustomAdded1080p/general/very_high.png",
         "pictures/CustomAdded1080p/general/high.png",
