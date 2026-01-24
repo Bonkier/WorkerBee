@@ -513,22 +513,29 @@ class Mirror:
             if floor_priorities and refresh_count < MAX_REFRESHES:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
                 
-                # Attempt 1: Image Detection
-                refresh_btn = common.match_image("pictures/mirror/general/refresh.png", 0.6, screenshot=screenshot, enable_scaling=False)
+                # Region-Restricted Refresh Detection
+                refresh_x1, refresh_y1 = common.scale_coordinates_1080p(1400, 0)
+                refresh_x2, refresh_y2 = common.scale_coordinates_1080p(1920, 200)
+                
+                refresh_btn = common.match_image(
+                    "pictures/mirror/general/refresh.png", 
+                    0.75, 
+                    screenshot=screenshot, 
+                    enable_scaling=False,
+                    x1=refresh_x1, y1=refresh_y1, x2=refresh_x2, y2=refresh_y2
+                )
+                
                 if refresh_btn:
                     x, y = refresh_btn[0]
                     common.mouse_move_click(x, y)
                     logger.info("Refreshed via image detection.")
+                    
+                    common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+                    common.sleep(1.5)
+                    refresh_count += 1
+                    continue
                 else:
-                    # Attempt 2: Blind Fallback
-                    logger.info("Forcing Refresh (Blind)")
-                    rx, ry = common.scale_coordinates_1080p(1560, 230)
-                    common.mouse_move_click(rx, ry)
-                
-                common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                common.sleep(1.5)
-                refresh_count += 1
-                continue
+                    logger.warning("Refresh button not found in expected region.")
 
             # 3. Status Pack
             if status_selectable_packs_pos and floor != "floor5":
