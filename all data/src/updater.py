@@ -903,7 +903,7 @@ print(f"Launching application with command: {{cmd}}")
 
 try:
     if sys.platform == 'win32':
-        subprocess.Popen(cmd, creationflags=0x00000008, close_fds=True) # DETACHED_PROCESS
+        subprocess.Popen(cmd, creationflags=0x08000000, close_fds=True) # CREATE_NO_WINDOW
     else:
         subprocess.Popen(cmd, start_new_session=True, close_fds=True)
     print("Application launched successfully")
@@ -913,9 +913,9 @@ except Exception as e:
             
             # Launch the restart script
             if platform.system() == "Windows":
-                # Use DETACHED_PROCESS (0x8) to ensure it survives parent console closure
+                # Use CREATE_NO_WINDOW (0x08000000) to ensure it survives parent console closure
                 subprocess.Popen([sys.executable, restart_script_path], 
-                              creationflags=0x00000008, close_fds=True)
+                              creationflags=0x08000000, close_fds=True)
             else:
                 # Use subprocess.DEVNULL to detach on Unix
                 subprocess.Popen([sys.executable, restart_script_path], 
@@ -1044,6 +1044,12 @@ except Exception as e:
                 args = "--updated"
             else:
                 executable = sys.executable
+                # Try to switch to pythonw.exe if on Windows to avoid console window
+                if platform.system() == "Windows" and "python.exe" in executable.lower():
+                    pythonw = executable.lower().replace("python.exe", "pythonw.exe")
+                    if os.path.exists(pythonw):
+                        executable = pythonw
+                
                 script_path = os.path.join(self.all_data_dir, "gui_launcher.py")
                 args = f'"{script_path}" --updated'
 

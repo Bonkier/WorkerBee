@@ -192,6 +192,7 @@ def update_stats(win, run_data=None):
 def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_vars):
     """Main mirror dungeon run logic"""
     try:
+        import common
         from core import pre_md_setup
         from common import element_exist, error_screenshot
         
@@ -215,6 +216,15 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         
         for i in range(num_runs):
             logger.info(f"Run {run_count + 1}")
+            
+            # Clear caches to prevent memory leaks over long sessions
+            try:
+                common._template_cache.clear()
+                if hasattr(common._thread_local, "sct"):
+                    common._thread_local.sct.close()
+                    del common._thread_local.sct
+            except Exception as e:
+                logger.warning(f"Failed to clear caches: {e}")
             
             try:
                 run_complete = 0

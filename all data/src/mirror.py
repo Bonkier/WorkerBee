@@ -529,7 +529,6 @@ class Mirror:
             # --- 3. Identify Status Packs ---
             status_gift_pos = common.match_image(
                 status, 
-                0.9, 
                 screenshot=screenshot,
                 enable_scaling=True,
                 x1=min_x_scaled,
@@ -544,7 +543,7 @@ class Mirror:
 
             owned_gift_pos = common.match_image(
                 "pictures/mirror/packs/status/owned.png", 
-                0.9, 
+                0.8, 
                 screenshot=screenshot,
                 enable_scaling=True,
                 x1=min_x_scaled,
@@ -591,6 +590,15 @@ class Mirror:
                 
                 x, y = coords
                 robust_drag_pack(x, y)
+                
+                # Wait for pack selection to finish (inpack.png to disappear)
+                # This prevents double-counting if the loop runs again quickly before screen transition
+                wait_start = time.time()
+                while time.time() - wait_start < 5:
+                    if not common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png", 
+                                              threshold=0.8, x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled, quiet_failure=True):
+                        break
+                    common.sleep(0.2)
 
             # --- DECISION LOGIC ---
 
@@ -937,7 +945,7 @@ class Mirror:
         skip_keywordless = any(os.path.basename(p).lower() == "keywordless.png" for p in exception_gifts)
         
         if not skip_keywordless:
-            vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+            vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", threshold=0.6, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if vestige_coords:
                 fusion_gifts += vestige_coords
             
@@ -947,9 +955,9 @@ class Mirror:
             # Use higher threshold for pierce since somehow the ++ icons on upgraded gifts were detected as pierce?!?!?
             # Similarly, it can mistake circular part of left side fusion UI as slash icon
             if i == 'pierce' or i == 'slash':
-                threshold = 0.79
+                threshold = 0.65
             else:
-                threshold = 0.75
+                threshold = 0.6
             
             status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if status_coords:
@@ -1002,7 +1010,7 @@ class Mirror:
                 continue
 
             try:
-                boxes = common.ifexist_match(gift_img, 0.75, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+                boxes = common.ifexist_match(gift_img, 0.6, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
                 if boxes:
                     all_exception_boxes.extend(boxes)
             except Exception as e:
