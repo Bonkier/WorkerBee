@@ -901,6 +901,23 @@ def save_gui_config(config=None):
             'Shortcuts': {}
         }
             
+        # Determine window dimensions
+        width = 900
+        height = 800
+        
+        if 'root' in globals():
+            if globals().get('is_compact_mode', False):
+                # In compact mode, use the stored previous geometry
+                prev_geo = globals().get('previous_geometry', "900x800")
+                try:
+                    width = int(prev_geo.split('+')[0].split('x')[0])
+                    height = int(prev_geo.split('+')[0].split('x')[1])
+                except:
+                    pass
+            else:
+                width = root.winfo_width()
+                height = root.winfo_height()
+
         # Add settings safely
         try:
             config['Settings'] = {
@@ -910,8 +927,8 @@ def save_gui_config(config=None):
                 'exp_stage': exp_stage_var.get() if 'exp_stage_var' in globals() and exp_stage_var.get() == "latest" else (int(exp_stage_var.get()) if 'exp_stage_var' in globals() else 1),
                 'threads_runs': int(threads_entry.get()) if 'threads_entry' in globals() and threads_entry.get().isdigit() else 1,
                 'threads_difficulty': threads_difficulty_var.get() if 'threads_difficulty_var' in globals() else 20,
-                'window_width': root.winfo_width() if 'root' in globals() else 900,
-                'window_height': root.winfo_height() if 'root' in globals() else 800,
+                'window_width': width,
+                'window_height': height,
                 'clean_logs': bool(filtered_messages_enabled) if 'filtered_messages_enabled' in globals() else True,
                 'logging_enabled': bool(logging_enabled) if 'logging_enabled' in globals() else True,
                 'kill_processes_on_exit': True,
@@ -2585,20 +2602,14 @@ def load_mirror_settings():
     )
     skip_ego_buying_cb.pack(anchor="w", padx=10, pady=5)
     
-    # Prioritize Pack List checkbox
-    prioritize_list_var = ctk.BooleanVar(value=shared_vars.prioritize_list_over_status.value)
-    def update_prioritize_list():
-        shared_vars.prioritize_list_over_status.value = prioritize_list_var.get()
-        save_gui_config()
-    settings_ui_vars['prioritize_list_over_status'] = prioritize_list_var
-    prioritize_list_cb = ctk.CTkCheckBox(
-        basic_settings_container, 
-        text="Prioritize Pack List Over Status Gifts", 
-        variable=prioritize_list_var,
-        command=update_prioritize_list,
-        font=UIStyle.BODY_FONT
+    # Pack Priority Status Label
+    pack_priority_label = ctk.CTkLabel(
+        basic_settings_container,
+        text="Pack Priority: Automatic (Enabled if list exists)",
+        font=UIStyle.BODY_FONT,
+        text_color=UIStyle.TEXT_SECONDARY_COLOR
     )
-    prioritize_list_cb.pack(anchor="w", padx=10, pady=5)
+    pack_priority_label.pack(anchor="w", padx=10, pady=5)
     
     # Claim on Defeat checkbox
     claim_on_defeat_var = ctk.BooleanVar(value=config['Settings'].get('claim_on_defeat', False))
