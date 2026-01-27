@@ -51,6 +51,17 @@ def get_sct():
         _thread_local.sct = mss()
     return _thread_local.sct
 
+def reset_sct():
+    """Reset the MSS screen capture instance and clear caches"""
+    try:
+        if hasattr(_thread_local, "sct"):
+            _thread_local.sct.close()
+            del _thread_local.sct
+        _template_cache.clear()
+        logger.info("Screen capture and template cache reset")
+    except Exception as e:
+        logger.error(f"Error resetting SCT: {e}")
+
 # Template cache to reduce disk I/O
 _template_cache = {}
 
