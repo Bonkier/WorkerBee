@@ -254,6 +254,10 @@ class Mirror:
         elif common.element_exist("pictures/mirror/general/gift_search_menu.png"):
             self.logger.info("Gift search menu detected in loop")
             self.gift_search_selection()
+            
+        elif common.element_exist("pictures/mirror/gift_search/refuse_gift.png"):
+            self.logger.info("Refuse gift button detected in loop")
+            self.gift_search_selection()
 
         # Failsafe: Check if we are back at main menu (run finished but victory/defeat missed)
         elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
@@ -269,7 +273,8 @@ class Mirror:
                 "pictures/battle/winrate.png",
                 "pictures/general/victory.png",
                 "pictures/mirror/general/encounter_reward.png",
-                "pictures/mirror/general/gift_search_menu.png"
+                "pictures/mirror/general/gift_search_menu.png",
+                "pictures/mirror/gift_search/refuse_gift.png"
             ]
             
             for img in stuck_images:
@@ -282,7 +287,7 @@ class Mirror:
                         self.event_choice()
                     elif "event_check.png" in img and common.click_matching(img, threshold=0.75):
                         common.wait_skip("pictures/events/continue.png")
-                    elif "gift_search_menu.png" in img:
+                    elif "gift_search_menu.png" in img or "refuse_gift.png" in img:
                         self.gift_search_selection()
                     
                     break # Found one valid state, reset is done, exit check
