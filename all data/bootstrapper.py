@@ -2,19 +2,42 @@ import sys
 import subprocess
 import importlib.util
 import os
+import time
 
 def check_and_install():
-    # If this is missing, we assume we need to install everything.
-    package_name = "customtkinter"
+    # Check for all critical dependencies
+    # Map import name to package name
+    dependencies = {
+        "customtkinter": "customtkinter",
+        "cv2": "opencv-python",
+        "PIL": "Pillow",
+        "keyboard": "keyboard",
+        "mss": "mss",
+        "pyautogui": "PyAutoGUI"
+    }
     
-    spec = importlib.util.find_spec(package_name)
-    
-    if spec is None:
-        print(f"{package_name} not found. Installing requirements...")
+    missing = [pkg for import_name, pkg in dependencies.items() if importlib.util.find_spec(import_name) is None]
+
+    if missing:
+        print(f"Missing libraries found: {', '.join(missing)}")
+        print("Installing requirements...")
         
         # Get the path to requirements.txt (assumed to be in the same folder)
         req_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
         
+        # Sanitize requirements.txt if it contains null bytes (encoding issue fix)
+        try:
+            if os.path.exists(req_file):
+                with open(req_file, 'rb') as f:
+                    content = f.read()
+                if b'\x00' in content:
+                    print("Detected corrupted requirements.txt, sanitizing...")
+                    clean_content = content.replace(b'\x00', b'')
+                    with open(req_file, 'wb') as f:
+                        f.write(clean_content)
+        except Exception as e:
+            print(f"Warning: Failed to sanitize requirements.txt: {e}")
+
         try:
             # Run pip install automatically
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
@@ -23,14 +46,35 @@ def check_and_install():
             print("Failed to install requirements. Please check your internet connection.")
             input("Press Enter to exit...")
             sys.exit(1)
+        except Exception as e:
+            print(f"Error installing requirements: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
 
 def launch_main_app():
     # Run the main GUI launcher
     main_script = os.path.join(os.path.dirname(__file__), "gui_launcher.py")
     
+    if not os.path.exists(main_script):
+        print(f"Error: gui_launcher.py not found at {main_script}")
+        input("Press Enter to exit...")
+        sys.exit(1)
+
     # We use subprocess to run it so it starts with a fresh environment
-    subprocess.call([sys.executable, main_script])
+    print(f"Launching {main_script}...")
+    try:
+        ret_code = subprocess.call([sys.executable, main_script])
+        if ret_code != 0:
+            print(f"\nApplication exited with error code {ret_code}")
+            input("Press Enter to exit...")
+    except Exception as e:
+        print(f"\nFailed to launch application: {e}")
+        input("Press Enter to exit...")
 
 if __name__ == "__main__":
-    check_and_install()
-    launch_main_app()
+    try:
+        check_and_install()
+        launch_main_app()
+    except Exception as e:
+        print(f"Bootstrapper error: {e}")
+        input("Press Enter to exit...")

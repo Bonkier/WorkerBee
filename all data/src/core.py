@@ -1,77 +1,38 @@
-import sys
-import os
 import time
 import logging
-from sys import exit
-
+import sys
 import pyautogui
-
 import common
 import shared_vars
 
-
-def get_base_path():
-    """Determine if running as executable or script and return base path."""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled exe
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as script
-        folder_path = os.path.dirname(os.path.abspath(__file__))
-        # Check if we're in the src folder or main folder
-        if os.path.basename(folder_path) == 'src':
-            return os.path.dirname(folder_path)
-        return folder_path
-
-
-# Get base path for resource access
-BASE_PATH = get_base_path()
-
-screen_width, screen_height = common.get_resolution()
-
-# Logging configuration is handled by common.py
 logger = logging.getLogger(__name__)
 
-def refill_enkephalin():
-    """Try to refill enkephalin using modules"""
-    logger.info("Starting enkephalin refill")
-    if common.click_matching("pictures/general/module.png",recursive=False):
-        logger.debug("Module button clicked successfully")
-        if not common.click_matching("pictures/general/right_arrow.png", recursive=False):
-            logger.debug("Right arrow not found, navigating back")
-            while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
-                pass
-            return refill_enkephalin()
-        common.click_matching("pictures/general/confirm_w.png")
-        logger.info("Enkephalin refill completed")
-        while common.element_exist("pictures/general/right_arrow.png"):
-            common.key_press("esc")
-            time.sleep(0.1)
-        return True
-    elif common.element_exist("pictures/CustomAdded1080p/mirror/general/InMirrorSelectCheck.png"):
-        return False
-
-def navigate_to_md():
-    """Navigate to mirror dungeon interface"""
-    while not common.element_exist("pictures/general/MD.png"):
-        while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
-            pass
-        common.click_matching("pictures/general/window.png")
-        common.click_matching("pictures/general/drive.png")
-    common.click_matching("pictures/general/MD.png")
-
-def pre_md_setup():
-    """Prepare for mirror dungeon run"""
-    if refill_enkephalin():
-        navigate_to_md()
-        return True
-    return False
-
 def check_loading():
-    """Wait for loading screens to finish"""
-    common.sleep(2)
-    while(common.element_exist("pictures/general/loading.png")):
-        common.sleep(0.5)
+    """Check for loading screens and wait until they disappear"""
+    loading_images = [
+        "pictures/general/loading.png",
+        "pictures/general/connecting.png",
+        "pictures/general/loading_icon.png"
+    ]
+    
+    timeout = 60
+    start_time = time.time()
+    
+    while True:
+        is_loading = False
+        for img in loading_images:
+            if common.element_exist(img, quiet_failure=True):
+                is_loading = True
+                break
+        
+        if not is_loading:
+            break
+            
+        if time.time() - start_time > timeout:
+            logger.warning("Loading check timed out")
+            break
+            
+        time.sleep(0.5)
 
 def transition_loading():
     """Wait for transitions between screens"""
@@ -268,7 +229,7 @@ def ego_check():
     else:
         logger.debug("No bad clashes found, EGO not needed")
     return
-    
+
 def battle_check():
     """Handle special battle events and skill checks"""
     if common.click_matching("pictures/battle/investigate.png", recursive=False):
@@ -415,3 +376,36 @@ def skill_check():
         common.sleep(1)
         if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
             common.click_matching("pictures/general/confirm_b.png")
+
+def refill_enkephalin():
+    """Try to refill enkephalin using modules"""
+    logger.info("Starting enkephalin refill")
+    if common.click_matching("pictures/general/module.png", recursive=False):
+        logger.debug("Module button clicked successfully")
+        if not common.click_matching("pictures/general/right_arrow.png", recursive=False):
+            logger.debug("Right arrow not found, navigating back")
+            while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
+                pass
+            return refill_enkephalin()
+        common.click_matching("pictures/general/confirm_w.png")
+        logger.info("Enkephalin refill completed")
+        while common.element_exist("pictures/general/right_arrow.png"):
+            common.key_press("esc")
+            time.sleep(0.1)
+        return True
+    elif common.element_exist("pictures/general/no_enkephalin.png", quiet_failure=True):
+        logger.info("Refilling Enkephalin (Popup)")
+        common.click_matching("pictures/general/confirm_b.png")
+        time.sleep(1)
+        common.click_matching("pictures/general/close.png", quiet_failure=True)
+        return True
+    return False
+
+def navigate_to_md():
+    """Navigate to mirror dungeon interface"""
+    while not common.element_exist("pictures/general/MD.png"):
+        while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
+            pass
+        common.click_matching("pictures/general/window.png")
+        common.click_matching("pictures/general/drive.png")
+    common.click_matching("pictures/general/MD.png")

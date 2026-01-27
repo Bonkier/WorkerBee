@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""
+Threads Runner Script - Runs Luxcavation Thread automation
+This script is called by the GUI and runs as a separate process
+"""
 import sys
 import os
 import time
@@ -18,6 +22,7 @@ BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
 
+import luxcavation_functions
 import common
 
 # Logging configuration is handled by common.py
@@ -33,15 +38,8 @@ class ConnectionManager:
     
     def start_connection_monitor(self):
         """Start the connection monitoring thread"""
-        try:
-            connection_thread = threading.Thread(target=self._connection_check, daemon=True)
-            connection_thread.start()
-        except RuntimeError as e:
-            if "main thread is not in main loop" in str(e):
-                logger.warning("Cannot start connection monitor thread in subprocess, using polling instead")
-                self._connection_check_polling()
-            else:
-                raise
+        connection_thread = threading.Thread(target=self._connection_check, daemon=True)
+        connection_thread.start()
     
     def _connection_check(self):
         """Monitor connection status"""
@@ -56,18 +54,6 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error in connection check: {e}")
     
-    def _connection_check_polling(self):
-        """Simplified connection check without threading"""
-        from common import element_exist
-        
-        try:
-            if element_exist("pictures/general/connection.png", quiet_failure=True):
-                self.connection_event.clear()
-            else:
-                self.connection_event.set()
-        except Exception as e:
-            logger.error(f"Error in connection check: {e}")
-    
     def handle_reconnection(self):
         """Handle reconnection when needed"""
         try:
@@ -76,114 +62,106 @@ class ConnectionManager:
             
             self.connection_event.clear()
             
-            try:
-                connection_listener_thread = threading.Thread(target=reconnect)
-                connection_listener_thread.start()
-                connection_listener_thread.join()
-            except RuntimeError as e:
-                if "main thread is not in main loop" in str(e):
-                    logger.warning("Cannot start reconnection thread in subprocess, using direct call")
-                    reconnect()
-                else:
-                    raise
+            connection_listener_thread = threading.Thread(target=reconnect)
+            connection_listener_thread.start()
+            connection_listener_thread.join()
             
             self.connection_event.set()
         except Exception as e:
             logger.error(f"Error in reconnection: {e}")
 
-# Signal handler for clean shutdown
+def sync_shared_vars(shared_vars_instance):
+    """Synchronize multiprocessing.Value objects with local shared_vars module"""
+    import shared_vars as sv_module
+    
+    if shared_vars_instance is None:
+        return
+
+    while True:
+        try:
+            # Update module variables from shared memory values
+            if hasattr(shared_vars_instance, 'x_offset'): sv_module.x_offset = shared_vars_instance.x_offset.value
+            if hasattr(shared_vars_instance, 'y_offset'): sv_module.y_offset = shared_vars_instance.y_offset.value
+            if hasattr(shared_vars_instance, 'game_monitor'): sv_module.game_monitor = shared_vars_instance.game_monitor.value
+            if hasattr(shared_vars_instance, 'click_delay'): sv_module.click_delay = shared_vars_instance.click_delay.value
+            if hasattr(shared_vars_instance, 'good_pc_mode'): sv_module.good_pc_mode = shared_vars_instance.good_pc_mode.value
+            if hasattr(shared_vars_instance, 'debug_image_matches'): sv_module.debug_image_matches = shared_vars_instance.debug_image_matches.value
+            if hasattr(shared_vars_instance, 'convert_images_to_grayscale'): sv_module.convert_images_to_grayscale = shared_vars_instance.convert_images_to_grayscale.value
+            if hasattr(shared_vars_instance, 'reconnection_delay'): sv_module.reconnection_delay = shared_vars_instance.reconnection_delay.value
+            if hasattr(shared_vars_instance, 'reconnect_when_internet_reachable'): sv_module.reconnect_when_internet_reachable = shared_vars_instance.reconnect_when_internet_reachable.value
+            if hasattr(shared_vars_instance, 'stop_after_current_run'): sv_module.stop_after_current_run = shared_vars_instance.stop_after_current_run.value
+            
+        except AttributeError:
+            pass 
+        except Exception as e:
+            logger.error(f"Error in sync_shared_vars: {e}")
+        time.sleep(1)
+
 def signal_handler(sig, frame):
     """Handle termination signals"""
     logger.warning(f"Termination signal received, shutting down...")
     sys.exit(0)
 
-def main(runs=None, difficulty=None, shared_vars=None):
+def main(runs, difficulty, shared_vars=None):
     """Main function for threads runner"""
-    # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
-    # If parameters were not passed directly, try to get them from command line
-    if runs is None or difficulty is None:
-        if len(sys.argv) != 3:
-            logger.error(f"Usage: threads_runner.py <runs> <difficulty>")
-            return 1
-            
-        try:
-            runs = int(sys.argv[1])
-            difficulty_arg = sys.argv[2]
-        except (ValueError, IndexError) as e:
-            logger.error(f"Invalid command line arguments: {e}")
-            return 1
-    else:
-        difficulty_arg = difficulty
-    
-    # Handle "latest" vs numeric difficulties
-    if difficulty_arg == "latest":
-        difficulty = "latest"
-    else:
-        # Convert to integer for numeric difficulties
-        difficulty = int(difficulty_arg)
-    
+   
     try:
+        # Start synchronization thread
+        if shared_vars:
+            sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
+            sync_thread.start()
+
+        difficulty_arg = difficulty
+        if difficulty_arg == "latest":
+            difficulty = "latest"
+        else:
+            difficulty = int(difficulty_arg)
         
-        # Import here to ensure correct path initialization
-        import luxcavation_functions
-        
-        # Initialize connection manager
         connection_manager = ConnectionManager()
         connection_manager.start_connection_monitor()
-        
-        # First run with SelectTeam=True
+       
         luxcavation_functions.pre_threads_setup(difficulty, SelectTeam=True, config_type="threads_team_selection")
-        
-        # Remaining runs with SelectTeam=False
-        for i in range(runs - 1):
+        runs = runs - 1
+        for i in range(runs):
+            
+            if shared_vars and hasattr(shared_vars, 'stop_after_current_run') and shared_vars.stop_after_current_run.value:
+                logger.info("Stop after current run signal detected. Stopping sequence.")
+                break
+
             try:
                 time.sleep(1)
-                # Wait for connection before proceeding (copied from compiled_runner logic)
                 while True:
                     if connection_manager.connection_event.is_set():
-                        # Connection is good, proceed with run
                         luxcavation_functions.pre_threads_setup(difficulty, config_type="threads_team_selection")
                         break
                     else:
-                        # Connection lost, wait for it to be restored
                         connection_manager.connection_event.wait()
                     
-                    # Check for server errors (copied from compiled_runner)
                     try:
                         from common import element_exist
                         if element_exist("pictures/general/server_error.png"):
                             connection_manager.handle_reconnection()
                     except ImportError:
-                        # Handle case where common module isn't available
                         pass
-                    except Exception as e:
-                        logger.error(f"Error checking for server error: {e}")
-                        
             except Exception as e:
-                logger.error(f"Error during Threads run {i+1}: {e}")
-            
-            # Short delay between runs
+                logger.error(f"Error during Thread run {i+1}: {e}")
             time.sleep(2)
-        
-        return 0
     except Exception as e:
         logger.critical(f"Critical error in Threads runner: {e}")
         return 1
+    return 0
 
 if __name__ == "__main__":
     try:
-        # Get parameters from command line arguments
         if len(sys.argv) >= 3:
             runs = int(sys.argv[1])
             difficulty = sys.argv[2]
+            sys.exit(main(runs, difficulty))
         else:
             logger.error("Usage: threads_runner.py <runs> <difficulty>")
             sys.exit(1)
-            
-        sys.exit(main(runs, difficulty))
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception as e:

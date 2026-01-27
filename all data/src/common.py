@@ -168,26 +168,43 @@ def detect_monitor_resolution():
     
     # Use monitor 1 as default if shared_vars.game_monitor doesn't exist yet
     monitor_index = getattr(shared_vars, 'game_monitor', 1)
-    monitor = get_sct().monitors[monitor_index]
-    MONITOR_WIDTH = monitor['width']
-    MONITOR_HEIGHT = monitor['height']
     
-    logger.info(f"Detected montior size: {MONITOR_WIDTH}x{MONITOR_HEIGHT}")
+    try:
+        monitors = get_sct().monitors
+        # Validate index
+        if monitor_index >= len(monitors):
+            logger.warning(f"Monitor index {monitor_index} invalid. Defaulting to primary.")
+            monitor_index = 1
+            
+        monitor = monitors[monitor_index]
+        MONITOR_WIDTH = monitor['width']
+        MONITOR_HEIGHT = monitor['height']
+        
+        logger.info(f"Detected montior size: {MONITOR_WIDTH}x{MONITOR_HEIGHT}")
 
-    # Calculate aspect ratio
-    aspect_ratio = MONITOR_WIDTH / MONITOR_HEIGHT
-    IS_NON_STANDARD_RATIO = not(abs(aspect_ratio - REFERENCE_ASPECT_RATIO) < 0.0001)
+        # Calculate aspect ratio
+        aspect_ratio = MONITOR_WIDTH / MONITOR_HEIGHT
+        IS_NON_STANDARD_RATIO = not(abs(aspect_ratio - REFERENCE_ASPECT_RATIO) < 0.0001)
 
-    EXPECTED_WIDTH = MONITOR_WIDTH
-    EXPECTED_HEIGHT = MONITOR_HEIGHT
-    if IS_NON_STANDARD_RATIO:
-        if aspect_ratio > REFERENCE_ASPECT_RATIO:
-            EXPECTED_WIDTH = round(MONITOR_HEIGHT * REFERENCE_ASPECT_RATIO)
-        else:
-            EXPECTED_HEIGHT = round(MONITOR_WIDTH / REFERENCE_ASPECT_RATIO)
-        logger.info(f"Non-standard monitor ratio detected (expect {EXPECTED_WIDTH}x{EXPECTED_HEIGHT} instead)")
+        EXPECTED_WIDTH = MONITOR_WIDTH
+        EXPECTED_HEIGHT = MONITOR_HEIGHT
+        if IS_NON_STANDARD_RATIO:
+            if aspect_ratio > REFERENCE_ASPECT_RATIO:
+                EXPECTED_WIDTH = round(MONITOR_HEIGHT * REFERENCE_ASPECT_RATIO)
+            else:
+                EXPECTED_HEIGHT = round(MONITOR_WIDTH / REFERENCE_ASPECT_RATIO)
+            logger.info(f"Non-standard monitor ratio detected (expect {EXPECTED_WIDTH}x{EXPECTED_HEIGHT} instead)")
 
-    return MONITOR_WIDTH, MONITOR_HEIGHT
+        return MONITOR_WIDTH, MONITOR_HEIGHT
+    except Exception as e:
+        logger.error(f"Error detecting monitor resolution: {e}")
+        # Safe fallbacks
+        MONITOR_WIDTH = 1920
+        MONITOR_HEIGHT = 1080
+        EXPECTED_WIDTH = 1920
+        EXPECTED_HEIGHT = 1080
+        IS_NON_STANDARD_RATIO = False
+        return 1920, 1080
 
 # Initialize monitor resolution at module load time
 detect_monitor_resolution()
@@ -989,9 +1006,9 @@ def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, gra
     result = match_image(img_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
     return result
 
-def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False):
+def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False, enable_scaling=False):
     """checks if exists and returns the image location if found"""
-    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
+    result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot, enable_scaling=enable_scaling)
     return result
 
 def squad_order(status):

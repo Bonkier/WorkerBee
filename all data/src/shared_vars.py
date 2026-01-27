@@ -207,7 +207,8 @@ def _get_gui_values():
         'click_delay': 0.5,
         'claim_on_defeat': False,
         'retry_count': 0,
-        'pack_refreshes': 7
+        'pack_refreshes': 7,
+        'stop_after_current_run': False
     }
 
 def _load_shared_vars():
@@ -272,7 +273,7 @@ _update_all_exports()
 ConfigCache.preload_all_configs()
 try:
     ScaledCoordinates.preload_all_coordinates()
-except (ImportError, AttributeError):
+except (ImportError, AttributeError, TypeError):
     # common module might not be available during early import, will load on first use
     logger.debug("Deferred coordinate preloading - common module not yet available")
 
