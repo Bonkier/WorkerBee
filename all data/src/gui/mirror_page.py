@@ -42,6 +42,19 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
     entry.insert(0, str(config.get('Settings', {}).get('mirror_runs', 1)))
     ui_context['mirror_runs_entry'] = entry
 
+    def save_runs(event=None):
+        try:
+            runs = int(entry.get())
+            config['Settings']['mirror_runs'] = runs
+            if hasattr(shared_vars, 'mirror_runs'):
+                shared_vars.mirror_runs.value = runs
+            save_callback()
+        except ValueError:
+            pass
+
+    entry.bind("<FocusOut>", save_runs)
+    entry.bind("<Return>", save_runs)
+
     def start_mirror_wrapper():
         try:
             runs = int(entry.get())

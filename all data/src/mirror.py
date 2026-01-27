@@ -54,6 +54,7 @@ class Mirror:
         }
         self.current_floor_tracker = None
         self.retries_used = 0
+        self.loop_counter = 0
 
     @staticmethod
     def floor_id():
@@ -190,6 +191,7 @@ class Mirror:
 
     def mirror_loop(self):
         """Handles all the mirror dungeon logic in this"""
+        self.loop_counter += 1
         if common.element_exist("pictures/general/maint.png"): #maintainance prompt
             common.click_matching("pictures/general/close.png", recursive=False)
             common.sleep(0.5)
@@ -253,6 +255,30 @@ class Mirror:
         elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
             self.logger.info("Main menu detected in loop. Forcing run completion.")
             return 1, 1, self.run_stats
+
+        # Anti-stuck logic: Every 50 loops, check for common stuck points with lower threshold
+        if self.loop_counter % 50 == 0:
+            # List of images that indicate we are in a valid state but might be stuck due to SCT freeze
+            stuck_images = [
+                "pictures/events/proceed.png",
+                "pictures/battle/event_check.png",
+                "pictures/battle/winrate.png",
+                "pictures/general/victory.png",
+                "pictures/mirror/general/encounter_reward.png"
+            ]
+            
+            for img in stuck_images:
+                if common.element_exist(img, threshold=0.7, quiet_failure=True):
+                    self.logger.warning(f"Anti-stuck: Found {os.path.basename(img)} with low threshold. Refreshing SCT.")
+                    common.reset_sct()
+                    
+                    # If it's a clickable event/proceed, try to click it immediately to resume flow
+                    if "proceed.png" in img and common.click_matching(img, threshold=0.75):
+                        self.event_choice()
+                    elif "event_check.png" in img and common.click_matching(img, threshold=0.75):
+                        common.wait_skip("pictures/events/continue.png")
+                    
+                    break # Found one valid state, reset is done, exit check
 
         return self.check_run()
 
@@ -326,8 +352,22 @@ class Mirror:
 
     def gift_search_selection(self):
         logger.warning("Gift search only support for tremor team.")
-        common.click_matching("pictures/mirror/gift_search/refuse_gift.png")
-        common.key_press("enter")
+        
+        # Try to find and click refuse_gift with a timeout
+        start_time = time.time()
+        while time.time() - start_time < 10: # 10 second timeout
+            if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", recursive=False):
+                common.key_press("enter")
+                return
+            common.sleep(0.5)
+            
+        self.logger.warning("Timed out waiting for refuse_gift.png. Attempting SCT reset.")
+        common.reset_sct()
+        if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", recursive=False):
+            common.key_press("enter")
+        else:
+            self.logger.error("Failed to find refuse_gift.png. Skipping.")
+            common.key_press("enter")
         return
     
     def initial_squad_selection(self):

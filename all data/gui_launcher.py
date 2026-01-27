@@ -648,8 +648,15 @@ if __name__ == "__main__":
         'save_settings': save_settings
     }
 
+    # Wrap callbacks for KeyboardHandler to ensure they run on the main thread
+    # This prevents crashes when modifying UI elements from the keyboard thread
+    def make_safe_callback(func):
+        return lambda *args, **kwargs: root.after(0, lambda: func(*args, **kwargs))
+    
+    safe_keyboard_callbacks = {k: make_safe_callback(v) for k, v in callbacks.items()}
+
     log_debug("Initializing handlers...")
-    keyboard_handler = KeyboardHandler(callbacks, config)
+    keyboard_handler = KeyboardHandler(safe_keyboard_callbacks, config)
     scheduler_handler = SchedulerHandler(BASE_PATH, shared_vars, callbacks)
 
     # Start the dedicated keyboard handler thread
