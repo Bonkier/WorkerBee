@@ -1,8 +1,7 @@
-Set shell = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
+Set WshShell = CreateObject("WScript.Shell")
+Set FSO = CreateObject("Scripting.FileSystemObject")
 
-currentFolder = fso.GetParentFolderName(WScript.ScriptFullName)
+ScriptDir = FSO.GetParentFolderName(WScript.ScriptFullName)
+WshShell.CurrentDirectory = ScriptDir
 
-shell.CurrentDirectory = currentFolder
-
-shell.Run "python bootstrapper.py", 0, False
+WshShell.Run "python ""gui_launcher.py""", 0, False

@@ -45,7 +45,7 @@ def setup_paths_and_imports():
     try:
         # Import common FIRST to set up DirtyLogger before other modules
         import common
-        from core import pre_md_setup, reconnect
+        from core import reconnect
         from common import error_screenshot, element_exist
         import mirror
         
@@ -123,6 +123,9 @@ def sync_shared_vars(shared_vars_instance):
     """Synchronize multiprocessing.Value objects with local shared_vars module"""
     import shared_vars as sv_module
     import time
+    import common
+    
+    last_monitor = -1
     
     while True:
         try:
@@ -130,6 +133,12 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.x_offset = shared_vars_instance.x_offset.value
             sv_module.y_offset = shared_vars_instance.y_offset.value
             sv_module.game_monitor = shared_vars_instance.game_monitor.value
+            
+            # Explicitly update common module if monitor changes
+            if sv_module.game_monitor != last_monitor:
+                common.set_game_monitor(sv_module.game_monitor)
+                last_monitor = sv_module.game_monitor
+                
             sv_module.skip_restshop = shared_vars_instance.skip_restshop.value
             sv_module.skip_ego_check = shared_vars_instance.skip_ego_check.value
             sv_module.skip_ego_fusion = shared_vars_instance.skip_ego_fusion.value
@@ -141,11 +150,18 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.retry_count = shared_vars_instance.retry_count.value
             sv_module.claim_on_defeat = shared_vars_instance.claim_on_defeat.value
             sv_module.pack_refreshes = shared_vars_instance.pack_refreshes.value
-            time.sleep(1)
+            sv_module.debug_image_matches = shared_vars_instance.debug_image_matches.value
+            sv_module.convert_images_to_grayscale = shared_vars_instance.convert_images_to_grayscale.value
+            sv_module.reconnection_delay = shared_vars_instance.reconnection_delay.value
+            sv_module.reconnect_when_internet_reachable = shared_vars_instance.reconnect_when_internet_reachable.value
+            sv_module.good_pc_mode = shared_vars_instance.good_pc_mode.value
+            sv_module.click_delay = shared_vars_instance.click_delay.value
+            sv_module.stop_after_current_run = shared_vars_instance.stop_after_current_run.value
         except AttributeError:
             pass # Ignore if shared_vars_instance is missing attributes during shutdown
         except Exception:
             break
+        time.sleep(1)
 
 def update_stats(win, run_data=None):
     """Update statistics in stats.json"""
@@ -192,14 +208,12 @@ def update_stats(win, run_data=None):
 def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_vars):
     """Main mirror dungeon run logic"""
     try:
-        import common
-        from core import pre_md_setup
         from common import element_exist, error_screenshot
         
         run_count = 0
         win_count = 0
         lose_count = 0
-        
+
         # Ensure we have status selections
         if not status_list_file:
             logger.critical(f"Status list file is empty, cannot proceed")
@@ -214,7 +228,15 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
         sync_thread.start()
         
+        # Give time for shared vars to sync and monitor to be detected
+        time.sleep(1.0)
+        
         for i in range(num_runs):
+            # Check for stop signal before starting run
+            if hasattr(shared_vars, 'stop_after_current_run') and shared_vars.stop_after_current_run.value:
+                logger.info("Stop after current run signal detected. Stopping sequence.")
+                break
+
             logger.info(f"Run {run_count + 1}")
             
             # Clear caches to prevent memory leaks over long sessions
@@ -230,9 +252,7 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                 run_complete = 0
                 MD = mirror.Mirror(status_list[i])
                 logger.info(f"Current Team: " + status_list[i])
-                if pre_md_setup():
-                    
-                    MD.setup_mirror()
+                MD.setup_mirror()
                 
                 while run_complete != 1:
                     if connection_manager.connection_event.is_set():
@@ -267,15 +287,9 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         from common import error_screenshot
         error_screenshot()
 
-def setup_logging(base_path):
-    """Logging configuration is handled by common.py"""
-    pass
-
 def main(num_runs, shared_vars):
     try:
         base_path, status_path = setup_paths_and_imports()
-        
-        setup_logging(base_path)
         
         logger.info(f"compiled_runner.py main function started with {num_runs} runs")
         
@@ -301,8 +315,6 @@ if __name__ == "__main__":
     
     try:
         base_path, status_path = setup_paths_and_imports()
-        
-        setup_logging(base_path)
         
         logger.info(f"compiled_runner.py main execution started")
         

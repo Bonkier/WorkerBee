@@ -148,10 +148,6 @@ def call_function(function_string):
             
             # Call the function with arguments
             result = func(*args)
-            
-            # Log the result
-            if result is not None:
-                pass
             return True
             
         except ImportError:

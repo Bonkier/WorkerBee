@@ -23,3 +23,8 @@ class SharedVars:
         self.retry_count = Value('i', 0)
         self.claim_on_defeat = Value('b', False)
         self.pack_refreshes = Value('i', 7)
+        self.exp_runs = Value('i', 1)
+        self.exp_stage = Value('i', 6)
+        self.threads_runs = Value('i', 3)
+        self.threads_difficulty = Value('i', 4)
+        self.stop_after_current_run = Value('b', False)

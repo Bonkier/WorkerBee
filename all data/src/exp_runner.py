@@ -70,6 +70,33 @@ class ConnectionManager:
         except Exception as e:
             logger.error(f"Error in reconnection: {e}")
 
+def sync_shared_vars(shared_vars_instance):
+    """Synchronize multiprocessing.Value objects with local shared_vars module"""
+    import shared_vars as sv_module
+    
+    if shared_vars_instance is None:
+        return
+
+    while True:
+        try:
+            # Update module variables from shared memory values
+            if hasattr(shared_vars_instance, 'x_offset'): sv_module.x_offset = shared_vars_instance.x_offset.value
+            if hasattr(shared_vars_instance, 'y_offset'): sv_module.y_offset = shared_vars_instance.y_offset.value
+            if hasattr(shared_vars_instance, 'game_monitor'): sv_module.game_monitor = shared_vars_instance.game_monitor.value
+            if hasattr(shared_vars_instance, 'click_delay'): sv_module.click_delay = shared_vars_instance.click_delay.value
+            if hasattr(shared_vars_instance, 'good_pc_mode'): sv_module.good_pc_mode = shared_vars_instance.good_pc_mode.value
+            if hasattr(shared_vars_instance, 'debug_image_matches'): sv_module.debug_image_matches = shared_vars_instance.debug_image_matches.value
+            if hasattr(shared_vars_instance, 'convert_images_to_grayscale'): sv_module.convert_images_to_grayscale = shared_vars_instance.convert_images_to_grayscale.value
+            if hasattr(shared_vars_instance, 'reconnection_delay'): sv_module.reconnection_delay = shared_vars_instance.reconnection_delay.value
+            if hasattr(shared_vars_instance, 'reconnect_when_internet_reachable'): sv_module.reconnect_when_internet_reachable = shared_vars_instance.reconnect_when_internet_reachable.value
+            if hasattr(shared_vars_instance, 'stop_after_current_run'): sv_module.stop_after_current_run = shared_vars_instance.stop_after_current_run.value
+            
+        except AttributeError:
+            pass 
+        except Exception as e:
+            logger.error(f"Error in sync_shared_vars: {e}")
+        time.sleep(1)
+
 def signal_handler(sig, frame):
     """Handle termination signals"""
     logger.warning(f"Termination signal received, shutting down...")
@@ -82,6 +109,11 @@ def main(runs, stage, shared_vars=None):
     signal.signal(signal.SIGINT, signal_handler)
    
     try:
+        # Start synchronization thread
+        if shared_vars:
+            sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
+            sync_thread.start()
+
         # Use the parameters passed to the function
         stage_arg = stage  # Instead of sys.argv[2]
         
@@ -99,6 +131,10 @@ def main(runs, stage, shared_vars=None):
         luxcavation_functions.pre_exp_setup(stage, SelectTeam=True, config_type="exp_team_selection")
         runs = runs - 1
         for i in range(runs):
+            
+            if shared_vars and hasattr(shared_vars, 'stop_after_current_run') and shared_vars.stop_after_current_run.value:
+                logger.info("Stop after current run signal detected. Stopping sequence.")
+                break
            
             try:
                 time.sleep(1)

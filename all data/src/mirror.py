@@ -10,7 +10,8 @@ import shared_vars
 import mirror_utils
 import pyautogui
 from core import (skill_check, battle_check, battle, check_loading, 
-                  transition_loading, post_run_load)
+                  transition_loading, post_run_load, refill_enkephalin,
+                  navigate_to_md)
 
 
 def get_base_path():
@@ -86,8 +87,33 @@ class Mirror:
 
     def setup_mirror(self):
         """Complete mirror dungeon setup from entry to gift selection"""
+        # Check for deep run states (already inside)
+        if (common.element_exist("pictures/mirror/general/danteh.png", quiet_failure=True) or
+            common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or
+            common.element_exist("pictures/events/skip.png", quiet_failure=True) or
+            common.element_exist("pictures/mirror/restshop/shop.png", quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png", quiet_failure=True) or
+            common.element_exist("pictures/mirror/general/reward_select.png", quiet_failure=True) or
+            common.element_exist("pictures/mirror/general/encounter_reward.png", quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/general/squads/clear_selection.png", quiet_failure=True)):
+             self.logger.info("Detected existing run state, skipping setup.")
+             return
+
+        refill_enkephalin()
+        if not (common.element_exist("pictures/general/resume.png", quiet_failure=True) or common.element_exist("pictures/mirror/general/md_enter.png", quiet_failure=True)):
+            navigate_to_md()
         self.logger.info("Setting up Mirror Dungeon run...")
+        
+        # Prioritize finding the Enter button, but check for existing run states occasionally
         while not common.click_matching("pictures/mirror/general/md_enter.png", recursive=False):
+            # Check for other states that imply we are already inside or ready
+            if (common.element_exist("pictures/mirror/general/explore_reward.png", quiet_failure=True) or
+                common.element_exist("pictures/general/resume.png", quiet_failure=True) or
+                common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png", quiet_failure=True)):
+                self.logger.info("Detected existing state, skipping main menu entry.")
+                break
             common.sleep(0.5)
 
         if common.element_exist("pictures/mirror/general/explore_reward.png"):
@@ -100,7 +126,6 @@ class Mirror:
                             common.key_press("enter")
                         if common.element_exist("pictures/mirror/general/pass_level.png"):
                             common.key_press("enter")
-                            #common.click_matching("pictures/general/confirm_b.png")
                             break
                     common.click_matching("pictures/general/cancel.png")
             else:
@@ -223,6 +248,11 @@ class Mirror:
             common.mouse_move_click(x, y)
             common.sleep(1)
             common.click_matching("pictures/general/confirm_b.png")
+
+        # Failsafe: Check if we are back at main menu (run finished but victory/defeat missed)
+        elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
+            self.logger.info("Main menu detected in loop. Forcing run completion.")
+            return 1, 1, self.run_stats
 
         return self.check_run()
 
@@ -465,7 +495,7 @@ class Mirror:
 
                     matches = common.match_image(
                         pack_image, 
-                        0.65, 
+                        0.60, 
                         grayscale=True,
                         screenshot=screenshot, 
                         enable_scaling=True,
@@ -479,8 +509,9 @@ class Mirror:
                     if not matches:
                         matches = common.match_image(
                             pack_image, 
-                            0.60, 
+                            0.55, 
                             grayscale=False,
+                            no_grayscale=True,
                             screenshot=screenshot, 
                             enable_scaling=True,
                             x1=min_x_scaled,
@@ -575,15 +606,35 @@ class Mirror:
 
             def select_pack(coords, name="unknown_pack", source="unknown"):
                 pack_name = name
+                raw_name = name # For floor detection
                 
                 if source == "status":
-                    pack_name = os.path.basename(status).replace("_pack.png", "").capitalize() + " (Status)"
+                    raw_name = os.path.basename(status).replace("_pack.png", "")
+                    pack_name = raw_name.capitalize()
                 elif coords in known_pack_names:
-                    pack_name = known_pack_names[coords]
+                    raw_name = known_pack_names[coords]
+                    pack_name = raw_name
                 
                 # Clean up pack name (remove extension if present)
                 if pack_name.lower().endswith('.png'):
                     pack_name = pack_name[:-4]
+                
+                # Determine floor based on file existence
+                detected_floor = "unknown_floor"
+                if raw_name != "unknown_pack":
+                    for i in range(1, 6):
+                        # Check common extensions
+                        found = False
+                        for ext in [".png", ".jpg", ".jpeg"]:
+                            check_path = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{i}/{raw_name}{ext}")
+                            if os.path.exists(check_path):
+                                detected_floor = f"Floor {i}"
+                                found = True
+                                break
+                        if found:
+                            break
+                
+                self.logger.info(f"Selected Pack: {pack_name} | Location: {detected_floor}")
 
                 if not self.run_stats["packs"] or self.run_stats["packs"][-1] != pack_name:
                     self.run_stats["packs"].append(pack_name)
@@ -605,6 +656,12 @@ class Mirror:
             # Sort priority packs by rank (lowest number first)
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
+
+            # 0. Status Pack (If Prioritize List is Disabled)
+            if not shared_vars.prioritize_list_over_status and status_selectable_packs_pos and floor != "floor5":
+                logger.info("Selecting status pack (Status > List)")
+                select_pack(status_selectable_packs_pos[0], source="status")
+                return
 
             # 1. Priority Pack (Highest Priority)
             if found_priority_packs:
@@ -646,8 +703,9 @@ class Mirror:
                     logger.info("Refreshed via image detection.")
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(3.5)
+                    common.sleep(1.8)
                     refresh_count += 1
+                    retry_attempt = 10
                     continue
                 else:
                     # Blind click fallback if image detection fails
@@ -656,8 +714,9 @@ class Mirror:
                     common.mouse_move_click(*common.scale_coordinates_1080p(1600, 50))
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(3.5)
+                    common.sleep(1.8)
                     refresh_count += 1
+                    retry_attempt = 10
                     continue
 
             # 3. Status Pack
@@ -669,13 +728,38 @@ class Mirror:
             # Fallback: Random / Exception
             if selectable_packs_pos:
                 logger.info("Fallback: Selecting random available pack")
-                select_pack(selectable_packs_pos[0], "unknown_pack")
+                
+                target_coords = selectable_packs_pos[0]
+                identified_name = "unknown_pack"
+                
+                # Attempt to identify the pack for logging purposes
+                if floor:
+                    try:
+                        floor_num = floor[-1]
+                        image_floor = f"f{floor_num}"
+                        floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/{image_floor}")
+                        
+                        if os.path.exists(floor_dir):
+                            all_packs = [f.replace(".png", "") for f in os.listdir(floor_dir) if f.endswith(".png")]
+                            
+                            for pack in all_packs:
+                                # Skip if we already identified this pack elsewhere to save time
+                                if pack in known_pack_names.values():
+                                    continue
+                                    
+                                pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                                matches = common.match_image(pack_image, 0.65, grayscale=True, screenshot=screenshot, enable_scaling=True, x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled)
+                                
+                                # Check if this pack image is close to our target click (within ~250px)
+                                if matches and common.proximity_check([target_coords], matches, common.scale_x_1080p(250)):
+                                    identified_name = pack
+                                    logger.info(f"Identified fallback pack as: {pack}")
+                                    break
+                    except Exception as e:
+                        logger.error(f"Error identifying fallback pack: {e}")
+
+                select_pack(target_coords, identified_name)
                 return
-            
-            if not selectable_packs_pos and packs_to_remove:
-                 logger.info("Fallback: Forced to select exception pack")
-                 select_pack(list(packs_to_remove)[0], "unknown_pack")
-                 return
 
         if retry_attempt == 0:
             logger.error("Something went wrong, not fixable after 10 retries.")
@@ -730,9 +814,6 @@ class Mirror:
         # Filter rewards within specified boundaries
         min_y_scaled = common.scale_y_1080p(225)
         max_y_scaled = common.scale_y_1080p(845)
-        # Should not filter by X-axis to allow more gift in the future
-        # min_x_scaled = common.scale_x_1080p(360)
-        # max_x_scaled = common.scale_x_1080p(1555)
         filtered_rewards = [reward for reward in found if min_y_scaled <= reward[1] <= max_y_scaled]
         if owned_ego_gift_matches:
             owned_filtered_rewards = common.proximity_check(filtered_rewards, owned_ego_gift_matches, common.scale_x_1080p(200))
@@ -857,7 +938,6 @@ class Mirror:
                     node_location.append(common.scale_coordinates_1440p(1440, y + 105))
                 else:
                     node_location.append(common.scale_coordinates_1440p(1440, y))
-#           
             if drag_danteh and self.aspect_ratio == "16:9": #Drag because 16:9 blocks the top view of the cost
                 common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                 if found := common.match_image("pictures/mirror/general/danteh.png"):
@@ -917,26 +997,49 @@ class Mirror:
     
     def fuse(self):
         """Execute fusion of selected gifts"""
-        common.click_matching("pictures/mirror/restshop/fusion/fuse_b.png")
+        # Move mouse away to prevent hover effects interfering with detection
+        common.mouse_move(*common.scale_coordinates_1080p(50, 50))
+        
+        # Use a timeout loop instead of infinite recursion
+        start_time = time.time()
+        while not common.click_matching("pictures/mirror/restshop/fusion/fuse_b.png", recursive=False):
+            if time.time() - start_time > 10: # 10 seconds timeout
+                return False
+            common.sleep(0.5)
+            
         if common.element_exist("pictures/CustomAdded1080p/mirror/general/cannot_fuse.png"):
             common.mouse_move(*common.scale_coordinates_1080p(50, 50))
             return False
         common.click_matching("pictures/general/confirm_b.png")
+        
+        wait_start = time.time()
         while(not common.element_exist("pictures/mirror/general/ego_gift_get.png")): #in the event of slow connection
+            if time.time() - wait_start > 10:
+                self.logger.warning("Timed out waiting for fusion result")
+                return False
             common.sleep(0.5)
-        common.key_press("enter")
+        
+        # Click to confirm the acquired gift
+        common.click_matching("pictures/general/confirm_b.png")
+        common.sleep(0.5)
+        
+        # Double check if we need to press enter or click again
+        if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
+             common.key_press("enter")
+             
         return True
 
     def find_gifts(self, statuses):
         """Find all gifts matching the given status list for fusion, with region optimization"""
         fusion_gifts = []
+        gift_types = {} # Track what status each gift was detected as
         
         # Region limitation optimized to match the return filter
         # x > scale_x(1235) and y < scale_y(800)
-        x1 = common.scale_x(1235)
+        x1 = common.scale_x_1080p(920) # Relaxed from 960 to match 1.0.6.3 effective range
         y1 = common.scale_y_1080p(300)
         x2 = common.scale_x_1080p(1700)
-        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for matching
+        y2 = common.scale_y_1080p(680) # Reduced from 850 to avoid fusion slots
         
         screenshot = common.capture_screen()
         
@@ -945,44 +1048,92 @@ class Mirror:
         skip_keywordless = any(os.path.basename(p).lower() == "keywordless.png" for p in exception_gifts)
         
         if not skip_keywordless:
-            vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", threshold=0.6, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+            vestige_coords = common.ifexist_match("pictures/mirror/restshop/market/vestige_2.png", threshold=0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if vestige_coords:
+                self.logger.info(f"find_gifts: Detected {len(vestige_coords)} 'vestige' gifts")
                 fusion_gifts += vestige_coords
+                for coord in vestige_coords:
+                    if coord not in gift_types: gift_types[coord] = []
+                    gift_types[coord].append("vestige")
+            
+            wordless_coords = common.ifexist_match("pictures/mirror/restshop/market/wordless.png", threshold=0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+            if wordless_coords:
+                self.logger.info(f"find_gifts: Detected {len(wordless_coords)} 'wordless' gifts")
+                fusion_gifts += wordless_coords
+                for coord in wordless_coords:
+                    if coord not in gift_types: gift_types[coord] = []
+                    gift_types[coord].append("wordless")
             
         for i in statuses:
             status = mirror_utils.get_status_gift_template(i)
             
-            # Use higher threshold for pierce since somehow the ++ icons on upgraded gifts were detected as pierce?!?!?
-            # Similarly, it can mistake circular part of left side fusion UI as slash icon
-            if i == 'pierce' or i == 'slash':
-                threshold = 0.65
-            else:
-                threshold = 0.6
+            # Use 0.75 threshold to ensure detection (some gifts like Blunt match at ~0.80)
+            threshold = 0.75
             
             status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if status_coords:
+                self.logger.info(f"find_gifts: Detected {len(status_coords)} '{i}' gifts at {status_coords}")
                 fusion_gifts += status_coords
+                for coord in status_coords:
+                    if coord not in gift_types: gift_types[coord] = []
+                    gift_types[coord].append(i)
+            
+            market_status = mirror_utils.market_choice(i)
+            if market_status:
+                market_coords = common.ifexist_match(market_status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+                if market_coords:
+                    self.logger.info(f"find_gifts: Detected {len(market_coords)} '{i}' market gifts at {market_coords}")
+                    fusion_gifts += market_coords
+                    for coord in market_coords:
+                        if coord not in gift_types: gift_types[coord] = []
+                        gift_types[coord].append(f"{i}_market")
         
         # Remove duplicate coordinates
         fusion_gifts = list(dict.fromkeys(fusion_gifts))
+
+        # Log detected types for all candidates
+        for gift in fusion_gifts:
+            types = gift_types.get(gift, ["unknown"])
+            self.logger.info(f"Candidate gift at {gift} identified as: {', '.join(types)}")
         
+        # Filter out fully upgraded gifts (Tier 4 / ++) to prevent false positives and save resources
+        self.logger.debug("Checking for fully upgraded (++) gifts...")
+        fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.55, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True)
+        if fully_upgraded_coords:
+             self.logger.info(f"find_gifts: Detected {len(fully_upgraded_coords)} fully upgraded (++) markers.")
+             # ++ icon is top-left, gift center is down-right
+             # Expand detection box from ++ icon to cover the gift center
+             # Expanded in all directions to catch misalignments where ++ is detected slightly below/right of gift center
+             upgraded_gifts = common.enhanced_proximity_check(fully_upgraded_coords, fusion_gifts, 
+                                                            expand_left=common.scale_x_1080p(50),
+                                                            expand_right=common.scale_x_1080p(100), 
+                                                            expand_above=common.scale_y_1080p(50),
+                                                            expand_below=common.scale_y_1080p(100),
+                                                            use_bounding_box=False, return_bool=False)
+             if upgraded_gifts:
+                 self.logger.info(f"Filtered {len(upgraded_gifts)} fully upgraded (++) gifts.")
+                 fusion_gifts = [g for g in fusion_gifts if g not in upgraded_gifts]
+
         # Filter out status detections that are inside exception gift areas
         fusion_gifts = self.filter_exception_gifts(fusion_gifts, screenshot, exception_gifts)
         
         # Strictly filter results to ensure we don't pick up gifts from the fusion slots below
-        fusion_gifts = [x for x in fusion_gifts if x[1] < common.scale_y(800)]
+        # Use scale_y_1080p(680) to ensure gifts at ~640px (1080p) are not filtered out but fusion slots (>680) are
+        fusion_gifts = [x for x in fusion_gifts if x[1] < common.scale_y_1080p(680) and x[0] > x1]
 
         # Filter out coordinates that are too close to each other (duplicates)
         unique_gifts = []
         for gift in fusion_gifts:
             is_duplicate = False
             for unique in unique_gifts:
-                # Check distance (e.g. within 20 pixels)
-                if abs(gift[0] - unique[0]) < common.scale_x(20) and abs(gift[1] - unique[1]) < common.scale_y(20):
+                # Check distance (increased to 200 to prevent double clicking same gift with multiple match points)
+                if abs(gift[0] - unique[0]) < common.scale_x_1080p(100) and abs(gift[1] - unique[1]) < common.scale_y_1080p(100):
                     is_duplicate = True
                     break
             if not is_duplicate:
                 unique_gifts.append(gift)
+        
+        self.logger.info(f"find_gifts: Found {len(unique_gifts)} gifts. Coords: {unique_gifts}")
         
         return unique_gifts
     
@@ -997,45 +1148,45 @@ class Mirror:
         if not exception_gifts:
             return fusion_gifts
         
-        # Find all exception gift bounding boxes once
-        x1 = common.scale_x(1235)
-        y1 = common.scale_y_1080p(300)
-        x2 = common.scale_x_1080p(1700)
-        y2 = common.scale_y(800) + common.scale_y_1080p(50) # Add buffer for robust matching
+        if screenshot is None:
+            screenshot = common.capture_screen()
         
-        all_exception_boxes = []
-        for gift_img in exception_gifts:
-            # Skip keywordless.png as it is a logic flag, not a visual template
-            if os.path.basename(gift_img).lower() == "keywordless.png":
-                continue
+        filtered_gifts = []
+        
+        # Define search window size (radius) around the gift center
+        # 1080p scaling - 80px radius gives 160x160 box, sufficient for icons/headers
+        # but small enough to avoid text descriptions at the bottom of the card
+        radius_x = common.scale_x_1080p(80)
+        radius_y = common.scale_y_1080p(80)
+        
+        for gift_x, gift_y in fusion_gifts:
+            is_exception = False
+            
+            # Define ROI around the candidate gift
+            x1 = max(0, gift_x - radius_x)
+            y1 = max(0, gift_y - radius_y)
+            x2 = gift_x + radius_x
+            y2 = gift_y + radius_y
+            
+            for gift_img in exception_gifts:
+                if os.path.basename(gift_img).lower() == "keywordless.png":
+                    continue
 
-            try:
-                boxes = common.ifexist_match(gift_img, 0.6, area="all", x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
-                if boxes:
-                    all_exception_boxes.extend(boxes)
-            except Exception as e:
-                # Ignore invalid images (e.g. dummy files used as flags)
-                self.logger.debug(f"Skipping exception matching for {gift_img}: {e}")
-                continue
+                try:
+                    # Check if this exception image exists specifically at this gift's location
+                    # Increased threshold to 0.8 to avoid false positives on other status gifts
+                    if common.ifexist_match(gift_img, 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot):
+                        self.logger.info(f"Filtered gift at ({gift_x}, {gift_y}) - matched exception: {os.path.basename(gift_img)}")
+                        is_exception = True
+                        break
+                except Exception as e:
+                    self.logger.debug(f"Error matching exception {gift_img}: {e}")
+                    continue
+            
+            if not is_exception:
+                filtered_gifts.append((gift_x, gift_y))
         
-        self.logger.debug(f"Found {len(all_exception_boxes)} exception areas for filtering")
-        
-        if not all_exception_boxes:
-            return fusion_gifts
-        
-        # Use enhanced_proximity_check with bounding box mode for exception filtering
-        # Expand detection area to account for small logo images in corners of gift cards
-        inside_exception = common.enhanced_proximity_check(all_exception_boxes, fusion_gifts,
-                                                          # Increased expansion to ensure coverage of the gift center from corner logos
-                                                          expand_left=common.scale_x_1080p(350),
-                                                          expand_right=common.scale_x_1080p(150),
-                                                          expand_above=common.scale_y_1080p(450),
-                                                          expand_below=common.scale_y_1080p(150),
-                                                          use_bounding_box=True, return_bool=False)
-        
-        # Filter out gifts that are inside exception areas
-        filtered_gifts = [gift for gift in fusion_gifts if gift not in inside_exception]
-        
+        self.logger.info(f"filter_exception_gifts: {len(fusion_gifts)} -> {len(filtered_gifts)} gifts remaining")
         return filtered_gifts
     
     def load_fusion_exceptions(self):
@@ -1082,11 +1233,12 @@ class Mirror:
 
         def exit_fusion():
             if common.element_exist("pictures/mirror/restshop/close.png"):
-                common.click_matching("pictures/mirror/restshop/fusion/forecasts.png")
-                common.click_matching("pictures/mirror/restshop/close.png")
-            else:
-                common.sleep(5)
                 common.click_matching("pictures/mirror/restshop/close.png", recursive=False)
+            else:
+                common.sleep(2)
+                common.click_matching("pictures/mirror/restshop/close.png", recursive=False)
+            
+            common.sleep(1) # Wait for menu to close
 
         statuses = ["burn","bleed","tremor","rupture","sinking","poise","charge","slash","pierce","blunt"] #List of status to use
         statuses.remove(self.status)
@@ -1104,74 +1256,115 @@ class Mirror:
         except Exception as e:
             logger.warning(f"Error filtering fusion statuses: {e}")
             
-        common.click_matching("pictures/mirror/restshop/fusion/fuse.png")
+        # --- Start of 1.0.6.3 logic restoration ---
+        
+        # 1. Enter Fusion Menu
+        if not common.click_matching("pictures/mirror/restshop/fusion/fuse.png", recursive=False):
+            self.logger.warning("Could not find fuse button. Aborting fusion.")
+            return
+
+        # 2. Wait for menu to appear
         start_time = time.time()
-        duration = 1.5  #  Duration to wait for fuse_menu to appear
+        duration = 3  # Increased duration
         while not common.element_exist("pictures/mirror/restshop/fusion/fuse_menu.png"):
             if time.time() > (start_time + duration):
-                logger.info(f"No fuse menu appear after {duration}s, assume failure due to insufficient number of gift.")
+                logger.info(f"No fuse menu appeared after {duration}s. Aborting.")
+                exit_fusion()
                 return
-            else:
-                time.sleep(0.1)
-        status_picture = mirror_utils.get_fusion_target_button(self.status)
-        common.mouse_move_click(*common.scale_coordinates_1440p(730, 700))
-        time.sleep(0.5)
-        while not common.click_matching(status_picture, recursive=False):
+            time.sleep(0.2)
+
+        # 3. Select Target Keyword
+        # This is the fix: construct the path directly as per 1.0.6.3's implicit behavior
+        status_picture = f"pictures/mirror/restshop/fusion/{self.status}_fusion.png"
+        self.logger.info(f"Attempting to select fusion keyword: {status_picture}")
+        
+        common.mouse_move_click(*common.scale_coordinates_1440p(730, 700)) # Click dropdown
+        time.sleep(0.5) # Wait for dropdown animation
+
+        # Loop until the keyword is clicked, re-opening dropdown if needed
+        selection_start_time = time.time()
+        while not common.click_matching(status_picture, recursive=False, quiet_failure=True):
+            if time.time() - selection_start_time > 15: # 15 second timeout for this step
+                self.logger.error(f"Timed out trying to select fusion keyword '{status_picture}'. Aborting fusion.")
+                exit_fusion()
+                return
+            
+            self.logger.debug("Keyword not found, re-clicking dropdown and waiting...")
             common.mouse_move_click(*common.scale_coordinates_1440p(730, 700))
-            time.sleep(2)
+            time.sleep(2) # Longer wait after re-click
+
+        # 4. Confirm Keyword
+        self.logger.debug("Keyword selected, confirming...")
         common.click_matching("pictures/general/confirm_b.png")
+
+        # 5. Change Sort Order
+        # Wait for transition to gift selection screen
+        wait_start = time.time()
+        while not (common.element_exist("pictures/mirror/restshop/fusion/bytier.png") or \
+                   common.element_exist("pictures/mirror/restshop/fusion/bykeyword.png")):
+            if time.time() - wait_start > 5:
+                self.logger.warning("Timed out waiting for gift selection screen after confirming keyword.")
+                exit_fusion()
+                return
+            common.sleep(0.5)
+            
         common.click_matching("pictures/mirror/restshop/fusion/bytier.png")
         common.click_matching("pictures/mirror/restshop/fusion/bykeyword.png")
 
-        if not common.click_matching("pictures/CustomAdded1080p/mirror/general/fully_scrolled_up.png", threshold=0.95, recursive=False) and common.click_matching("pictures/mirror/restshop/scroll_bar.png", recursive=False): #if scroll bar present scrolls to the start
-            for i in range(5):
-                common.mouse_scroll(1000)
-            common.sleep(0.5)
-
-        while(True):
-            fusion_gifts = self.find_gifts(statuses)
-            
-            if len(fusion_gifts) >= 3:
-                click_count = 0
-                for x,y in fusion_gifts:
-                    common.mouse_move_click(x, y)
-                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
-                    click_count += 1
-                    if click_count == 3:
-                        if not self.fuse():
-                            exit_fusion()
-                            return
-                        click_count = 0
-                        break
-
-            elif len(fusion_gifts) > 0 and common.element_exist("pictures/mirror/restshop/scroll_bar.png"):
-                click_count = 0
-                for x,y in fusion_gifts:
-                    common.mouse_move_click(x, y)
-                    common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
-                    click_count += 1
-                common.click_matching("pictures/mirror/restshop/scroll_bar.png")
+        # Continuous fusion loop
+        while True:
+            # Reset scroll to top for each fusion attempt to ensure we scan from the beginning
+            if not common.click_matching("pictures/CustomAdded1080p/mirror/general/fully_scrolled_up.png", threshold=0.95, recursive=False) and common.click_matching("pictures/mirror/restshop/scroll_bar.png", recursive=False): 
                 for i in range(5):
-                    common.mouse_scroll(-1000)
+                    common.mouse_scroll(1000)
                 common.sleep(0.5)
-                fusion_gifts_scroll = self.find_gifts(statuses)
-                duplicates = common.proximity_check_fuse(fusion_gifts_scroll,fusion_gifts,common.scale_x(10),common.scale_y(348))
-                for i in duplicates:
-                    fusion_gifts_scroll.remove(i)
-                if (len(fusion_gifts_scroll) + click_count) >= 3:
-                    for x,y in fusion_gifts_scroll:
+                
+            selected_gifts_coords = []
+            scroll_attempts = 0
+            max_scroll_attempts = 5 
+
+            while len(selected_gifts_coords) < 3 and scroll_attempts < max_scroll_attempts:
+                current_screen_gifts = self.find_gifts(statuses)
+                self.logger.info(f"fuse_gifts: Loop start. Found {len(current_screen_gifts)} gifts on screen.")
+                
+                new_gifts_on_screen = current_screen_gifts
+
+                self.logger.info(f"fuse_gifts: {len(new_gifts_on_screen)} new gifts available to click.")
+                for x, y in new_gifts_on_screen:
+                    if len(selected_gifts_coords) < 3:
+                        self.logger.info(f"Clicking EGO gift at ({x}, {y}). Selected {len(selected_gifts_coords) + 1}/3.")
                         common.mouse_move_click(x, y)
-                        common.click_matching("pictures/mirror/restshop/fusion/forecasts.png", recursive=False)
-                        click_count += 1
-                        if click_count == 3:
-                            if not self.fuse():
-                                exit_fusion()
-                                return
-                            click_count = 0
-                            break
+                        self.logger.debug(f"Delaying for 0.5 second after clicking gift at ({x}, {y}).")
+                        common.sleep(0.5) 
+                        selected_gifts_coords.append((x, y))
+                    else:
+                        break 
+                
+                if len(selected_gifts_coords) >= 3:
+                    break 
+                
+                if common.element_exist("pictures/mirror/restshop/scroll_bar.png") and \
+                   not common.element_exist("pictures/CustomAdded1080p/mirror/general/fully_scrolled_down.png", quiet_failure=True):
+                    self.logger.debug(f"Not enough gifts found, scrolling down. Scroll attempt {scroll_attempts + 1}/{max_scroll_attempts}.")
+                    common.click_matching("pictures/mirror/restshop/scroll_bar.png") 
+                    common.mouse_scroll(-1000) 
+                    common.sleep(1.0) 
+                    scroll_attempts += 1
                 else:
+                    self.logger.debug("No more scrolling possible or needed.")
+                    break 
+
+            if len(selected_gifts_coords) == 3:
+                self.logger.info("3 EGO gifts selected. Attempting fusion.")
+                if not self.fuse():
+                    self.logger.warning("Fusion failed after selecting 3 gifts.")
                     break
+                else:
+                    self.logger.info("Fusion successful. Repeating process to find more gifts.")
+                    common.sleep(1.0)
+                    continue
             else:
+                self.logger.info(f"Could not find 3 EGO gifts for fusion (found {len(selected_gifts_coords)}). Exiting fusion menu.")
                 break
         
         exit_fusion()
@@ -1252,25 +1445,33 @@ class Mirror:
                         market_gifts = []
                         if common.element_exist(status):
                             market_gifts += common.match_image(status)
-                        # keywordless gifts
-                        wordless_matches = common.ifexist_match("pictures/mirror/restshop/market/wordless.png")
-                        if wordless_matches:
-                            # Filters in the event of the skill replacement being detected
-                            wordless_gifts = [x for x in wordless_matches if not (abs(x[0] - common.scale_x(1300)) <= 10 and abs(x[1] - common.scale_y(541)) <= 10)] 
-                            market_gifts += wordless_gifts
                         if len(market_gifts):
                             market_gifts = [x for x in market_gifts if (x[0] > common.scale_x(1091) and x[0] < common.scale_x(2322)) and (x[1] > common.scale_y(434) and x[1] < common.scale_y(919))] # filter within purchase area
                             for x,y in market_gifts:
-                                # x,y = i
                                 offset_x, offset_y = common.scale_offset_1440p(25, 1)
                                 if common.luminence(x + offset_x, y + offset_y) < 2: # this area will have a value of less than or equal to 5 if purchased
                                     continue
                                 if common.element_exist("pictures/mirror/restshop/small_not.png"):
                                     break
-                                common.mouse_move_click(x, y)
-                                common.click_matching("pictures/mirror/restshop/enhance/cancel.png", recursive=False)
-                                common.click_matching("pictures/mirror/restshop/market/purchase.png", recursive=False)
-                                common.click_matching("pictures/general/confirm_b.png", recursive=False)
+                                common.mouse_move_click(x, y) # Click on the gift
+                                
+                                # Wait for the purchase button to appear, with a timeout
+                                purchase_button_visible = False
+                                wait_start_time = time.time()
+                                while time.time() - wait_start_time < 3: # Wait up to 3 seconds for purchase button
+                                    if common.element_exist("pictures/mirror/restshop/market/purchase.png"):
+                                        purchase_button_visible = True
+                                        break
+                                    common.sleep(0.1)
+
+                                if purchase_button_visible:
+                                    if common.click_matching("pictures/mirror/restshop/market/purchase.png", recursive=False):
+                                        for _ in range(10): # Retry clicking confirm_b for a longer duration
+                                            if common.click_matching("pictures/general/confirm_b.png", recursive=False):
+                                                break
+                                            common.sleep(0.1)
+                                else:
+                                    self.logger.warning(f"Purchase button not found after clicking gift at ({x}, {y}). Skipping purchase.")
                         
                         # Handle scroll bar presence, usually in super shop
                         common.sleep(1)
@@ -1278,7 +1479,6 @@ class Mirror:
                             for _ in range(15):
                                 common.mouse_scroll(-1000) # TODO: this roll value vary between resolution, should fix this
                         else:
-                            # scrollable = False
                             break  # No more scroll bar, exit the loop
 
                     if common.element_exist("pictures/mirror/restshop/small_not.png"):
@@ -1370,7 +1570,6 @@ class Mirror:
                     break
             common.sleep(1)
             if common.element_exist("pictures/mirror/general/ego_gift_get.png"): #handles the ego gift get
-                #common.click_matching("pictures/general/confirm_b.png")
                 common.key_press("enter")
 
         elif common.click_matching("pictures/events/gain_check.png", recursive=False): #Pass to gain an EGO Gift
@@ -1405,7 +1604,6 @@ class Mirror:
                     break
             common.sleep(1)
             if common.element_exist("pictures/mirror/general/ego_gift_get.png"): #handles the ego gift get
-                #common.click_matching("pictures/general/confirm_b.png")
                 common.key_press("enter")
 
         elif common.click_matching("pictures/events/win_battle.png", recursive=False): #Win battle to gain
@@ -1452,6 +1650,11 @@ class Mirror:
                 if common.element_exist("pictures/mirror/general/pass_level.png"): #BP Promptw
                     common.key_press("enter")
                     break
+            
+            # Ensure floor 5 is recorded in stats if we win (fixes 4/5 floor log issue)
+            if "floor5" not in self.run_stats["floor_times"]:
+                self.run_stats["floor_times"]["floor5"] = time.time() - self.run_stats["start_time"]
+                
             post_run_load()
         else: #incase not enough modules
             common.click_matching("pictures/general/to_window.png")
