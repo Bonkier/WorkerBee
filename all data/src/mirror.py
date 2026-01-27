@@ -703,7 +703,7 @@ class Mirror:
                     logger.info("Refreshed via image detection.")
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(1.8)
+                    common.sleep(2.5)
                     refresh_count += 1
                     retry_attempt = 10
                     continue
@@ -714,7 +714,7 @@ class Mirror:
                     common.mouse_move_click(*common.scale_coordinates_1080p(1600, 50))
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(1.8)
+                    common.sleep(2.5)
                     refresh_count += 1
                     retry_attempt = 10
                     continue
