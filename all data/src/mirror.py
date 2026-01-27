@@ -250,6 +250,10 @@ class Mirror:
             common.mouse_move_click(x, y)
             common.sleep(1)
             common.click_matching("pictures/general/confirm_b.png")
+            
+        elif common.element_exist("pictures/mirror/general/gift_search_menu.png"):
+            self.logger.info("Gift search menu detected in loop")
+            self.gift_search_selection()
 
         # Failsafe: Check if we are back at main menu (run finished but victory/defeat missed)
         elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
@@ -264,7 +268,8 @@ class Mirror:
                 "pictures/battle/event_check.png",
                 "pictures/battle/winrate.png",
                 "pictures/general/victory.png",
-                "pictures/mirror/general/encounter_reward.png"
+                "pictures/mirror/general/encounter_reward.png",
+                "pictures/mirror/general/gift_search_menu.png"
             ]
             
             for img in stuck_images:
@@ -277,6 +282,8 @@ class Mirror:
                         self.event_choice()
                     elif "event_check.png" in img and common.click_matching(img, threshold=0.75):
                         common.wait_skip("pictures/events/continue.png")
+                    elif "gift_search_menu.png" in img:
+                        self.gift_search_selection()
                     
                     break # Found one valid state, reset is done, exit check
 
@@ -359,11 +366,15 @@ class Mirror:
             if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", recursive=False):
                 common.key_press("enter")
                 return
+            # Try with lower threshold if standard fails
+            if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", threshold=0.7, recursive=False):
+                common.key_press("enter")
+                return
             common.sleep(0.5)
             
         self.logger.warning("Timed out waiting for refuse_gift.png. Attempting SCT reset.")
         common.reset_sct()
-        if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", recursive=False):
+        if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", threshold=0.7, recursive=False):
             common.key_press("enter")
         else:
             self.logger.error("Failed to find refuse_gift.png. Skipping.")
