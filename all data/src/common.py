@@ -895,7 +895,7 @@ def wait_skip(img_path, threshold=0.8):
         
     click_matching(img_path, threshold)
 
-def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False):
+def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False, enable_scaling=False):
     """Find and click on image match. Returns True if clicked, False if not found."""
 
     if quiet_failure and recursive:
@@ -904,7 +904,7 @@ def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False,
             return False
 
     while True:
-        found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot, quiet_failure=quiet_failure)
+        found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot, quiet_failure=quiet_failure, enable_scaling=enable_scaling)
         if found:
             x, y = found[0]
             mouse_move_click(x, y, log_click=False)

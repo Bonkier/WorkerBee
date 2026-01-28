@@ -326,6 +326,29 @@ def battle_check():
         common.wait_skip("pictures/events/continue.png")
         return 0
     
+    elif common.click_matching("pictures/events/gain_check.png", recursive=False):
+        logger.info("Event: Gain Check (Battle)")
+        common.wait_skip("pictures/events/proceed.png")
+        skill_check()
+        return 0
+
+    elif common.click_matching("pictures/events/gain_check_o.png", recursive=False):
+        logger.info("Event: Gain Check Alt (Battle)")
+        common.wait_skip("pictures/events/proceed.png")
+        skill_check()
+        return 0
+
+    elif common.click_matching("pictures/events/select_gain.png", recursive=False):
+        logger.info("Event: Select Gain (Battle)")
+        common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
+        while(True):
+            common.mouse_click()
+            if common.click_matching("pictures/events/proceed.png", recursive=False):
+                break
+            if common.click_matching("pictures/events/continue.png", recursive=False):
+                break
+        return 0
+
     elif common.click_matching("pictures/battle/event_check.png", recursive=False):
         logger.info("Global event checker, Nothing was detected so did a general check.")
         common.wait_skip("pictures/events/continue.png")
