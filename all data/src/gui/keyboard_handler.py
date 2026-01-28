@@ -23,16 +23,12 @@ class KeyboardHandler(threading.Thread):
         try:
             keyboard.unhook_all()
             
-            # Default hardcoded for safety/fallback if config missing
-            # F1 to Start/Stop Mirror Dungeon (Toggle)
             if 'toggle_mirror' in self.callbacks:
                  keyboard.add_hotkey('F1', self.callbacks['toggle_mirror'])
-            
-            # F2 to Stop All
+
             if 'stop_all' in self.callbacks:
                 keyboard.add_hotkey('F2', self.callbacks['stop_all'])
 
-            # Configurable shortcuts
             shortcuts = self.config.get('Shortcuts', {})
             
             mapping = {

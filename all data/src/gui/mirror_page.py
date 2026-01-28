@@ -32,7 +32,6 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
 
     ctk.CTkLabel(run_card, text="Run Configuration", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 10))
 
-    # Input row
     input_row = ctk.CTkFrame(run_card, fg_color="transparent")
     input_row.pack(pady=(0, 10))
 
@@ -68,13 +67,11 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
     start_button.pack(pady=(0, 20))
     ui_context['mirror_start_button'] = start_button
 
-    # Advanced Settings Card
     settings_card = CardFrame(scroll_frame)
     settings_card.pack(fill="x", padx=10, pady=10)
 
     ctk.CTkLabel(settings_card, text="Advanced Settings", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
 
-    # Master Expandable Section
     master_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
     master_frame.pack(fill="x", padx=10, pady=10)
     
@@ -91,7 +88,6 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
             master_content.pack(fill="x", pady=10)
             expand_btn.configure(text="▼ Settings")
             is_expanded.set(True)
-            # Lazy load content
             if not master_content.winfo_children():
                 load_mirror_settings(master_content, base_path, shared_vars, config, save_callback)
 
@@ -100,13 +96,11 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
 
 def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     """Populate the advanced settings content"""
-    
-    # 1. Team Selection
+
     ctk.CTkLabel(parent, text="Your Team", font=UIStyle.SUBHEADER_FONT).pack(pady=(10, 5))
     team_frame = ctk.CTkFrame(parent, fg_color="transparent")
     team_frame.pack(pady=5)
-    
-    # Load saved selection
+
     status_path = os.path.join(base_path, "config", "status_selection.json")
     saved_team = set()
     if os.path.exists(status_path):
@@ -125,27 +119,22 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
                               command=lambda: save_team_selection(base_path), font=UIStyle.BODY_FONT)
         chk.grid(row=row, column=col, padx=10, pady=5, sticky="w")
 
-    # 2. Basic Settings (Hard Mode, etc.)
     ctk.CTkLabel(parent, text="Basic Settings", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     basic_frame = ctk.CTkFrame(parent, fg_color="transparent")
     basic_frame.pack(pady=5)
     
     def add_setting_checkbox(label, key, default=False):
-        # Use passed config
         current_val = config.get("Settings", {}).get(key, default)
         
         var = ctk.BooleanVar(value=current_val)
         
         def on_change():
-            # Update config object
             if "Settings" not in config: config["Settings"] = {}
             config["Settings"][key] = var.get()
-            
-            # Update shared_vars immediately
+
             if hasattr(shared_vars, key):
                 getattr(shared_vars, key).value = var.get()
-            
-            # Save using callback
+
             save_callback()
                 
         chk = ctk.CTkCheckBox(basic_frame, text=label, variable=var, command=on_change, font=UIStyle.BODY_FONT)
@@ -162,8 +151,7 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     add_setting_checkbox("Prioritize List over Status", "prioritize_list_over_status", False)
     
     add_setting_checkbox("Claim Rewards on Defeat", "claim_on_defeat", False)
-    
-    # Retry Count
+
     retry_frame = ctk.CTkFrame(basic_frame, fg_color="transparent")
     retry_frame.pack(anchor="w", padx=10, pady=5)
     ctk.CTkLabel(retry_frame, text="Retry Count on Defeat:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
@@ -186,7 +174,6 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     retry_entry.bind("<FocusOut>", save_retry)
     retry_entry.bind("<Return>", save_retry)
 
-    # Pack Refreshes
     refresh_frame = ctk.CTkFrame(basic_frame, fg_color="transparent")
     refresh_frame.pack(anchor="w", padx=10, pady=5)
     ctk.CTkLabel(refresh_frame, text="Pack Refreshes:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
@@ -211,35 +198,30 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
         
     refresh_entry.bind("<FocusOut>", save_refresh)
     refresh_entry.bind("<Return>", save_refresh)
-    
-    # Grace Selection
+
     ctk.CTkLabel(parent, text="Grace Selection", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     grace_frame = ctk.CTkFrame(parent, fg_color="transparent")
     grace_frame.pack(fill="x", pady=5)
     load_grace_selection_ui(grace_frame, base_path)
 
-    # 3. Pack Priority
     ctk.CTkLabel(parent, text="Pack Priority", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     pack_frame = ctk.CTkFrame(parent, fg_color="transparent")
     pack_frame.pack(fill="x", pady=5)
     
     load_pack_priority_ui(pack_frame, base_path)
 
-    # 4. Pack Exceptions
     ctk.CTkLabel(parent, text="Pack Exceptions", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     pack_ex_frame = ctk.CTkFrame(parent, fg_color="transparent")
     pack_ex_frame.pack(fill="x", pady=5)
     
     load_pack_exceptions_ui(pack_ex_frame, base_path)
 
-    # 5. Fuse Exceptions
     ctk.CTkLabel(parent, text="Fuse Exceptions", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     fuse_frame = ctk.CTkFrame(parent, fg_color="transparent")
     fuse_frame.pack(fill="x", pady=5)
     
     load_fuse_exceptions_ui(fuse_frame, base_path)
 
-    # Add a refresh button for Fusion Exceptions
     def refresh_fuse():
         load_fuse_exceptions_ui(fuse_frame, base_path)
     ctk.CTkButton(parent, text="Refresh Fusion List", command=refresh_fuse, height=24, font=UIStyle.SMALL_FONT).pack(pady=5)
@@ -247,23 +229,18 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
 def save_team_selection(base_path):
     status_path = os.path.join(base_path, "config", "status_selection.json")
     selected = [name for name, var in mirror_checkbox_vars.items() if var.get()]
-    
-    # Preserve order logic (simple append for new items)
+
     existing_data = load_json_data(status_path)
     existing_list = [existing_data[str(i)] for i in sorted([int(k) for k in existing_data.keys()])] if existing_data else []
-    
-    # Filter existing to keep only currently selected
+
     final_list = [s for s in existing_list if s in selected]
-    # Add new selections
     for s in selected:
         if s not in final_list:
             final_list.append(s)
-            
-    # Save as numbered dict
+
     output = {str(i+1): s for i, s in enumerate(final_list)}
     save_json_data(status_path, output)
 
-# --- Grace Selection Logic ---
 def load_grace_selection_ui(parent, base_path):
     global grace_selection_data, grace_dropdown_vars, grace_expand_frame
     
@@ -334,7 +311,6 @@ def save_grace_selection(base_path):
     grace_selection_data["order"] = updated_order
     save_json_data(os.path.join(base_path, "config", "grace_selection.json"), grace_selection_data)
 
-# --- Pack Priority Logic ---
 def load_floor_packs(base_path):
     floor_packs = {}
     packs_base_dir = os.path.join(base_path, "pictures", "mirror", "packs")
@@ -353,7 +329,7 @@ def load_floor_packs(base_path):
 
 def load_pack_priority_ui(parent, base_path):
     global pack_dropdown_vars
-    pack_dropdown_vars = {} # Reset to avoid stale data
+    pack_dropdown_vars = {} 
     floor_packs = load_floor_packs(base_path)
     pack_priority_path = os.path.join(base_path, "config", "pack_priority.json")
     pack_priority_data = load_json_data(pack_priority_path)
@@ -370,8 +346,7 @@ def load_pack_priority_ui(parent, base_path):
         for floor in group:
             wrapper = ctk.CTkFrame(col, fg_color="transparent")
             wrapper.pack(pady=5, fill="x")
-            
-            # Expandable button
+
             is_expanded = ctk.BooleanVar(value=False)
             content = ctk.CTkFrame(wrapper, fg_color="transparent")
             
@@ -388,8 +363,7 @@ def load_pack_priority_ui(parent, base_path):
             btn = ctk.CTkButton(wrapper, text=f"▶ {floor.capitalize()}", width=150, height=30, anchor="w")
             btn.configure(command=lambda b=btn, t=toggle: t(btn=b))
             btn.pack(anchor="center")
-            
-            # Dropdowns
+
             if floor not in pack_dropdown_vars:
                 pack_dropdown_vars[floor] = []
                 
@@ -403,21 +377,16 @@ def load_pack_priority_ui(parent, base_path):
                 
                 var = ctk.StringVar(value=reverse_map.get(i+1, "None"))
                 pack_dropdown_vars[floor].append(var)
-                
-                # Use a factory function to capture the loop variables correctly
+
                 def make_callback(f_val, idx_val, v_var):
                     def callback(choice):
                         if choice != "None":
-                            # Check for duplicates in this floor's dropdowns
                             for j, other_var in enumerate(pack_dropdown_vars[f_val]):
                                 if j != idx_val and other_var.get() == choice:
-                                    # Found duplicate, try to swap
-                                    # Find what was previously at this index (idx+1) in the saved data
-                                    # We use the *current* saved data state for swapping logic
+
                                     current_saved = load_json_data(pack_priority_path, {})
                                     floor_data = current_saved.get(f_val, {})
-                                    
-                                    # Find key that had value == idx + 1
+
                                     old_key = next((k for k, val in floor_data.items() if val == idx_val + 1), None)
                                     other_var.set(old_key if old_key else "None")
                                     break
@@ -438,7 +407,6 @@ def save_pack_priority(base_path):
                 data[floor][val] = i + 1
     
     save_json_data(os.path.join(base_path, "config", "pack_priority.json"), data)
-    # Also save delayed
     save_json_data(os.path.join(base_path, "config", "delayed_pack_priority.json"), data)
 
 # --- Pack Exceptions Logic ---
@@ -502,20 +470,17 @@ def update_pack_exception(base_path, floor, pack, is_checked):
 
 # --- Fuse Exceptions Logic ---
 def load_fuse_exceptions_ui(parent, base_path):
-    # Clear existing widgets
     for widget in parent.winfo_children():
         widget.destroy()
 
     fuse_dir = os.path.join(base_path, "pictures", "CustomFuse")
-    
-    # Ensure CustomFuse directory exists
+
     if not os.path.exists(fuse_dir):
         try:
             os.makedirs(fuse_dir)
         except OSError:
             pass
-            
-    # Create CustomEgoGifts folder if it doesn't exist
+
     custom_gifts_dir = os.path.join(fuse_dir, "CustomEgoGifts")
     if not os.path.exists(custom_gifts_dir):
         try:
@@ -525,8 +490,7 @@ def load_fuse_exceptions_ui(parent, base_path):
         
     exceptions_path = os.path.join(base_path, "config", "fusion_exceptions.json")
     saved_exceptions = load_json_data(exceptions_path, [])
-    
-    # Get items
+
     other_items = []
     has_custom_ego_gifts = False
     
@@ -539,12 +503,10 @@ def load_fuse_exceptions_ui(parent, base_path):
             full_path = os.path.join(fuse_dir, item)
             if os.path.isdir(full_path) or item.lower().endswith(('.png', '.jpg', '.jpeg')):
                 other_items.append(item)
-            
-    # Create wrapper for dropdown
+
     wrapper = ctk.CTkFrame(parent, fg_color="transparent")
     wrapper.pack(fill="x", padx=10)
-    
-    # Content frame (hidden initially)
+
     content_frame = ctk.CTkFrame(wrapper, fg_color="transparent")
     
     def toggle(btn):
@@ -562,7 +524,6 @@ def load_fuse_exceptions_ui(parent, base_path):
     if not has_custom_ego_gifts and not other_items:
         ctk.CTkLabel(content_frame, text="No items found in pictures/CustomFuse", font=UIStyle.SMALL_FONT, text_color="gray").pack(pady=10)
 
-    # Helper to add checkbox
     def add_checkbox(name, is_dir):
         display_name = name if is_dir else os.path.splitext(name)[0]
         var = ctk.BooleanVar(value=display_name in saved_exceptions)
@@ -572,16 +533,13 @@ def load_fuse_exceptions_ui(parent, base_path):
             
         ctk.CTkCheckBox(content_frame, text=display_name, variable=var, command=on_toggle, font=UIStyle.SMALL_FONT).pack(anchor="center", padx=20, pady=2)
 
-    # Add CustomEgoGifts first
     if has_custom_ego_gifts:
         add_checkbox("CustomEgoGifts", True)
-        
-        # Add separator if there are other items
+
         if other_items:
             separator = ctk.CTkFrame(content_frame, height=2, fg_color="#404040")
             separator.pack(fill="x", pady=5, padx=10)
 
-    # Add other items
     for item in other_items:
         is_dir = os.path.isdir(os.path.join(fuse_dir, item))
         add_checkbox(item, is_dir)

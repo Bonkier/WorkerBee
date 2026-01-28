@@ -23,8 +23,7 @@ def load_schedule_tab(parent, base_path):
     scroll_frame.pack(fill="both", expand=True)
 
     ctk.CTkLabel(scroll_frame, text="Scheduler", font=UIStyle.HEADER_FONT).pack(pady=(20, 10), anchor="w", padx=20)
-    
-    # Global Enable Switch
+
     global_enabled = ctk.BooleanVar(value=data.get("enabled", False))
     
     def toggle_scheduler():
@@ -35,7 +34,6 @@ def load_schedule_tab(parent, base_path):
     switch_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkSwitch(switch_card, text="Enable Scheduler", variable=global_enabled, command=toggle_scheduler, font=UIStyle.SUBHEADER_FONT).pack(pady=15, padx=20, anchor="w")
 
-    # Add Task Card
     add_task_card = CardFrame(scroll_frame)
     add_task_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkLabel(add_task_card, text="Add Scheduled Task", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 10))
@@ -82,11 +80,10 @@ def load_schedule_tab(parent, base_path):
         
         data["tasks"].append(task)
         save_json_data(schedule_path, data)
-        load_schedule_tab(parent, base_path) # Refresh
+        load_schedule_tab(parent, base_path) 
 
     ctk.CTkButton(add_task_card, text="Add Task", command=add_schedule_task, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=(0, 15))
 
-    # Tasks List
     ctk.CTkLabel(scroll_frame, text="Scheduled Tasks", font=UIStyle.SUBHEADER_FONT).pack(pady=(10, 5), anchor="w", padx=20)
     
     for i, task in enumerate(data.get("tasks", [])):

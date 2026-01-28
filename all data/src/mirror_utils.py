@@ -4,7 +4,6 @@ import os
 
 def squad_choice(status):
     """Get squad image path for status"""
-    # This would typically look up a config, but for now return standard path
     return f"pictures/CustomAdded1080p/general/squads/{status}.png"
 
 def gift_choice(status):

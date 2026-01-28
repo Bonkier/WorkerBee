@@ -7,7 +7,6 @@ from logging.handlers import RotatingFileHandler
 import multiprocessing
 from typing import Optional, Dict, Any
 
-# Global variables for async logging
 _log_queue: Optional[queue.Queue] = None
 _log_process: Optional[multiprocessing.Process] = None
 _logging_enabled: bool = True
@@ -41,7 +40,6 @@ class NoMillisecondsFormatter(logging.Formatter):
 
 def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
     """Worker process that handles async log writing to file"""
-    # Setup logging in the worker process
     handler = RotatingFileHandler(log_filename, maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
     formatter = NoMillisecondsFormatter(
         fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
@@ -56,17 +54,13 @@ def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
     try:
         while True:
             try:
-                # Get log record from queue (blocking)
                 record_data = log_queue.get(timeout=1.0)
-                
-                # Check for shutdown signal
+
                 if record_data is None:
                     break
-                
-                # Reconstruct LogRecord and write to file
+
                 level, name, msg, funcName, lineno, dirty = record_data
-                
-                # Create a LogRecord manually
+
                 record = logging.LogRecord(
                     name=name,
                     level=level,
@@ -78,20 +72,17 @@ def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
                     func=funcName
                 )
                 record.dirty = dirty
-                
-                # Log it using the worker logger
+
                 worker_logger.handle(record)
                 
             except queue.Empty:
-                continue  # No messages, keep waiting
+                continue  
             except Exception as e:
-                # Log worker errors to stderr (not the main log)
                 print(f"Async logger worker error: {e}", flush=True)
                 
     except KeyboardInterrupt:
         pass
     finally:
-        # Cleanup
         handler.close()
 
 def start_async_logging(log_filename: str):
@@ -99,12 +90,12 @@ def start_async_logging(log_filename: str):
     global _log_queue, _log_process
     
     if _log_process is not None:
-        return  # Already started
+        return  
     
-    # Create multiprocessing queue
+    
     _log_queue = multiprocessing.Queue(maxsize=1000)
     
-    # Start worker process
+    
     _log_process = multiprocessing.Process(
         target=_log_worker_process,
         args=(_log_queue, log_filename),
@@ -117,7 +108,7 @@ def stop_async_logging():
     global _log_queue, _log_process
     
     if _log_process is not None:
-        # Send shutdown signal
+        
         _log_queue.put(None)
         _log_process.join(timeout=1.0)
         if _log_process.is_alive():
@@ -130,45 +121,40 @@ def async_log(level: int, name: str, msg: str, funcName: str, lineno: int, dirty
     """Queue log message for async processing. Returns True if queued, False if should use sync logging."""
     global _log_queue, _logging_enabled, _async_enabled
     
-    # Fast exit if logging disabled
+    
     if not _logging_enabled:
         return
     
-    # If async disabled, fall back to synchronous logging
+    
     if not _async_enabled or _log_queue is None:
-        return False  # Signal caller to use sync logging
+        return False  
     
     try:
-        # Non-blocking put (drop messages if queue full)
+        
         _log_queue.put_nowait((level, name, msg, funcName, lineno, dirty))
-        return True  # Successfully queued
+        return True  
     except queue.Full:
-        # Queue full, drop this message or fall back to sync
+        
         return False
 
 class AsyncDirtyLogger(logging.Logger):
     
     def _log_async_or_sync(self, level, msg, args, dirty=False):
         """Try async logging first, fallback to sync if queue full or disabled"""
-        # Fast exit if logging disabled
         if not _logging_enabled:
             return
-        
-        # Get caller info for logging
+
         import inspect
-        frame = inspect.currentframe().f_back.f_back  # Go up 2 frames
+        frame = inspect.currentframe().f_back.f_back  
         funcName = frame.f_code.co_name
         lineno = frame.f_lineno
-        
-        # Format message
+
         if args:
             msg = msg % args
-        
-        # Try async logging first
+
         if async_log(level, self.name, msg, funcName, lineno, dirty):
-            return  # Successfully queued
-        
-        # Fall back to synchronous logging
+            return  
+
         if self.isEnabledFor(level):
             record = self.makeRecord(self.name, level, '', lineno, msg, (), None, funcName)
             record.dirty = dirty

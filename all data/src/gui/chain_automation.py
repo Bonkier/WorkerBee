@@ -89,7 +89,6 @@ def run_next_chain_step(ui_context, shared_vars):
         return
 
     if current_chain_step >= len(chain_queue):
-        # Chain automations done, check for rewards
         if ui_context['collect_rewards_var'].get():
             start_reward_collection(ui_context)
         else:
@@ -136,19 +135,15 @@ def check_chain_status(root, ui_context, shared_vars):
     if not chain_running:
         return
 
-    # Check active process
     if process_handler.is_any_process_running():
-        # Still running
         return
-        
-    # Check if we were running rewards
+
     if battlepass_process:
         if not battlepass_process.is_alive():
             battlepass_process = None
             finish_chain(ui_context)
         return
 
-    # If we are here, a regular step finished.
     run_next_chain_step(ui_context, shared_vars)
 
 def finish_chain(ui_context):

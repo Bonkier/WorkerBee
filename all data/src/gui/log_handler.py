@@ -13,8 +13,7 @@ class OptimizedLogHandler(logging.Handler):
         self.log_modules = log_modules
         self.queue = queue.Queue()
         self.running = True
-        
-        # Set formatter
+
         self.setFormatter(common.NoMillisecondsFormatter(
             fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
@@ -34,7 +33,6 @@ class OptimizedLogHandler(logging.Handler):
                 if self._should_show_record(record):
                     msg = self.format(record)
                     try:
-                        # Use the widget's after method to schedule update on main thread
                         self.text_widget.after(0, self._append_log, msg)
                     except:
                         self.running = False

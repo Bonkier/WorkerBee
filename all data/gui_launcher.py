@@ -9,7 +9,6 @@ import platform
 import time
 import traceback
 
-# Setup debug logging immediately
 def log_debug(msg):
     try:
         with open("launcher_debug.log", "a") as f:
@@ -18,14 +17,12 @@ def log_debug(msg):
 
 log_debug("Starting gui_launcher.py")
 
-# Try to import GUI libraries first to ensure we can show errors
 try:
     import customtkinter as ctk
     import tkinter as tk
     from tkinter import messagebox
 except ImportError as e:
     log_debug(f"GUI import failed: {e}")
-    # Fallback to ctypes for message box if tkinter fails
     try:
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, f"Critical dependency missing: {e}\nPlease run bootstrapper.py", "Startup Error", 0x10)
@@ -35,12 +32,10 @@ except ImportError as e:
 
 try:
     log_debug("Importing modules...")
-    # Import common FIRST to set up DirtyLogger before any logging setup
     sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
     import common
     from src.mp_types import SharedVars
 
-    # Import GUI components
     from src.gui.styles import UIStyle
     from src.gui.components import SidebarNavigation, CardFrame, ToolTip
     from src.gui.themes import load_available_themes
@@ -66,16 +61,13 @@ try:
 
 except Exception as e:
     log_debug(f"Module import failed: {e}\n{traceback.format_exc()}")
-    # Catch any import errors (missing files, syntax errors in modules)
     err_msg = traceback.format_exc()
     print(err_msg)
-    # Log to file in case console is not visible
     try:
         with open("launcher_error.log", "w") as f:
             f.write(err_msg)
     except:
         pass
-    # Use ctypes for reliable error box on Windows even if tk isn't ready
     try:
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, f"Failed to load application modules:\n\n{e}\n\nSee console for details.", "Startup Error", 0x10)
@@ -83,7 +75,6 @@ except Exception as e:
         pass
     sys.exit(1)
 
-# Global variables and UI Setup (Moved after imports)
 root = None
 sidebar = None
 shared_vars = None
@@ -103,7 +94,6 @@ is_compact_mode = False
 previous_geometry = "1200x800"
 compact_frame = None
 
-# UI Context for shared widgets across pages
 ui_context = {}
 
 def get_display_version():
@@ -139,7 +129,6 @@ def save_window_geometry():
     if root:
         if is_compact_mode and previous_geometry:
             try:
-                # Parse previous_geometry (e.g., "1200x800+100+100") to save the restored size
                 geo_parts = previous_geometry.split('+')[0].split('x')
                 if len(geo_parts) == 2:
                     config["Settings"]["window_width"] = int(geo_parts[0])
@@ -162,13 +151,11 @@ def save_settings():
     
     settings = config["Settings"]
     
-    # Helper to save value safely
     def save_val(name):
         if hasattr(shared_vars, name):
             val = getattr(shared_vars, name).value
             settings[name] = val
 
-    # List of variables to save
     vars_to_save = [
         "game_monitor", "skip_restshop", "skip_ego_check", "skip_ego_fusion",
         "skip_sinner_healing", "skip_ego_enhancing", "skip_ego_buying",
@@ -184,10 +171,8 @@ def save_settings():
         
     save_json_data(os.path.join(BASE_PATH, "config", "gui_config.json"), config)
 
-# Initialize Logger
 logger = logging.getLogger("gui_launcher")
 
-# Initialize Shared Variables and Config (Global scope to match 1.0.6.3 behavior)
 log_debug("Initializing SharedVars and Config...")
 shared_vars = SharedVars()
 config = load_json_data(os.path.join(BASE_PATH, "config", "gui_config.json"))
@@ -196,17 +181,14 @@ if not config:
 if "Settings" not in config:
     config["Settings"] = {}
 
-# Load preferences immediately at module level to ensure shared_vars is populated
 app_lifecycle.load_preferences(config, shared_vars)
 
 def reset_settings_to_defaults():
     """Reset all settings to default values"""
     if messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to defaults?"):
         try:
-            # Create a new instance to get default values
             default_vars = SharedVars()
-            
-            # List of all shared variables to reset
+
             fields = [
                 'game_monitor', 'skip_restshop', 'skip_ego_check', 'skip_ego_fusion',
                 'skip_sinner_healing', 'skip_ego_enhancing', 'skip_ego_buying',
@@ -231,34 +213,26 @@ def reset_settings_to_defaults():
 
 def stop_running_process():
     """Stop whatever automation is currently running"""
-    # Update Status Label immediately for better UX
     if ui_context and 'status_label' in ui_context:
         ui_context['status_label'].configure(text="Stopping...", text_color="orange")
 
     def _stop_thread():
-        # 1. Stop Chain Automation (Module level)
         if chain_automation.chain_running:
             chain_automation.stop_chain_automation(ui_context)
-
-        # 2. Cleanup all processes via handler (Parallel kill)
         process_handler.cleanup_processes()
 
     threading.Thread(target=_stop_thread, daemon=True).start()
 
 def kill_battlepass():
     """Kill Battlepass Collector subprocess"""
-    # Delegate to process handler cleanup as it manages the battlepass process now
     if process_handler.battlepass_process:
         process_handler.cleanup_processes()
 
 def start_mirror_dungeon(runs=None):
     try:
-        # Save settings before starting
         save_settings() 
         
-        # If runs is not specified, load from config
         if runs is None or runs == 999999:
-            # Default to 1 if not found or invalid
             runs = int(config.get("Settings", {}).get("mirror_runs", 1))
             log_debug(f"Starting Mirror Dungeon with {runs} runs (from config)")
         
@@ -297,7 +271,6 @@ def toggle_compact_mode():
     global is_compact_mode, previous_geometry
     
     if not is_compact_mode:
-        # Enter Compact Mode
         previous_geometry = root.geometry()
         is_compact_mode = True
         
@@ -309,7 +282,6 @@ def toggle_compact_mode():
         root.resizable(False, False)
         root.title("WorkerBee (Compact)")
     else:
-        # Exit Compact Mode
         is_compact_mode = False
         compact_frame.pack_forget()
         sidebar_frame.pack(side="left", fill="y")
@@ -367,13 +339,10 @@ def toggle_chain():
 def restart_with_theme(theme_name):
     """Restart application to apply theme"""
     try:
-        # Save settings first
         save_settings()
-        
-        # Start theme_restart.py
+
         subprocess.Popen([sys.executable, THEME_RESTART_PATH, theme_name, "Settings"])
-        
-        # Exit immediately
+
         os._exit(0)
     except Exception as e:
         logger.error(f"Error applying theme: {e}")
@@ -382,14 +351,12 @@ def restart_with_theme(theme_name):
 def perform_cleanup():
     """Clean up all running processes and resources"""
     try:
-        # Stop async logging process FIRST
         try:
-            # Fast kill logging process without waiting
             import src.logger as logger_module
             if logger_module._log_process and logger_module._log_process.is_alive():
                 logger_module._log_process.terminate()
         except Exception:
-            pass  # Ignore cleanup errors
+            pass
         
         try:
             if chain_automation.chain_running:
@@ -400,23 +367,19 @@ def perform_cleanup():
             print(f"Error killing processes: {e}")
         
         try:
-            # Close all logging handlers
             for handler in logging.getLogger().handlers:
                 handler.close()
         except Exception:
-            pass  # Ignore cleanup errors
+            pass
         
         try:
-            # Only try to stop keyboard handler if it's running, and don't wait too long
             if keyboard_handler and keyboard_handler.running:
                 keyboard_handler.stop()
         except Exception as e:
-            pass  # Ignore cleanup errors
+            pass
         
-        # Stop background threads from running processes
         try:
             if process_handler.process and hasattr(process_handler.process, '_target') and process_handler.process._target:
-                # Force stop any connection monitoring threads
                 import threading
                 for thread in threading.enumerate():
                     if thread.name.startswith('Thread-') and thread.daemon and thread.is_alive():
@@ -425,14 +388,13 @@ def perform_cleanup():
                         except:
                             pass
         except Exception:
-            pass  # Ignore cleanup errors
+            pass
             
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
 
 def on_closing():
     """Handle application exit cleanup"""
-    # Hide window immediately to give instant feedback
     try:
         if root:
             root.withdraw()
@@ -446,19 +408,15 @@ def on_closing():
     except Exception as e:
         print(f"Error during application close: {e}")
     finally:
-        # Clean up PID file if it exists
+
         try:
             if os.path.exists(PID_FILE):
                 os.remove(PID_FILE)
         except:
-            pass  # Ignore cleanup errors
-            
-        # Nuclear option for Windows to ensure everything dies
+            pass
+
         if platform.system() == "Windows":
             try:
-                # Spawn a taskkill command to kill this process tree forcefully
-                # We use shell=True with CREATE_NO_WINDOW to hide the command prompt
-                # We add a small delay to ensure this command is dispatched before we exit
                 subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T",
                                shell=True, 
                                creationflags=0x08000000) # CREATE_NO_WINDOW
@@ -487,7 +445,6 @@ def setup_help_tab():
     if 'tab_help' in globals():
         load_help_page(tab_help, HELP_TEXT_PATH, get_display_version(), join_discord)
 
-# Define wrapper functions for tab loading
 def load_dashboard_tab():
     try:
         load_dashboard_page(tab_dashboard, sidebar, callbacks, ui_context)
@@ -552,11 +509,9 @@ def _lazy_show_page(name):
 # =======================
 
 if __name__ == "__main__":
-    # Essential for Windows multiprocessing support
     import multiprocessing
     multiprocessing.freeze_support()
 
-    # Initialize Main UI
     log_debug("Initializing Main UI (ctk.CTk)...")
     root = ctk.CTk()
     root.title(original_title)
@@ -564,7 +519,6 @@ if __name__ == "__main__":
     h = config.get("Settings", {}).get("window_height", 800)
     root.geometry(f"{w}x{h}")
 
-    # Load and apply theme
     log_debug("Loading themes...")
     available_themes = load_available_themes(BASE_PATH)
     current_theme_name = config.get("Settings", {}).get("appearance_mode", "Dark")
@@ -589,7 +543,6 @@ if __name__ == "__main__":
     log_debug("Initializing SidebarNavigation...")
     sidebar = SidebarNavigation(sidebar_frame, content_area)
 
-    # Define tabs globally so lazy loading works
     tab_dashboard = sidebar.add_page("Dashboard")
     tab_md = sidebar.add_page("Mirror Dungeon")
     tab_exp = sidebar.add_page("Exp")
@@ -601,7 +554,6 @@ if __name__ == "__main__":
     tab_logs = sidebar.add_page("Logs")
     tab_help = sidebar.add_page("Help")
 
-    # Sidebar Footer for Compact Mode
     log_debug("Creating sidebar footer...")
     sidebar_footer = ctk.CTkFrame(sidebar_frame, fg_color="transparent")
     sidebar_footer.pack(side="bottom", fill="x", padx=10, pady=20)
@@ -612,7 +564,6 @@ if __name__ == "__main__":
     ctk.CTkButton(sidebar_footer, text="Compact Mode", command=toggle_compact_mode, fg_color="transparent", border_width=1, text_color="gray90").pack(fill="x", pady=(10, 0))
     ctk.CTkButton(sidebar_footer, text="Exit Application", command=on_closing, height=30, fg_color="#c42b1c", hover_color="#8f1f14", font=UIStyle.SMALL_FONT).pack(fill="x", pady=(10, 0))
 
-    # Compact Mode Frame
     log_debug("Creating compact mode frame...")
     compact_frame = ctk.CTkFrame(main_container, fg_color=UIStyle.MAIN_BG_COLOR)
     compact_status_label = ctk.CTkLabel(compact_frame, text="Idle", font=UIStyle.SUBHEADER_FONT, text_color=UIStyle.TEXT_SECONDARY_COLOR)
@@ -623,14 +574,12 @@ if __name__ == "__main__":
     ui_context['compact_stop_btn'] = compact_stop_btn
     ctk.CTkButton(compact_frame, text="Expand", command=toggle_compact_mode, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="bottom", pady=20)
 
-    # Monkeypatch sidebar.show_page to implement lazy loading
     _original_show_page = sidebar.show_page
     def _lazy_show_page_wrapper(name):
         _lazy_show_page(name)
         _original_show_page(name)
     sidebar.show_page = _lazy_show_page_wrapper
 
-    # Initialize Handlers
     callbacks = {
         'toggle_mirror': toggle_mirror_dungeon,
         'start_mirror': start_mirror_dungeon,
@@ -648,8 +597,6 @@ if __name__ == "__main__":
         'save_settings': save_settings
     }
 
-    # Wrap callbacks for KeyboardHandler to ensure they run on the main thread
-    # This prevents crashes when modifying UI elements from the keyboard thread
     def make_safe_callback(func):
         return lambda *args, **kwargs: root.after(0, lambda: func(*args, **kwargs))
     
@@ -659,16 +606,13 @@ if __name__ == "__main__":
     keyboard_handler = KeyboardHandler(safe_keyboard_callbacks, config)
     scheduler_handler = SchedulerHandler(BASE_PATH, shared_vars, callbacks)
 
-    # Start the dedicated keyboard handler thread
     keyboard_handler.start()
 
-    # Handle CLI args for theme/tab restoration
     if len(sys.argv) > 2:
         target_tab = sys.argv[2]
         if target_tab in sidebar.buttons:
             sidebar.show_page(target_tab)
     else:
-        # Show default page
         sidebar.show_page("Dashboard")
 
     log_debug("Loading initial tabs...")
@@ -679,26 +623,19 @@ if __name__ == "__main__":
     setup_help_tab()
     log_debug("Initial tabs loaded")
 
-    # Set the callback for window close
     root.protocol("WM_DELETE_WINDOW", on_closing)
 
     log_debug("Entering main block")
     def start_application():
-        # Singleton check to prevent multiple instances
         try:
             import socket
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind(("127.0.0.1", 47329)) # Arbitrary port for lock
-            # Keep socket open until exit
             globals()['_singleton_socket'] = s
         except socket.error:
-            # Another instance is likely running
-            # Check if we are the "updated" instance, if so, we should take precedence
-            # But we can't easily kill the other one from here without PID
-            # For now, just log and continue, but this might explain multiple instances
+
             logger.warning("Another instance of WorkerBee appears to be running.")
-            
-            # If we are the updated instance, give the old one a moment to die
+
             if "--updated" in sys.argv:
                 time.sleep(2)
                 try:
@@ -712,23 +649,19 @@ if __name__ == "__main__":
         try:
             log_debug("Initializing application logic...")
             
-            # Ensure schedule file exists
             ensure_schedule_file(BASE_PATH)
             load_schedule_tab()
             load_others_tab()
             load_statistics_tab()
             
-            # Check for updated flag
             if "--updated" in sys.argv:
                 messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
 
-            # Check internet connection
             if not common.check_internet_connection():
                 root.title("WorkerBee | Bonk (Offline)")
                 logger.warning("No internet connection detected. Running in offline mode.")
                 messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
             else:
-                # Check for updates if enabled and online
                 if config['Settings'].get('auto_update', False):
                     try:
                         import updater
@@ -750,17 +683,15 @@ if __name__ == "__main__":
             logger.error(f"Error in start_application: {e}")
     
     log_debug("Creating data directory...")
-    # Make sure "all data" folder exists in the correct location
+
     os.makedirs(BASE_PATH, exist_ok=True)
-    
-    # Initialize common module settings after GUI is ready
+
     def delayed_common_init():
         try:
             app_lifecycle.setup_environment(shared_vars)
             monitor_index = shared_vars.game_monitor.value
             common.set_game_monitor(monitor_index)
-            
-            # Initialize logging settings
+
             common.CLEAN_LOGS_ENABLED = config['Settings'].get('clean_logs', True)
             common.initialize_async_logging()
             if hasattr(common, 'set_logging_enabled'):
@@ -770,14 +701,13 @@ if __name__ == "__main__":
     
     log_debug("Scheduling startup tasks...")
     root.after(5, start_application)
-    # Initialize common settings after startup
+
     root.after(100, delayed_common_init)
 
     # Initialize UI Updater
     log_debug("Initializing UI Updater...")
     ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
 
-    # Start UI Updater loops
     ui_updater.check_processes()
     ui_updater.update_compact_status()
     ui_updater.check_stats_update()

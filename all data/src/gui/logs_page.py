@@ -13,21 +13,17 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     for widget in parent.winfo_children():
         widget.destroy()
 
-    # Filter Card
     filter_card = CardFrame(parent)
     filter_card.pack(fill="x", padx=10, pady=(10, 5))
 
-    # Filter header
     filter_header = ctk.CTkFrame(filter_card, fg_color="transparent")
     filter_header.pack(fill="x", pady=(10, 5), padx=10)
     
     ctk.CTkLabel(filter_header, text="Log Filters", font=UIStyle.SUBHEADER_FONT).pack(side="left")
 
-    # Toggles
     toggles = ctk.CTkFrame(filter_header, fg_color="transparent")
     toggles.pack(side="right", padx=10)
-    
-    # Clean Logs Toggle
+
     clean_logs_var = ctk.BooleanVar(value=config['Settings'].get('clean_logs', True))
     
     def toggle_clean_logs():
@@ -38,8 +34,7 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
 
     ctk.CTkLabel(toggles, text="Clean Logs", font=UIStyle.SMALL_FONT).grid(row=0, column=0, padx=(0,2), sticky="e")
     ctk.CTkSwitch(toggles, text="", variable=clean_logs_var, command=toggle_clean_logs, font=UIStyle.SMALL_FONT).grid(row=0, column=1, padx=(0,10))
-    
-    # Do Not Log Toggle
+
     logging_enabled_var = ctk.BooleanVar(value=not config['Settings'].get('logging_enabled', True))
     
     def toggle_logging():
@@ -50,8 +45,7 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
             common.set_logging_enabled(enabled)
             
         save_callback()
-        
-        # Visual feedback
+
         if enabled:
             log_text.configure(state="normal")
             log_text.insert("end", f"\n--- LOGGING ENABLED ---\n")
@@ -65,11 +59,9 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     ctk.CTkLabel(toggles, text="Do Not Log", font=UIStyle.SMALL_FONT).grid(row=0, column=2, padx=(0,2), sticky="e") 
     ctk.CTkSwitch(toggles, text="", variable=logging_enabled_var, command=toggle_logging, font=UIStyle.SMALL_FONT).grid(row=0, column=3, padx=0)
 
-    # Filters Frame
     filters_main_frame = ctk.CTkFrame(filter_card, fg_color="transparent")
     filters_main_frame.pack(fill="x", expand=True, padx=10, pady=(0, 10))
 
-    # Level Filters
     levels_frame = ctk.CTkFrame(filters_main_frame, fg_color="transparent")
     levels_frame.pack(side="left", fill="y", padx=(5, 2))
     
@@ -79,7 +71,6 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     module_filters = {}
 
     def apply_filter():
-        # Update config
         if 'LogFilters' not in config: config['LogFilters'] = {}
         if 'ModuleFilters' not in config: config['ModuleFilters'] = {}
         
@@ -113,7 +104,6 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
         col = i // 3
         chk.grid(row=row, column=col, sticky="w", padx=2, pady=1)
 
-    # Module Filters
     modules_frame = ctk.CTkFrame(filters_main_frame, fg_color="transparent")
     modules_frame.pack(side="left", fill="both", expand=True, padx=(2, 5))
     
@@ -122,14 +112,12 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     module_scroll_frame = ctk.CTkScrollableFrame(modules_frame, height=60)
     module_scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # Create module checkboxes
     modules_per_column = max(3, len(log_modules) // 4)
     
     for i, module in enumerate(log_modules):
         col = i // modules_per_column
         row = i % modules_per_column
-        
-        # Load saved state or default to True
+
         key = module.lower().replace(' ', '_')
         default_val = config.get('ModuleFilters', {}).get(key, True)
         
@@ -144,18 +132,15 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
             font=(UIStyle.FONT_FAMILY, 10)
         )
         chk.grid(row=row, column=col, sticky="w", padx=2, pady=1)
-    
-    # Add "Other" filter
+
     module_filters["Other"] = ctk.BooleanVar(value=True)
 
-    # Log Display Card
     log_card = CardFrame(parent)
     log_card.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
     log_text = ctk.CTkTextbox(log_card, font=("Consolas", 12), state="disabled")
     log_text.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # Log Control Buttons
     button_frame = ctk.CTkFrame(log_card, fg_color="transparent")
     button_frame.pack(fill="x", padx=10, pady=(0, 10))
 
@@ -179,11 +164,9 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     auto_reload_var = ctk.BooleanVar(value=True)
     ctk.CTkSwitch(button_frame, text="Auto-reload", variable=auto_reload_var, font=UIStyle.BODY_FONT).pack(side="right", padx=5, pady=5)
 
-    # Log Loading Logic
     last_file_position = 0
 
     def should_display_line(line):
-        # Check module filters
         for module, pattern in log_modules.items():
             if f" | {pattern} | " in line:
                 if not module_filters[module].get():
@@ -192,8 +175,6 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
         else:
             if not module_filters["Other"].get():
                 return False
-        
-        # Check clean logs
         if " | DIRTY" in line and clean_logs_var.get():
             return False
             

@@ -9,8 +9,7 @@ def load_others_tab(parent, config, callbacks, ui_context):
         
     scroll_frame = ctk.CTkScrollableFrame(parent, corner_radius=0, fg_color="transparent")
     scroll_frame.pack(fill="both", expand=True)
-    
-    # Chain Automation
+
     chain_card = CardFrame(scroll_frame)
     chain_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkLabel(chain_card, text="Chain Automation", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
@@ -19,22 +18,19 @@ def load_others_tab(parent, config, callbacks, ui_context):
     
     chain_grid = ctk.CTkFrame(chain_card, fg_color="transparent")
     chain_grid.pack(pady=10)
-    
-    # Threads Runs
+
     ctk.CTkLabel(chain_grid, text="Threads Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=0, padx=5, pady=5)
     chain_threads_entry = ctk.CTkEntry(chain_grid, width=60)
     chain_threads_entry.grid(row=0, column=1, padx=5, pady=5)
     chain_threads_entry.insert(0, str(config.get("Settings", {}).get("chain_threads_runs", 3)))
     ui_context['chain_threads_entry'] = chain_threads_entry
-    
-    # EXP Runs
+
     ctk.CTkLabel(chain_grid, text="EXP Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=2, padx=5, pady=5)
     chain_exp_entry = ctk.CTkEntry(chain_grid, width=60)
     chain_exp_entry.grid(row=0, column=3, padx=5, pady=5)
     chain_exp_entry.insert(0, str(config.get("Settings", {}).get("chain_exp_runs", 2)))
     ui_context['chain_exp_entry'] = chain_exp_entry
-    
-    # Mirror Runs
+
     ctk.CTkLabel(chain_grid, text="Mirror Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=4, padx=5, pady=5)
     chain_mirror_entry = ctk.CTkEntry(chain_grid, width=60)
     chain_mirror_entry.grid(row=0, column=5, padx=5, pady=5)
@@ -56,7 +52,6 @@ def load_others_tab(parent, config, callbacks, ui_context):
         save_chain_settings()
         callbacks['start_chain']()
 
-    # Toggles
     launch_game_var = ctk.BooleanVar(value=config.get("Settings", {}).get("launch_game_before_runs", False))
     ctk.CTkCheckBox(chain_card, text="Launch Game First", variable=launch_game_var, command=save_chain_settings).pack(pady=5)
     ui_context['launch_game_var'] = launch_game_var
@@ -73,7 +68,6 @@ def load_others_tab(parent, config, callbacks, ui_context):
     chain_status_label.pack(pady=(0, 15))
     ui_context['chain_status_label'] = chain_status_label
 
-    # Function Call Card
     function_card = CardFrame(scroll_frame)
     function_card.pack(fill="x", padx=10, pady=10)
 

@@ -4,24 +4,18 @@ import os
 import common
 import sys
 import logging
-# Determine if running as executable or script
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
         return os.path.dirname(sys.executable)
     else:
-        # Running as script
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Set up paths
 BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
 
-# Logging is handled by common.py
 logger = logging.getLogger(__name__)
 
-# Signal handler for clean shutdown
 def signal_handler(sig, frame):
     """
     Handle termination signals

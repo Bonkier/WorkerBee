@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Exp Runner Script - Runs Luxcavation Exp automation
 This script is called by the GUI and runs as a separate process
@@ -17,7 +16,6 @@ def get_base_path():
     else:
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Set up paths
 BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
@@ -25,7 +23,6 @@ sys.path.append(os.path.join(BASE_PATH, 'src'))
 import luxcavation_functions
 import common
 
-# Logging configuration is handled by common.py
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
@@ -34,7 +31,7 @@ class ConnectionManager:
     def __init__(self):
         """Initialize connection manager"""
         self.connection_event = threading.Event()
-        self.connection_event.set()  # Start with connection assumed good
+        self.connection_event.set()
     
     def start_connection_monitor(self):
         """Start the connection monitoring thread"""
@@ -79,7 +76,6 @@ def sync_shared_vars(shared_vars_instance):
 
     while True:
         try:
-            # Update module variables from shared memory values
             if hasattr(shared_vars_instance, 'x_offset'): sv_module.x_offset = shared_vars_instance.x_offset.value
             if hasattr(shared_vars_instance, 'y_offset'): sv_module.y_offset = shared_vars_instance.y_offset.value
             if hasattr(shared_vars_instance, 'game_monitor'): sv_module.game_monitor = shared_vars_instance.game_monitor.value
@@ -104,27 +100,21 @@ def signal_handler(sig, frame):
 
 def main(runs, stage, shared_vars=None):
     """Main function for exp runner"""
-    # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
    
     try:
-        # Start synchronization thread
         if shared_vars:
             sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
             sync_thread.start()
 
-        # Use the parameters passed to the function
-        stage_arg = stage  # Instead of sys.argv[2]
-        
-        # Handle "latest" as a special case
+        stage_arg = stage
+
         if stage_arg == "latest":
             stage = "latest"
         else:
-            # Convert to integer for numeric stages
             stage = int(stage_arg)
-        
-        # Initialize connection manager
+
         connection_manager = ConnectionManager()
         connection_manager.start_connection_monitor()
        
@@ -138,30 +128,24 @@ def main(runs, stage, shared_vars=None):
            
             try:
                 time.sleep(1)
-                # Wait for connection before proceeding (copied from compiled_runner logic)
                 while True:
                     if connection_manager.connection_event.is_set():
-                        # Connection is good, proceed with run
                         luxcavation_functions.pre_exp_setup(stage, config_type="exp_team_selection")
                         break
                     else:
-                        # Connection lost, wait for it to be restored
                         connection_manager.connection_event.wait()
-                    
-                    # Check for server errors (copied from compiled_runner)
+
                     try:
                         from common import element_exist
                         if element_exist("pictures/general/server_error.png"):
                             connection_manager.handle_reconnection()
                     except ImportError:
-                        # Handle case where common module isn't available
                         pass
                     except Exception as e:
                         logger.error(f"Error checking for server error: {e}")
                         
             except Exception as e:
                 logger.error(f"Error during Exp run {i+1}: {e}")
-                # Continue with next run instead of crashing completely
            
             time.sleep(2)
        
@@ -174,7 +158,6 @@ def main(runs, stage, shared_vars=None):
 
 if __name__ == "__main__":
     try:
-        # Get parameters from command line arguments
         if len(sys.argv) >= 3:
             runs = int(sys.argv[1])
             stage = sys.argv[2]

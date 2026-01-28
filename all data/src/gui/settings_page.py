@@ -17,7 +17,6 @@ from src.gui.themes import load_available_themes
 import src.shared_vars as sv
 import common
 
-# Global state for this module
 squad_data = {}
 dropdown_vars = {}
 expand_frames = {}
@@ -38,7 +37,6 @@ def sinner_key(name):
 
 def load_settings_tab(parent, config, shared_vars, save_callback, base_path, root_ref, restart_callback=None, update_shortcuts_callback=None):
     """Populate the settings tab"""
-    # Clear existing
     for widget in parent.winfo_children():
         widget.destroy()
 
@@ -110,7 +108,7 @@ def _setup_profiles(parent, base_path, save_callback):
         target_dir = os.path.join(profiles_dir, name)
         os.makedirs(target_dir, exist_ok=True)
         
-        save_callback() # Save current state first
+        save_callback()
         
         config_dir = os.path.join(base_path, "config")
         count = 0
@@ -216,7 +214,6 @@ def _dropdown_callback(status, index, base_path):
         if new_val != "None":
             for i, var in enumerate(dropdown_vars[status]):
                 if i != index and var.get() == new_val:
-                    # Try to find the old key for the current index to swap
                     old_key = next((k for k, v in squad_data.get(status, {}).items() if v == index + 1), None)
                     pretty_old = next((x for x in SINNER_LIST if sinner_key(x) == old_key), "None") if old_key else "None"
                     var.set(pretty_old)
@@ -321,15 +318,13 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config):
     add_bool("Debug Image Matches", "debug_image_matches")
     add_bool("Convert to Grayscale (Speed Boost)", "convert_images_to_grayscale")
     add_bool("Reconnect only when Internet Reachable", "reconnect_when_internet_reachable")
-    
-    # Auto update
+
     auto_upd = ctk.BooleanVar(value=config.get("Settings", {}).get("auto_update", False))
     def toggle_upd():
         config["Settings"]["auto_update"] = auto_upd.get()
         save_callback()
     ctk.CTkCheckBox(frame, text="Auto Update on Startup", variable=auto_upd, command=toggle_upd).pack(anchor="w", pady=5)
-    
-    # Reconnection delay
+
     row = ctk.CTkFrame(frame, fg_color="transparent")
     row.pack(fill="x", pady=5)
     ctk.CTkLabel(row, text="Reconnection Delay (s):", width=200, anchor="w").pack(side="left")
@@ -345,8 +340,7 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config):
             save_callback()
         except: pass
     rec_entry.bind("<FocusOut>", save_rec)
-    
-    # Click delay
+
     row2 = ctk.CTkFrame(frame, fg_color="transparent")
     row2.pack(fill="x", pady=5)
     ctk.CTkLabel(row2, text="Click Delay (s):", width=200, anchor="w").pack(side="left")
@@ -368,8 +362,7 @@ def _setup_image_thresholds(parent, base_path):
     card.pack(fill="x", pady=10, padx=10)
     
     ctk.CTkLabel(card, text="Image Threshold Configuration", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
-    
-    # Global threshold adjustment
+
     global_row = ctk.CTkFrame(card, fg_color="transparent")
     global_row.pack(pady=5, fill="x", padx=20)
     
@@ -379,8 +372,7 @@ def _setup_image_thresholds(parent, base_path):
     
     apply_global_var = ctk.BooleanVar()
     ctk.CTkSwitch(global_row, text="Don't apply to modified", variable=apply_global_var, font=UIStyle.BODY_FONT).pack(side="left", padx=10)
-    
-    # Load initial values
+
     threshold_config = sv.image_threshold_config
     global_entry.insert(0, str(threshold_config.get("global_adjustment", 0.0)))
     apply_global_var.set(not threshold_config.get("apply_global_to_modified", True))
@@ -400,8 +392,7 @@ def _setup_image_thresholds(parent, base_path):
     global_entry.bind('<FocusOut>', save_global)
     global_entry.bind('<Return>', save_global)
     apply_global_var.trace("w", save_global)
-    
-    # Tree View
+
     tree_frame = ctk.CTkFrame(card, fg_color="transparent")
     tree_frame.pack(pady=5, fill="both", expand=True, padx=10)
     ctk.CTkLabel(tree_frame, text="Image-Specific Adjustments:", font=UIStyle.BODY_FONT).pack(pady=(5, 0), anchor="w", padx=10)
@@ -453,8 +444,6 @@ def _setup_image_thresholds(parent, base_path):
             except: pass
         lbl.bind("<Double-Button-1>", open_folder)
 
-        # Folder threshold
-        # Only show if direct images exist
         has_direct = any(f.lower().endswith(('.png', '.jpg')) for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f)))
         if has_direct:
             f_entry = ctk.CTkEntry(header, width=60, placeholder_text="0.0", font=UIStyle.SMALL_FONT)
@@ -520,7 +509,6 @@ def _setup_image_thresholds(parent, base_path):
             for item in items:
                 item_path = os.path.join(full_path, item)
                 if os.path.isdir(item_path):
-                    # Check if folder has images recursively
                     rel = f"{current_path}/{item}" if current_path else item
                     if folder_has_images(item_path):
                         folders.append((item, rel))
@@ -536,7 +524,6 @@ def _setup_image_thresholds(parent, base_path):
         except Exception as e:
             print(f"Error loading {current_path}: {e}")
 
-    # Initialize with pictures folder
     if os.path.exists(os.path.join(base_path, "pictures")):
         create_folder_node(content_area, "pictures", "pictures", 0)
 
@@ -567,7 +554,6 @@ def _setup_shortcuts(parent, config, save_callback, root, update_callback):
     shortcuts_frame = ctk.CTkFrame(card, fg_color="transparent")
     shortcuts_frame.pack(pady=(0, 15))
 
-    # Load from config
     if 'Shortcuts' not in config:
         config['Shortcuts'] = {}
         
@@ -584,8 +570,7 @@ def _setup_shortcuts(parent, config, save_callback, root, update_callback):
     for key, val in defaults.items():
         if key not in config['Shortcuts']:
             config['Shortcuts'][key] = val
-            
-    # Helper for shortcut rows
+
     def create_shortcut_row(label_text, shortcut_key):
         row = ctk.CTkFrame(shortcuts_frame)
         row.pack(fill="x", pady=5)
@@ -615,7 +600,6 @@ def _setup_shortcuts(parent, config, save_callback, root, update_callback):
     create_shortcut_row("Call Function:", 'call_function')
     create_shortcut_row("Terminate Functions:", 'terminate_functions')
 
-    # Help text
     shortcut_help = ctk.CTkLabel(shortcuts_frame, text="Format examples: ctrl+q, alt+s, shift+x", 
                                 font=UIStyle.SMALL_FONT, text_color="gray")
     shortcut_help.pack(pady=(5, 10))
@@ -629,11 +613,9 @@ def _setup_theme(parent, config, save_callback, base_path, root, restart_callbac
     current = config.get("Settings", {}).get("appearance_mode", "Dark")
     
     def change_theme(new_theme):
-        # Save config first
         config["Settings"]["appearance_mode"] = new_theme
         save_callback()
-        
-        # If we have a restart callback, use it to apply theme properly
+
         if restart_callback:
             restart_callback(new_theme)
         

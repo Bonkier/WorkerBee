@@ -1,5 +1,3 @@
-# GUI Constants
-
 DISCORD_INVITE = "https://discord.gg/vccsv4Q4ta"
 
 STATUS_COLUMNS = [

@@ -18,8 +18,7 @@ def load_statistics_tab(parent, base_path):
     scroll_frame.pack(fill="both", expand=True)
     
     ctk.CTkLabel(scroll_frame, text="Statistics", font=UIStyle.HEADER_FONT).pack(pady=(20, 10), anchor="w", padx=20)
-    
-    # Mirror Dungeon Stats
+
     md_card = CardFrame(scroll_frame)
     md_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkLabel(md_card, text="Mirror Dungeon", font=UIStyle.SUBHEADER_FONT).pack(pady=10, padx=15, anchor="w")
@@ -38,7 +37,6 @@ def load_statistics_tab(parent, base_path):
     ctk.CTkLabel(md_grid, text=f"Losses: {losses}", font=UIStyle.BODY_FONT, text_color="#f44336").pack(side="left", expand=True)
     ctk.CTkLabel(md_grid, text=f"Win Rate: {win_rate:.1f}%", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
 
-    # Luxcavation Stats
     lux_card = CardFrame(scroll_frame)
     lux_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkLabel(lux_card, text="Luxcavations", font=UIStyle.SUBHEADER_FONT).pack(pady=10, padx=15, anchor="w")
@@ -52,7 +50,6 @@ def load_statistics_tab(parent, base_path):
     ctk.CTkLabel(lux_grid, text=f"Exp Runs: {exp_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
     ctk.CTkLabel(lux_grid, text=f"Thread Runs: {threads_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
 
-    # History
     if "history" in md_stats and md_stats["history"]:
         hist_card = CardFrame(scroll_frame)
         hist_card.pack(fill="x", padx=10, pady=10)
@@ -61,7 +58,7 @@ def load_statistics_tab(parent, base_path):
         history_frame = ctk.CTkScrollableFrame(hist_card, height=300, fg_color="transparent")
         history_frame.pack(fill="x", padx=10, pady=(0, 15))
         
-        for entry in md_stats["history"][:50]: # Show last 50
+        for entry in md_stats["history"][:50]: 
             result = entry.get("result", "Unknown")
             duration = entry.get("duration", 0)
             timestamp = entry.get("timestamp", 0)
@@ -83,15 +80,13 @@ def load_statistics_tab(parent, base_path):
             ctk.CTkLabel(top_row, text=f"{date_str}", font=UIStyle.SMALL_FONT, text_color="#e0e0e0").pack(side="left")
             ctk.CTkLabel(top_row, text=" | ", font=UIStyle.SMALL_FONT, text_color="gray").pack(side="left")
             ctk.CTkLabel(top_row, text=f"Time: {duration_str}", font=UIStyle.SMALL_FONT, text_color="#e0e0e0").pack(side="left")
-            
-            # Bottom row: Packs details
+
             bottom_row = ctk.CTkFrame(run_frame, fg_color="transparent")
             bottom_row.pack(fill="x", padx=10, pady=(0, 8))
             
             floor_times = entry.get("floor_times", {})
             packs = entry.get("packs", [])
-            
-            # Sort floors numerically
+
             sorted_floors = sorted(floor_times.keys(), key=lambda x: int(x.replace("floor", "")) if x.replace("floor", "").isdigit() else 99)
             
             pack_details = []
