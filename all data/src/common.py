@@ -22,27 +22,21 @@ import shared_vars
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.05
 
-# Template reference resolutions - used only for template matching
+
 REFERENCE_WIDTH_1440P = 2560
 REFERENCE_HEIGHT_1440P = 1440
 REFERENCE_WIDTH_1080P = 1920
 REFERENCE_HEIGHT_1080P = 1080
 REFERENCE_ASPECT_RATIO = 16/9
 
-
-# Monitor configuration - can be adjusted by user if needed
-# GAME_MONITOR_INDEX now comes from shared_vars instead of being a module variable
-
 CLEAN_LOGS_ENABLED = True
 
-# Actual monitor resolution (will be set during initialization)
 MONITOR_WIDTH: int | None = None
 MONITOR_HEIGHT: int | None = None
 EXPECTED_WIDTH: int | None = None
 EXPECTED_HEIGHT: int | None = None
-IS_NON_STANDARD_RATIO: bool | None = None  # Whether current monitor size follow standard 16:9 ratio, e.g. 16:10
+IS_NON_STANDARD_RATIO: bool | None = None 
 
-# Thread-local storage for MSS instances to prevent threading errors
 _thread_local = threading.local()
 
 def get_sct():
@@ -62,24 +56,18 @@ def reset_sct():
     except Exception as e:
         logger.error(f"Error resetting SCT: {e}")
 
-# Template cache to reduce disk I/O
 _template_cache = {}
 
-# Determine if running as executable or script
 def get_base_path():
     """Get the base directory path for resource access"""
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
         return os.path.dirname(sys.executable)
     else:
-        # Running as script
         folder_path = os.path.dirname(os.path.abspath(__file__))
-        # Check if we're in the src folder or main folder
         if os.path.basename(folder_path) == 'src':
             return os.path.dirname(folder_path)
         return folder_path
 
-# Get base path for resource access
 BASE_PATH = get_base_path()
 
 def resource_path(relative_path):
@@ -89,20 +77,16 @@ def resource_path(relative_path):
 
 class NoMillisecondsFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
-        # Always use custom format without milliseconds
         return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(record.created))
     
     def format(self, record):
-        # Add dirty flag to the end of the message if present
         formatted = super().format(record)
         if hasattr(record, 'dirty') and record.dirty:
             formatted += " | DIRTY"
         return formatted
 
-# Setting up basic logging configuration
 LOG_FILENAME = os.path.join(BASE_PATH, "Logs.log")
 
-# Create custom handler with no-milliseconds formatter
 handler = RotatingFileHandler(LOG_FILENAME, maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
 formatter = NoMillisecondsFormatter(
     fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
@@ -137,21 +121,17 @@ class DirtyLogger(logging.Logger):
         if self.isEnabledFor(logging.CRITICAL):
             self._log(logging.CRITICAL, msg, args, dirty=dirty, **kwargs)
 
-# Import async logging system
 try:
     from logger import AsyncDirtyLogger, start_async_logging, set_logging_enabled, is_logging_enabled
     ASYNC_LOGGING_AVAILABLE = True
 except ImportError:
     ASYNC_LOGGING_AVAILABLE = False
 
-# Set the custom logger class globally
 if ASYNC_LOGGING_AVAILABLE:
     logging.setLoggerClass(AsyncDirtyLogger)
 else:
     logging.setLoggerClass(DirtyLogger)
 
-# Configure root logger AFTER setting the custom logger class
-# Clear any existing handlers first
 logging.getLogger().handlers.clear()
 logging.basicConfig(
     level=logging.DEBUG,
@@ -159,7 +139,6 @@ logging.basicConfig(
     force=True
 )
 
-# Create logger instance
 logger = logging.getLogger(__name__)
 
 def initialize_async_logging():
@@ -176,13 +155,11 @@ def initialize_async_logging():
 def detect_monitor_resolution():
     """Detect the actual resolution of the game monitor"""
     global MONITOR_WIDTH, MONITOR_HEIGHT, IS_NON_STANDARD_RATIO, EXPECTED_WIDTH, EXPECTED_HEIGHT
-    
-    # Use monitor 1 as default if shared_vars.game_monitor doesn't exist yet
+
     monitor_index = getattr(shared_vars, 'game_monitor', 1)
     
     try:
         monitors = get_sct().monitors
-        # Validate index
         if monitor_index >= len(monitors):
             logger.warning(f"Monitor index {monitor_index} invalid. Defaulting to primary.")
             monitor_index = 1
@@ -193,7 +170,6 @@ def detect_monitor_resolution():
         
         logger.info(f"Detected montior size: {MONITOR_WIDTH}x{MONITOR_HEIGHT}")
 
-        # Calculate aspect ratio
         aspect_ratio = MONITOR_WIDTH / MONITOR_HEIGHT
         IS_NON_STANDARD_RATIO = not(abs(aspect_ratio - REFERENCE_ASPECT_RATIO) < 0.0001)
 
@@ -209,7 +185,6 @@ def detect_monitor_resolution():
         return MONITOR_WIDTH, MONITOR_HEIGHT
     except Exception as e:
         logger.error(f"Error detecting monitor resolution: {e}")
-        # Safe fallbacks
         MONITOR_WIDTH = 1920
         MONITOR_HEIGHT = 1080
         EXPECTED_WIDTH = 1920
@@ -217,7 +192,6 @@ def detect_monitor_resolution():
         IS_NON_STANDARD_RATIO = False
         return 1920, 1080
 
-# Initialize monitor resolution at module load time
 detect_monitor_resolution()
 
 def random_choice(list):
@@ -299,37 +273,30 @@ def key_press(Key, presses=1):
 
 def capture_screen(monitor_index=None):
     """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""
-    # Use specified monitor or default game monitor
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
         
     monitor = get_sct().monitors[mon_idx]
-    
-    # Capture the screen with the current resolution
+
     screenshot = get_sct().grab(monitor)
     img = np.array(screenshot)
-    
-    # Convert the color from BGRA to BGR for OpenCV compatibility
+
     img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
     
     return img
 
 def save_match_screenshot(screenshot, top_left, bottom_right, template_path, match_index):
     """Saves a screenshot of the matched region, preserving directory structure in 'higher_res'."""
-    # Crop the matched region from the full screenshot
     match_region = screenshot[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]]
-    
-    # Create a modified output path in the 'higher_res' folder
+
     output_path = os.path.join(BASE_PATH, "higher_res", template_path)
     output_dir = os.path.dirname(output_path)
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Generate a unique filename for each match within the higher_res directory
-    output_path = os.path.splitext(output_path)[0]  # Remove original extension
-    output_path = f"{output_path}.png"  # Append match index
+
+    output_path = os.path.splitext(output_path)[0]  
+    output_path = f"{output_path}.png"  
     if os.path.exists(output_path):
         return
-    # Save the cropped region
     cv2.imwrite(output_path, match_region)
 
 def is_custom_1080p_image(template_path):
@@ -345,21 +312,18 @@ def get_template_reference_resolution(template_path):
     if is_custom_1080p_image(template_path):
         return REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P
     else:
-        # For non-1080p templates, use the 1440p template dimensions
         return REFERENCE_WIDTH_1440P, REFERENCE_HEIGHT_1440P
 
 def _extract_coordinates(filtered_boxes, area="center", crop_offset_x=0, crop_offset_y=0):
     """Extract coordinates from filtered boxes based on area preference"""
     found_elements = []
     for (x1, y1, x2, y2) in filtered_boxes:
-        # Adjust coordinates by crop offset to get full screen coordinates
         x1 += crop_offset_x
         y1 += crop_offset_y
         x2 += crop_offset_x
         y2 += crop_offset_y
         
         if area == "all":
-            # Return all coordinates: top, left, right, bottom, center
             top_x, top_y = (x1 + x2) // 2, y1
             left_x, left_y = x1, (y1 + y2) // 2
             right_x, right_y = x2, (y1 + y2) // 2
@@ -388,7 +352,7 @@ def _extract_coordinates(filtered_boxes, area="center", crop_offset_x=0, crop_of
             x = x2
             y = (y1 + y2) // 2
             found_elements.append((x, y))
-        else:  # center
+        else: 
             x = (x1 + x2) // 2
             y = (y1 + y2) // 2
             found_elements.append((x, y))
@@ -398,12 +362,10 @@ def _extract_coordinates(filtered_boxes, area="center", crop_offset_x=0, crop_of
 def _get_caller_info():
     """Get caller information (file and function name) for debugging"""
     try:
-        # Walk through the call stack to find the first frame not in common.py
         stack = inspect.stack()
         for frame_info in stack:
             filename = frame_info.filename
             if not filename.endswith('common.py'):
-                # Found the first non-common.py frame
                 module_name = os.path.splitext(os.path.basename(filename))[0]
                 function_name = frame_info.function
                 line_number = frame_info.lineno
@@ -420,26 +382,21 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     if screenshot is None:
         screenshot = capture_screen()
     original_screenshot_height, original_screenshot_width = screenshot.shape[:2]
-    
-    # Handle region cropping
+
     crop_offset_x = 0
     crop_offset_y = 0
     if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
-        # Ensure coordinates are within bounds
         x1 = max(0, min(x1, original_screenshot_width))
         y1 = max(0, min(y1, original_screenshot_height))
         x2 = max(x1, min(x2, original_screenshot_width))
         y2 = max(y1, min(y2, original_screenshot_height))
-        
-        # Crop screenshot to specified region
+
         screenshot = screenshot[y1:y2, x1:x2]
         crop_offset_x = x1
         crop_offset_y = y1
-    
-    # Use original dimensions for scale factor calculation, not cropped dimensions
+
     screenshot_height, screenshot_width = original_screenshot_height, original_screenshot_width
-    
-    # no_grayscale=True should completely prevent grayscale conversion
+
     if not no_grayscale and (grayscale or shared_vars.convert_images_to_grayscale):
         screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
     
@@ -448,14 +405,12 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     scale_factor_x = screenshot_width / base_width
     scale_factor_y = screenshot_height / base_height
     scale_factor = min(scale_factor_x, scale_factor_y)
-    
-    # no_grayscale=True should completely prevent grayscale conversion
+
     if no_grayscale:
         color_flag = cv2.IMREAD_COLOR
     else:
         color_flag = cv2.IMREAD_GRAYSCALE if (grayscale or shared_vars.convert_images_to_grayscale) else cv2.IMREAD_COLOR
-    
-    # Check cache
+
     cache_key = (full_template_path, color_flag)
     if cache_key in _template_cache:
         original_template = _template_cache[cache_key]
@@ -466,10 +421,8 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
                 return []
             raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
         _template_cache[cache_key] = original_template
-    
-    # Determine scales to test
+
     if enable_scaling:
-        # 0.80x to 1.20x in steps of 0.04
         scales_to_test = [x / 100.0 for x in range(80, 121, 4)]
     else:
         scales_to_test = [1.0]
@@ -480,20 +433,16 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     best_scale_found = 1.0
 
     for scale_adj in scales_to_test:
-        # Calculate effective scale
         if is_custom_fuse_image(full_template_path):
-            # Custom fuse images are not scaled by resolution, but apply multi-scale adjustment if requested
             effective_scale = scale_adj
         else:
             effective_scale = scale_factor * scale_adj
 
-        # Resize template
         if effective_scale != 1.0:
             curr_template = cv2.resize(original_template, None, fx=effective_scale, fy=effective_scale, interpolation=cv2.INTER_LINEAR)
         else:
             curr_template = original_template
 
-        # Ensure both screenshot and template have matching color formats
         if no_grayscale:
             if len(screenshot.shape) == 2: screenshot = cv2.cvtColor(screenshot, cv2.COLOR_GRAY2BGR)
             if len(curr_template.shape) == 2: curr_template = cv2.cvtColor(curr_template, cv2.COLOR_GRAY2BGR)
@@ -502,7 +451,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
                 if len(screenshot.shape) == 3: screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
                 if len(curr_template.shape) == 3: curr_template = cv2.cvtColor(curr_template, cv2.COLOR_BGR2GRAY)
 
-        # Check if template fits
         if curr_template.shape[0] > screenshot.shape[0] or curr_template.shape[1] > screenshot.shape[1]:
             continue
 
@@ -523,8 +471,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     
     if scale_factor < 0.75:
         threshold = threshold - 0.05
-    
-    # Apply threshold adjustment from user configuration
     total_adjustment = get_total_threshold_adjustment(template_path)
     threshold = threshold + total_adjustment
     
@@ -547,7 +493,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
             caller_info = _get_caller_info()
             highest_match_rate = result.max() if result.size > 0 else 0.0
             if len(filtered_boxes) > 0:
-                # Get center coordinates of matches for logging (adjusted for crop offset)
                 locations = []
                 for box in filtered_boxes:
                     center_x = int((box[0] + box[2]) / 2) + crop_offset_x
@@ -615,30 +560,27 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
 def get_total_threshold_adjustment(template_path):
     """Get combined threshold adjustment based on global, folder, and path-specific settings"""
     config = shared_vars.image_threshold_config
-    
-    # Get adjustments
+
     global_adj = config.get("global_adjustment", 0.0)
     folder_adj = get_folder_specific_adjustment(template_path)
     path_adj = get_path_specific_adjustment(template_path)
     apply_global_to_modified = config.get("apply_global_to_modified", True)
-    
-    # Logic for combining adjustments (folder + specific image adjustments are additive)
+
     total_specific_adj = folder_adj + path_adj
     
-    if total_specific_adj != 0.0:  # Any specific adjustment exists
+    if total_specific_adj != 0.0: 
         if apply_global_to_modified:
-            return global_adj + total_specific_adj  # Global + folder + image-specific
+            return global_adj + total_specific_adj 
         else:
-            return total_specific_adj  # Only folder + image-specific
-    else:  # No specific adjustments
-        return global_adj  # Only global applied
+            return total_specific_adj 
+    else: 
+        return global_adj 
 
 def get_folder_specific_adjustment(template_path):
     """Get adjustment for folder containing the image"""
     config = shared_vars.image_threshold_config
     folder_adjustments = config.get("folder_adjustments", {})
-    
-    # Extract folder path from template path
+
     folder_path = os.path.dirname(template_path)
     return folder_adjustments.get(folder_path, 0.0)
 
@@ -670,7 +612,7 @@ def debug_match_image(template_path, threshold=0.8, area="center", grayscale=Fal
 
 def proximity_check(list1, list2, threshold):
     """Check which coordinates in list1 are close to any in list2"""
-    close_pairs = set()  # To store pairs of coordinates that are close
+    close_pairs = set() 
     for coord1 in list1:
         for coord2 in list2:
             distance = np.sqrt((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2)
@@ -680,13 +622,13 @@ def proximity_check(list1, list2, threshold):
 
 def proximity_check_fuse(list1, list2, x_threshold ,threshold):
     """Check proximity with separate X and Y thresholds for fusion detection"""
-    close_pairs = set()  # To store pairs of coordinates meeting the criteria
+    close_pairs = set()
     for coord1 in list1:
         for coord2 in list2:
             x_difference = abs(coord1[0] - coord2[0])
-            if x_difference < x_threshold:  # Check if x values are the same
+            if x_difference < x_threshold: 
                 y_difference = abs(coord1[1] - coord2[1])
-                if y_difference < threshold:  # Check if y difference is within the threshold
+                if y_difference < threshold: 
                     close_pairs.add(coord1)
     return close_pairs
 
@@ -718,26 +660,20 @@ def enhanced_proximity_check(container_input, content_input,
         If return_bool=True: Boolean indicating if any content is found in expanded areas
         If return_bool=False: List of content coordinates that fall inside expanded areas
     """
-    # Handle container_input - get coordinates or bounding boxes
     if isinstance(container_input, str):
         if use_bounding_box:
-            # Get bounding boxes for expandable detection
             container_data = ifexist_match(container_input, threshold, area="all")
         else:
-            # Get coordinates for fixed area detection
             container_data = ifexist_match(container_input, threshold)
         if not container_data:
             return False if return_bool else []
     elif isinstance(container_input, list):
-        # Already processed data
         container_data = container_input
         if not container_data:
             return False if return_bool else []
     else:
-        # Invalid input type
         return False if return_bool else []
-        
-    # Handle content_input - convert to coordinates if it's an image path
+
     if isinstance(content_input, str):
         content_coords = ifexist_match(content_input, threshold)
         if not content_coords:
@@ -747,31 +683,26 @@ def enhanced_proximity_check(container_input, content_input,
         if not content_coords:
             return False if return_bool else []
     else:
-        # Invalid input type
         return False if return_bool else []
     
     matching_coords = []
-    
-    # Check each content coordinate against all container areas
+
     for content_x, content_y in content_coords:
         found_match = False
         
         for container_item in container_data:
             if use_bounding_box and isinstance(container_item, dict):
-                # Bounding box mode with expansion
                 base_x_min = container_item['left'][0]
                 base_x_max = container_item['right'][0]
                 base_y_min = container_item['top'][1]
                 base_y_max = container_item['bottom'][1]
-                
-                # Expand the bounding box
+
                 x_min = base_x_min - expand_left
                 x_max = base_x_max + expand_right
                 y_min = base_y_min - expand_above
                 y_max = base_y_max + expand_below
                 
             elif not use_bounding_box and isinstance(container_item, tuple):
-                # Fixed area mode around coordinates
                 center_x, center_y = container_item
                 x_min = center_x - expand_left
                 x_max = center_x + expand_right
@@ -779,16 +710,13 @@ def enhanced_proximity_check(container_input, content_input,
                 y_max = center_y + expand_below
                 
             else:
-                # Skip incompatible data
                 continue
-                
-            # Check if content coordinate falls within the expanded area
+
             if (x_min <= content_x <= x_max and y_min <= content_y <= y_max):
                 matching_coords.append((content_x, content_y))
                 found_match = True
-                break  # Found inside one area, no need to check others for this coordinate
-        
-        # For boolean mode, return True immediately on first match
+                break  
+
         if return_bool and found_match:
             return True
                 
@@ -805,48 +733,36 @@ def non_max_suppression_fast(boxes, overlapThresh=0.5):
     if len(boxes) == 0:
         return []
 
-    # Convert to float if necessary
     if boxes.dtype.kind == "i":
         boxes = boxes.astype("float")
 
-    # Initialize the list of picked indexes
     pick = []
 
-    # Get coordinates of bounding boxes
     x1 = boxes[:, 0]
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
 
-    # Compute the area of the bounding boxes and sort by the bottom-right y-coordinate
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
     idxs = np.argsort(y2)
 
-    # Keep looping while some indexes still remain in the indexes list
     while len(idxs) > 0:
-        # Grab the last index in the indexes list, add the index value to the list of picked indexes
         last = len(idxs) - 1
         i = idxs[last]
         pick.append(i)
 
-        # Find the largest (x, y) coordinates for the start of the bounding box
-        # and the smallest (x, y) coordinates for the end of the bounding box
         xx1 = np.maximum(x1[i], x1[idxs[:last]])
         yy1 = np.maximum(y1[i], y1[idxs[:last]])
         xx2 = np.minimum(x2[i], x2[idxs[:last]])
         yy2 = np.minimum(y2[i], y2[idxs[:last]])
 
-        # Compute the width and height of the bounding box
         w = np.maximum(0, xx2 - xx1 + 1)
         h = np.maximum(0, yy2 - yy1 + 1)
 
-        # Compute the ratio of overlap
         overlap = (w * h) / area[idxs[:last]]
 
-        # Delete all indexes from the index list that have an overlap greater than the threshold
         idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap > overlapThresh)[0])))
 
-    # Return only the bounding boxes that were picked
     return boxes[pick].astype("int")
 
 def get_aspect_ratio(monitor_index=None):
@@ -867,18 +783,15 @@ def _uniform_scale_coordinates(x, y, reference_width, reference_height, use_unif
     """Internal function that does all coordinate scaling work"""
     scale_factor_x = MONITOR_WIDTH / reference_width
     scale_factor_y = MONITOR_HEIGHT / reference_height
-    
-    # Get offsets from shared_vars with fallback to 0
+
     x_offset = shared_vars.x_offset
     y_offset = shared_vars.y_offset
     
     if use_uniform:
-        # Use minimum scale factor to maintain aspect ratio (true uniform scaling)
         scale_factor = min(scale_factor_x, scale_factor_y)
         scaled_x = round(x * scale_factor) + x_offset
         scaled_y = round(y * scale_factor) + y_offset
     else:
-        # Use individual scale factors (stretches to fill screen)
         scaled_x = round(x * scale_factor_x) + x_offset
         scaled_y = round(y * scale_factor_y) + y_offset
     
@@ -971,13 +884,11 @@ def click_skip(times):
 def wait_skip(img_path, threshold=0.8):
     """Clicks on the skip button and waits for specified element to appear"""
     mouse_move_click(*scale_coordinates_1080p(895, 465))
-    
-    # Check first to avoid unnecessary clicks if already there
+
     if element_exist(img_path, threshold):
         click_matching(img_path, threshold)
         return
 
-    # Aggressive clicking loop: click multiple times per check to ensure input is registered
     while not element_exist(img_path, threshold):
         mouse_click()
         mouse_click()
@@ -986,30 +897,25 @@ def wait_skip(img_path, threshold=0.8):
 
 def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False):
     """Find and click on image match. Returns True if clicked, False if not found."""
-    
-    # If quiet_failure is True and recursive is True, check if file exists to avoid infinite loop
+
     if quiet_failure and recursive:
         full_path = resource_path(image_path)
         if not os.path.exists(full_path):
             return False
 
-    # Iterative implementation to avoid recursion depth issues and improve performance
     while True:
         found = ifexist_match(image_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, x1, y1, x2, y2, screenshot, quiet_failure=quiet_failure)
         if found:
             x, y = found[0]
             mouse_move_click(x, y, log_click=False)
-            # Handle both multiprocessing.Value and plain float
             delay = shared_vars.click_delay.value if hasattr(shared_vars.click_delay, 'value') else shared_vars.click_delay
             time.sleep(delay)
             return True
         
         if not recursive:
             return False
-            
-        # If recursive, loop again with fresh screenshot
+
         screenshot = None
-        # Minimal sleep to yield CPU but stay responsive
         time.sleep(0.05)
     
 def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
@@ -1024,11 +930,9 @@ def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, gra
 
 def squad_order(status):
     """Returns a list of the image locations depending on the sinner order specified in the json file"""
-    # Use cached config instead of file I/O
     squads = shared_vars.ConfigCache.get_config("squad_order")
     squad = squads.get(status, {})
-    
-    # Calculate scaled character positions directly
+
     character_positions = {
         "yisang": (580, 500),
         "faust": (847, 500),
@@ -1044,7 +948,6 @@ def squad_order(status):
         "gregor": (1913, 900)
     }
     
-    # Create reverse lookup for O(n) performance
     position_to_char = {pos: name for name, pos in squad.items()}
     
     sinner_order = []
@@ -1069,7 +972,7 @@ def error_screenshot():
     """Take a screenshot for error debugging"""
     error_dir = os.path.join(BASE_PATH, "error")
     os.makedirs(error_dir, exist_ok=True)
-    monitor = get_sct().monitors[shared_vars.game_monitor]  # Use the configured game monitor
+    monitor = get_sct().monitors[shared_vars.game_monitor]  
     screenshot = get_sct().grab(monitor)
     png = to_png(screenshot.rgb, screenshot.size)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -1083,8 +986,7 @@ def set_game_monitor(monitor_index):
         shared_vars.game_monitor = 1
     else:
         shared_vars.game_monitor = monitor_index
-    
-    # Re-detect monitor resolution after changing monitor
+
     detect_monitor_resolution()
     return shared_vars.game_monitor
 
@@ -1092,7 +994,7 @@ def list_available_monitors():
     """List all available monitors and their properties"""
     monitors = []
     for i, monitor in enumerate(get_sct().monitors):
-        if i == 0:  # Skip the "all monitors" entry
+        if i == 0:  
             continue
         monitors.append({
             "index": i,

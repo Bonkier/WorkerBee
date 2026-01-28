@@ -13,28 +13,25 @@ import threading
 import fnmatch
 from datetime import datetime
 
-# Configure log
 logger = logging.getLogger("updater")
 
-# Define exclusions
 EXCLUDED_PATHS = [
-    "backups/",    # Backup directory
-    "temp/",      # Temporary files
-    "*.log",       # Any log files
-    "profiles/",   # User profiles
-    "*.exe",       # Executables
-    "*.lnk",       # Shortcuts
-    "*.url",       # Web shortcuts
-    "bootstrapper.py", # Setup script
-    "setup.vbs",   # Setup script VBS
-    "update.zip",  # Update package
-    "staged_updater", # Staged updater directory
-    "pictures/CustomFuse/CustomEgoGifts/", # User custom images
-    "config/stats.json", # User statistics
-    "config/schedule.json" # User schedule
+    "backups/",    
+    "temp/",      
+    "*.log",       
+    "profiles/",   
+    "*.exe",       
+    "*.lnk",       
+    "*.url",       
+    "bootstrapper.py", 
+    "setup.vbs",   
+    "update.zip",  
+    "staged_updater", 
+    "pictures/CustomFuse/CustomEgoGifts/", 
+    "config/stats.json", 
+    "config/schedule.json"
 ]
 
-# Config files that need smart merging (user settings preserved + new defaults added)
 CONFIG_MERGE_FILES = [
     "config/gui_config.json",
     "config/pack_priority.json",
@@ -63,47 +60,34 @@ class Updater:
         self.temp_folder = temp_folder
         self.exclusions = EXCLUDED_PATHS
         self.pre_exit_callback = pre_exit_callback
-        
-        # Default GitHub API URL fallback
+
         if api_url is None:
             self.api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
         else:
             self.api_url = api_url
-            
-        # Determine base path and set up correct directory structure
+
         if getattr(sys, 'frozen', False):
-            # Running as compiled exe
             self.base_path = os.path.dirname(sys.executable)
         else:
-            # Running as script
             script_path = os.path.abspath(__file__)
             self.base_path = os.path.dirname(script_path)
-        
-        # Determine parent directories structure
+
         if os.path.basename(self.base_path) == "src":
-            # We're in src folder inside all data
-            # src > all data > parent_dir
             self.all_data_dir = os.path.dirname(self.base_path)
             self.parent_dir = os.path.dirname(self.all_data_dir)
         elif os.path.basename(self.base_path) == "all data":
-            # We're directly in all_data
             self.all_data_dir = self.base_path
             self.parent_dir = os.path.dirname(self.all_data_dir)
         else:
-            # We're in some other location, assume it's the parent directory
             self.parent_dir = self.base_path
             self.all_data_dir = os.path.join(self.parent_dir, "all data")
-        
-        # Create full paths
+
         self.version_file_path = os.path.join(self.all_data_dir, current_version_file)
-        
-        # Put backup folder in parent directory (same level as 'all data')
+
         self.backup_path = os.path.join(self.parent_dir, backup_folder)
-        
-        # Temp directory in parent directory (same level as 'all data')
+
         self.temp_path = os.path.join(self.parent_dir, temp_folder)
-        
-        # Ensure directories exist
+
         os.makedirs(self.backup_path, exist_ok=True)
         os.makedirs(self.temp_path, exist_ok=True)
     
@@ -123,7 +107,7 @@ class Updater:
                     logger.error(f"RETRY FAILED: Unable to {operation_desc} after {max_retries} attempts. Final error: {error_type}: {e}")
                     raise
                 else:
-                    wait_time = delay * (2 ** attempt)  # Exponential backoff
+                    wait_time = delay * (2 ** attempt) 
                     logger.warning(f"RETRY {attempt + 1}/{max_retries}: {error_type} while trying to {operation_desc}: {e}")
                     logger.info(f"Waiting {wait_time:.1f}s before retry...")
                     time.sleep(wait_time)
@@ -135,28 +119,23 @@ class Updater:
                 with open(self.version_file_path, 'r') as f:
                     version = f.read().strip()
                     return version if version else 'v0'
-            return 'v0'  # Default version if file doesn't exist
+            return 'v0'  
         except Exception as e:
             logger.error(f"Error reading version file: {e}")
             return 'v0'
             
     def get_latest_version(self):
-        # Initialize candidates
         ver_json_info = None
         release_info = None
-        
-        # 1. Check version.json in the repository (Main Branch)
+
         try:
-            # Add timestamp to prevent caching
             version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
-            
-            # Add User-Agent to prevent 403 Forbidden from GitHub
+
             req = urllib.request.Request(version_file_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req) as response:
                 if response.getcode() == 200:
                     repo_version = response.read().decode().strip()
                     if repo_version:
-                        # Try to get the specific commit hash to bypass zipball caching
                         try:
                             commits_url = f"{self.api_url}/commits/main"
                             req_commit = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
@@ -172,21 +151,17 @@ class Updater:
         except Exception as e:
             logger.warning(f"Could not read version.json from repository: {e}")
 
-        # 2. Check Releases
         try:
             release_url = f"{self.api_url}/releases/latest"
-            
-            # Add User-Agent to prevent 403 Forbidden from GitHub API
+
             req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req) as response:
                 if response.getcode() == 200:
                     release_data = json.loads(response.read().decode())
                     release_info = (release_data['tag_name'], release_data['zipball_url'])
         except Exception as e:
-            # If no releases found (404), ignore
             pass
-            
-        # Compare and return the best one
+
         if ver_json_info and release_info:
             v_json = self.parse_version(ver_json_info[0])
             v_rel = self.parse_version(release_info[0])
@@ -199,15 +174,13 @@ class Updater:
             return ver_json_info
         elif release_info:
             return release_info
-                    
-        # 3. Final fallback to latest commit on main branch
+
         try:
             commits_url = f"{self.api_url}/commits/main"
             req = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req) as response:
                 commit_data = json.loads(response.read().decode())
                 commit_hash = commit_data['sha']
-                # Generate a version number based on the commit date
                 commit_date = commit_data['commit']['committer']['date'].split('T')[0].replace('-', '.')
                 download_url = f"{self.api_url}/zipball/{commit_hash}"
                 return f"commit-{commit_date}", download_url
@@ -217,21 +190,17 @@ class Updater:
     
     def parse_version(self, version_str):
         """Parse version string into a comparable tuple"""
-        # Remove 'v' prefix if present
         clean_ver = version_str.lower().strip()
         if clean_ver.startswith('v'):
             clean_ver = clean_ver[1:]
-            
-        # Handle commit-date style versions
+
         if clean_ver.startswith('commit-'):
             return (0, 0, 0) 
-            
-        # Split by dots
+
         parts = clean_ver.split('.')
         parsed_parts = []
         
         for p in parts:
-            # Extract numbers from start of string (e.g. '4-beta' -> 4)
             num_str = ""
             for char in p:
                 if char.isdigit():
@@ -249,20 +218,16 @@ class Updater:
         if latest_version is None:
             logger.warning("Failed to retrieve latest version information")
             return False, None, None
-        
-        # Clean up versions for comparison (remove any whitespace)
+
         current_clean = current_version.strip() if current_version else ""
         latest_clean = latest_version.strip() if latest_version else ""
-        
-        # Debug logging
+
         logger.info(f"Checking for updates... Local: '{current_clean}', Remote: '{latest_clean}'")
-            
-        # Semantic version comparison
+
         curr_tuple = self.parse_version(current_clean)
         lat_tuple = self.parse_version(latest_clean)
         logger.debug(f"Comparing versions: Local {curr_tuple} vs Remote {lat_tuple}")
-        
-        # Check if we need to update (Remote > Local)
+
         if lat_tuple > curr_tuple:
             logger.info(f"Update available: {current_clean} -> {latest_clean}")
             return True, latest_clean, download_url
@@ -274,12 +239,8 @@ class Updater:
             return False, latest_clean, None
 
     def should_exclude(self, file_path, dest_file_path=None):
-        # Convert to Unix-style path for consistent matching
         normalized_path = file_path.replace("\\", "/")
-        
-        # Config files are now handled by config merging system, no special exclusion needed
-            
-        # Explicitly exclude backup and temp folders
+
         if normalized_path.startswith(f"{self.backup_folder}/") or normalized_path == self.backup_folder:
             return True
             
@@ -287,24 +248,19 @@ class Updater:
             return True
         
         for pattern in self.exclusions:
-            # Exact match
             if normalized_path == pattern:
                 return True
-                
-            # Directory match (ends with /)
+
             if pattern.endswith("/") and normalized_path.startswith(pattern):
                 return True
-                
-            # Wildcard match (using glob patterns)
+
             if "*" in pattern and fnmatch.fnmatch(normalized_path, pattern):
                 return True
         
         return False
     
     def download_update(self, download_url):
-        # Clear temp directory if it exists (but don't recreate it)
         try:
-            # Just clear contents of temp directory without removing it
             for item in os.listdir(self.temp_path):
                 item_path = os.path.join(self.temp_path, item)
                 if os.path.isdir(item_path):
@@ -316,14 +272,11 @@ class Updater:
             logger.warning(f"Error clearing temp directory: {e}")
         
         try:
-            # Ensure temp directory exists
             os.makedirs(self.temp_path, exist_ok=True)
-            
-            # Download the zip file
+
             zip_path = os.path.join(self.temp_path, 'update.zip')
             logger.info(f"Downloading update from {download_url}")
-            
-            # Add User-Agent here too
+
             req = urllib.request.Request(download_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
                 shutil.copyfileobj(response, out_file)
@@ -335,20 +288,17 @@ class Updater:
             return None
     
     def modify_backup_config(self, backup_dir):
-        # Possible locations for gui_config.json in the backup
         possible_config_paths = [
             os.path.join(backup_dir, "all data", "config", "gui_config.json"),
             os.path.join(backup_dir, "config", "gui_config.json"),
         ]
-        
-        # Search for gui_config.json in the backup directory if not found in expected locations
+
         config_path = None
         for path in possible_config_paths:
             if os.path.exists(path):
                 config_path = path
                 break
-        
-        # If not found in expected locations, search the entire backup directory
+
         if not config_path:
             for root, dirs, files in os.walk(backup_dir):
                 if "gui_config.json" in files:
@@ -361,28 +311,22 @@ class Updater:
         
         try:
             logger.info(f"Modifying backup config at: {config_path}")
-            
-            # Load the backup's config file (NOT the current one!)
+
             config_data = {}
             with open(config_path, 'r') as f:
                 config_data = json.load(f)
-            
-            # Ensure Settings section exists
+
             if 'Settings' not in config_data:
                 config_data['Settings'] = {}
-            
-            # Get current values for logging
+
             old_auto_update = config_data['Settings'].get('auto_update', 'Unknown')
             old_notifications = config_data['Settings'].get('update_notifications', 'Unknown')
-            
-            # Disable auto-update and notifications in the BACKUP ONLY
+
             config_data['Settings']['auto_update'] = False
             config_data['Settings']['update_notifications'] = False
-            
-            # Add a note to indicate this is a backup (optional)
+
             config_data['Settings']['_backup_version'] = True
-            
-            # Write the modified config back to the BACKUP location only
+
             with open(config_path, 'w') as configfile:
                 json.dump(config_data, configfile, indent=2)
             
@@ -406,37 +350,29 @@ class Updater:
         logger.info(f"Creating backup at {backup_dir}")
         
         try:
-            # Make sure backup directory exists
             try:
-                # Create parent directory first, then the specific backup directory
                 os.makedirs(self.backup_path, exist_ok=True)
                 os.makedirs(backup_dir, exist_ok=True)
             except Exception as e:
                 logger.error(f"Failed to create backup directory at {backup_dir}: {e}")
                 return None
-            
-            # We want to back up the parent directory that contains 'all data'
+
             source_dir = self.parent_dir
             logger.info(f"Backing up contents from {source_dir}")
-            
-            # Count files for logging
+
             file_count = 0
             dir_count = 0
-            
-            # Copy all files and directories from parent_dir to backup_dir
-            # excluding the backup, _temp, and extracted folders
+
             for item in os.listdir(source_dir):
                 item_path = os.path.join(source_dir, item)
                 backup_item_path = os.path.join(backup_dir, item)
-                
-                # Skip backup, _temp, and extracted folders
+
                 if item == self.backup_folder or item == self.temp_folder or item == "extracted":
                     logger.info(f"Skipping {item} folder from backup")
                     continue
                 
                 try:
                     if os.path.isdir(item_path):
-                        # For directories, use copytree with ignore function
                         def ignore_func(src, names):
                             return [n for n in names if 
                                     n == self.backup_folder or 
@@ -449,7 +385,6 @@ class Updater:
                         dir_count += 1
                         logger.info(f"Backed up directory: {item}")
                     else:
-                        # Skip log files
                         if item.endswith('.log'):
                             logger.info(f"Skipping log file: {item}")
                             continue
@@ -459,12 +394,9 @@ class Updater:
                         logger.info(f"Backed up file: {item}")
                 except Exception as e:
                     logger.error(f"Failed to backup {item}: {e}")
-                    # Continue with other files instead of failing completely
             
             logger.info(f"Backup completed successfully: {file_count} files and {dir_count} directories")
-            
-            # IMPORTANT: Now modify the backup's config to prevent update loops
-            # This ONLY affects the backup, NOT the current config!
+
             logger.info("Modifying backup config to prevent update loops...")
             self.modify_backup_config(backup_dir)
             
@@ -474,7 +406,6 @@ class Updater:
             return None
     
     def apply_update(self, zip_path):
-        # Check if this is a staged self-update
         if self._is_staged_update():
             return self._perform_staged_update()
             
@@ -483,20 +414,15 @@ class Updater:
             return False
             
         try:
-            # Extract the zip file directly to _temp directory
-            # We'll use the _temp directory directly instead of creating a new "extracted" folder
             logger.info(f"Extracting update to {self.temp_path}")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.temp_path)
-                
-            # Find the directory that contains 'all data'
+
             repo_dir = None
-            
-            # Check if temp_path directly contains 'all data'
+
             if "all data" in os.listdir(self.temp_path) and os.path.isdir(os.path.join(self.temp_path, "all data")):
                 repo_dir = self.temp_path
             else:
-                # Check subdirectories (standard GitHub zip structure)
                 subdirs = [d for d in os.listdir(self.temp_path) if os.path.isdir(os.path.join(self.temp_path, d)) and d != "extracted"]
                 for d in subdirs:
                     if "all data" in os.listdir(os.path.join(self.temp_path, d)):
@@ -508,9 +434,7 @@ class Updater:
                 return False
             
             logger.info(f"Found repository directory: {repo_dir}")
-            
-            # Verify the version inside the downloaded zip to prevent update loops
-            # This handles cases where GitHub raw file is updated but zipball cache is stale
+
             new_version_path = os.path.join(repo_dir, "all data", "version.json")
             if os.path.exists(new_version_path):
                 try:
@@ -518,34 +442,25 @@ class Updater:
                         new_version = f.read().strip()
                     
                     current_version = self.get_current_version()
-                    
-                    # Parse versions
+
                     new_ver_tuple = self.parse_version(new_version)
                     curr_ver_tuple = self.parse_version(current_version)
-                    
-                    # If new version is not greater than current, abort
+
                     if new_ver_tuple <= curr_ver_tuple:
                         logger.warning(f"Downloaded update version ({new_version}) is not newer than current version ({current_version}). Aborting update to prevent loop.")
                         return False
                 except Exception as e:
                     logger.warning(f"Failed to verify version in update package: {e}")
 
-            # Always use batch updater for reliability on Windows
-            # This handles file locking and process termination better than Python
             if platform.system() == "Windows":
                 return self._run_batch_update(repo_dir)
-            
-            # Handle config merging BEFORE copying files
+
             temp_config_backup = self.handle_config_merging(repo_dir)
             
-            # Now copy files to the PARENT directory, NOT just all_data
-            # This is the key change - we're updating the parent directory structure
             self._copy_directory_with_exclusions(repo_dir, self.parent_dir)
-            
-            # Handle deleted files in the parent directory
+
             self._handle_deleted_files(repo_dir)
             
-            # Merge user settings back into newly installed configs
             if temp_config_backup:
                 self.merge_configs_from_temp(temp_config_backup)
             
@@ -556,58 +471,45 @@ class Updater:
             return False
     
     def _copy_directory_with_exclusions(self, src_dir, dest_dir):
-        # Create the destination directory if it doesn't exist
         os.makedirs(dest_dir, exist_ok=True)
         
         file_count = 0
         dir_count = 0
-        
-        # Walk through the source directory
+
         for root, dirs, files in os.walk(src_dir):
-            # Calculate the relative path from the source directory
             rel_path = os.path.relpath(root, src_dir)
-            
-            # Skip excluded directories
+
             if rel_path != "." and self.should_exclude(rel_path.replace("\\", "/")):
                 logger.info(f"Skipping excluded directory: {rel_path}")
-                
-                # Remove from dirs to prevent descending into it
+
                 for excluded_dir in list(dirs):
                     if self.should_exclude(os.path.join(rel_path, excluded_dir).replace("\\", "/")):
                         dirs.remove(excluded_dir)
                 continue
-                
-            # Process files
+
             for file in files:
-                # Get the path relative to the repository root
                 if rel_path == ".":
                     file_rel_path = file
                 else:
                     file_rel_path = os.path.join(rel_path, file).replace("\\", "/")
-                
-                # Copy the file
+
                 src_file = os.path.join(root, file)
                 dest_file = os.path.join(dest_dir, rel_path, file)
-                
-                # Skip if this file should be excluded
+
                 if self.should_exclude(file_rel_path, dest_file):
                     logger.info(f"Skipping excluded file: {file_rel_path}")
                     continue
-                
-                # Create parent directories if needed
+
                 os.makedirs(os.path.dirname(dest_file), exist_ok=True)
                 
                 try:
-                    # Skip self - don't update our own script if running from the directory being updated
                     if os.path.samefile(src_file, __file__) if os.path.exists(dest_file) else False:
                         logger.info(f"Skipping update to self: {file_rel_path}")
                         continue
-                        
-                    # Remove existing file if any with retry logic
+
                     if os.path.exists(dest_file):
                         self._retry_file_operation(lambda: os.remove(dest_file), f"remove {dest_file}")
-                    
-                    # Copy the file with retry logic
+
                     self._retry_file_operation(lambda: shutil.copy2(src_file, dest_file), f"copy {src_file} to {dest_file}")
                     file_count += 1
                     logger.debug(f"Updated file: {file_rel_path}")
@@ -617,68 +519,53 @@ class Updater:
         logger.info(f"Update copied {file_count} files")
     
     def _handle_deleted_files(self, extracted_repo_dir):
-        # Get list of all files in the extracted repository (excluding excluded paths)
         repo_files = set()
         for root, dirs, files in os.walk(extracted_repo_dir):
-            # Skip excluded directories to prevent descending into them
             dirs_to_remove = []
             for d in dirs:
                 rel_path = os.path.relpath(os.path.join(root, d), extracted_repo_dir).replace("\\", "/")
                 if self.should_exclude(rel_path):
                     dirs_to_remove.append(d)
-            
-            # Remove excluded directories from the dirs list
+
             for d in dirs_to_remove:
                 dirs.remove(d)
                 
             for file in files:
-                # Get path relative to repo root
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, extracted_repo_dir)
-                
-                # Normalize path
+
                 normalized_path = rel_path.replace("\\", "/")
-                
-                # Skip excluded paths
+
                 if not self.should_exclude(normalized_path):
                     repo_files.add(normalized_path)
         
-        # Get list of all files in the parent directory
         app_files = set()
         for root, dirs, files in os.walk(self.parent_dir):
-            # Skip excluded directories
             rel_root = os.path.relpath(root, self.parent_dir).replace("\\", "/")
             if self.should_exclude(rel_root):
-                # Skip this directory
-                dirs[:] = []  # Clear dirs list to prevent descending
+
+                dirs[:] = []
                 continue
                 
             for file in files:
-                # Get path relative to app root
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, self.parent_dir)
-                
-                # Normalize path
+
                 normalized_path = rel_path.replace("\\", "/")
-                
-                # Skip excluded paths
+
                 if not self.should_exclude(normalized_path):
                     app_files.add(normalized_path)
-        
-        # Find files that exist in app but not in repo
+
         deleted_files = app_files - repo_files
-        
-        # Remove these files (but never touch excluded paths)
+
         deleted_count = 0
         for file_path in deleted_files:
-            # Check exclusions one more time for safety
             if self.should_exclude(file_path):
                 logger.info(f"Protected excluded file from deletion: {file_path}")
                 continue
                 
             full_path = os.path.join(self.parent_dir, file_path)
             try:
-                # Skip self - don't delete our own script
                 if os.path.samefile(full_path, __file__) if os.path.exists(full_path) else False:
                     logger.info(f"Skipping deletion of self: {file_path}")
                     continue
@@ -690,10 +577,8 @@ class Updater:
                 logger.error(f"Failed to remove deleted file {file_path}: {e}")
         
         logger.info(f"Removed {deleted_count} deleted files")
-        
-        # Also remove empty directories (but never excluded ones)
+
         for root, dirs, files in os.walk(self.parent_dir, topdown=False):
-            # Skip excluded directories completely
             rel_path = os.path.relpath(root, self.parent_dir).replace("\\", "/")
             if self.should_exclude(rel_path):
                 continue
@@ -701,18 +586,15 @@ class Updater:
             for dir_name in dirs:
                 dir_path = os.path.join(root, dir_name)
                 rel_dir_path = os.path.relpath(dir_path, self.parent_dir).replace("\\", "/")
-                
-                # Skip excluded directories
+
                 if self.should_exclude(rel_dir_path):
                     continue
-                    
-                # Try to remove if empty
+
                 try:
                     if not os.listdir(dir_path):
-                        os.rmdir(dir_path)  # This only removes if directory is empty
+                        os.rmdir(dir_path)
                         logger.info(f"Removed empty directory: {rel_dir_path}")
                 except OSError as e:
-                    # Directory not empty or other error
                     logger.debug(f"Could not remove directory {rel_dir_path}: {e}")
     
     def handle_config_merging(self, repo_dir):
@@ -724,13 +606,11 @@ class Updater:
         4. Auto-cleanup temp configs
         """
         logger.info("Starting config merging process")
-        
-        # Create temp config backup directory
+
         temp_config_backup = os.path.join(self.temp_path, "config_backup")
         os.makedirs(temp_config_backup, exist_ok=True)
         
         try:
-            # Step 1: Backup existing user configs to temp
             config_dir = os.path.join(self.all_data_dir, "config")
             if os.path.exists(config_dir):
                 for config_file in CONFIG_MERGE_FILES:
@@ -741,11 +621,9 @@ class Updater:
                     if os.path.exists(user_config_path):
                         shutil.copy2(user_config_path, backup_config_path)
                         logger.info(f"Backed up user config: {config_filename}")
-            
-            # Step 2: Allow new configs to be installed (handled by normal copy process)
+
             logger.info("User configs backed up to temp, allowing new configs to install")
             
-            # Return temp backup path for later merging
             return temp_config_backup
             
         except Exception as e:
@@ -770,11 +648,9 @@ class Updater:
                     self._merge_single_config(user_backup_path, current_config_path)
                     logger.info(f"Merged config: {config_filename}")
                 elif os.path.exists(user_backup_path):
-                    # New config doesn't exist, keep user config
                     shutil.copy2(user_backup_path, current_config_path)
                     logger.info(f"Restored user config (no new version): {config_filename}")
-            
-            # Step 3: Auto-cleanup temp configs
+
             shutil.rmtree(temp_config_backup, ignore_errors=True)
             logger.info("Config merging completed, temp files cleaned up")
             
@@ -786,7 +662,6 @@ class Updater:
         Merge a single config file: user values take priority, new keys get added
         """
         try:
-            # Load user config (backup)
             with open(user_config_path, 'r') as f:
                 user_config = json.load(f)
         except:
@@ -794,19 +669,15 @@ class Updater:
             return
         
         try:
-            # Load new default config
             with open(new_config_path, 'r') as f:
                 new_config = json.load(f)
         except:
             logger.warning(f"Failed to load new config: {new_config_path}")
-            # Keep user config if new config is invalid
             shutil.copy2(user_config_path, new_config_path)
             return
-        
-        # Deep merge: user values override defaults, new keys from defaults are added
+
         merged_config = self._deep_merge_configs(new_config, user_config)
-        
-        # Save merged config
+
         with open(new_config_path, 'w') as f:
             json.dump(merged_config, f, indent=2)
         
@@ -820,14 +691,11 @@ class Updater:
             result = default_config.copy()
             for key, value in user_config.items():
                 if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                    # Recursively merge nested dictionaries
                     result[key] = self._deep_merge_configs(result[key], value)
                 else:
-                    # User value takes precedence
                     result[key] = value
             return result
         else:
-            # Non-dict values: user takes precedence
             return user_config if user_config is not None else default_config
 
     def update_version_file(self, version):
@@ -844,7 +712,6 @@ class Updater:
     def clean_temp_files(self):
         if os.path.exists(self.temp_path):
             try:
-                # Instead of removing the directory, just clean its contents
                 for item in os.listdir(self.temp_path):
                     item_path = os.path.join(self.temp_path, item)
                     if os.path.isdir(item_path):
@@ -858,26 +725,19 @@ class Updater:
     def restart_application(self):
         try:
             logger.info("Restarting application")
-            
-            # Create temp directory if it doesn't exist
+
             os.makedirs(self.temp_path, exist_ok=True)
-            
-            # Get the command to restart
+
             if getattr(sys, 'frozen', False):
-                # If running as exe, use the executable path (restart the same exe)
                 cmd = [sys.executable]
             else:
-                # If running as script, use the Python interpreter
                 gui_launcher_path = os.path.join(self.all_data_dir, "gui_launcher.py")
                 cmd = [sys.executable, gui_launcher_path]
-            
-            # Add updated flag to notify the new instance
+
             cmd.append("--updated")
-            
-            # Create a restart helper script
+
             restart_script_path = os.path.join(self.temp_path, "restart.py")
             restart_log_path = os.path.join(self.temp_path, "restart.log")
-            # Escape backslashes for python string
             restart_log_path_esc = restart_log_path.replace('\\', '\\\\')
             
             with open(restart_script_path, "w") as f:
@@ -911,20 +771,16 @@ except Exception as e:
     print(f"Error launching application: {{e}}")
 """)
             
-            # Launch the restart script
             if platform.system() == "Windows":
-                # Use CREATE_NO_WINDOW (0x08000000) to ensure it survives parent console closure
                 subprocess.Popen([sys.executable, restart_script_path], 
                               creationflags=0x08000000, close_fds=True)
             else:
-                # Use subprocess.DEVNULL to detach on Unix
                 subprocess.Popen([sys.executable, restart_script_path], 
                              stdout=subprocess.DEVNULL, 
                              stderr=subprocess.DEVNULL, 
                              stdin=subprocess.DEVNULL,
                              start_new_session=True)
-            
-            # Return True to allow callback to handle exit
+
             logger.info("Restart script launched")
             return True
             
@@ -937,18 +793,15 @@ except Exception as e:
         try:
             if not os.path.exists(self.backup_path):
                 return
-            
-            # Get all backup directories
+
             backup_dirs = []
             for item in os.listdir(self.backup_path):
                 item_path = os.path.join(self.backup_path, item)
                 if os.path.isdir(item_path) and item.startswith("backup_"):
                     backup_dirs.append(item_path)
-            
-            # Sort by modification time (newest first)
+
             backup_dirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-            
-            # Remove old backups beyond keep_count
+
             for old_backup in backup_dirs[keep_count:]:
                 try:
                     shutil.rmtree(old_backup)
@@ -963,7 +816,6 @@ except Exception as e:
             logger.error(f"Error cleaning up old backups: {e}")
     
     def perform_update(self, create_backup=True, auto_restart=True, preserve_only_last_3=True):
-        # Only create backup if requested
         backup_path = None
         if create_backup:
             backup_path = self.backup_current_version()
@@ -971,13 +823,11 @@ except Exception as e:
                 return False, "Failed to create safety backup"
         else:
             logger.info("Skipping backup creation as requested")
-            
-        # Check for updates
+
         update_available, latest_version, download_url = self.check_for_updates()
         
         if not update_available or download_url is None:
             logger.info("No updates available or failed to get update information")
-            # Clean up backup if not requested
             if not create_backup and backup_path and os.path.exists(backup_path):
                 try:
                     shutil.rmtree(backup_path)
@@ -985,35 +835,28 @@ except Exception as e:
                 except:
                     pass
             return False, "No updates available"
-        
-        # Download the update
+
         zip_path = self.download_update(download_url)
         if not zip_path:
             return False, "Failed to download update"
-        
-        # Apply the update
+
         if not self.apply_update(zip_path):
             return False, "Failed to apply update"
-        
-        # Update the version file
+
         self.update_version_file(latest_version)
-        
-        # Clean up backup if not requested (but we made one for safety)
+
         if not create_backup and backup_path and os.path.exists(backup_path):
             try:
                 shutil.rmtree(backup_path)
                 logger.info("Cleaned up unwanted backup after successful update")
             except:
                 pass
-        
-        # Preserve only last 3 backups if requested
+
         if create_backup and preserve_only_last_3:
             self.cleanup_old_backups(keep_count=3)
-                
-        # Clean up
+
         self.clean_temp_files()
         
-        # Restart if requested
         if auto_restart:
             self.restart_application()
         
@@ -1033,18 +876,15 @@ except Exception as e:
     def _run_batch_update(self, repo_dir):
         """Create and run a batch script to handle the update process safely"""
         try:
-            # Prepare paths
             batch_script_path = os.path.join(self.temp_path, "install_update.bat")
             vbs_script_path = os.path.join(self.temp_path, "silent_updater.vbs")
             current_pid = os.getpid()
-            
-            # Determine restart command
+
             if getattr(sys, 'frozen', False):
                 executable = sys.executable
                 args = "--updated"
             else:
                 executable = sys.executable
-                # Try to switch to pythonw.exe if on Windows to avoid console window
                 if platform.system() == "Windows" and "python.exe" in executable.lower():
                     pythonw = executable.lower().replace("python.exe", "pythonw.exe")
                     if os.path.exists(pythonw):
@@ -1053,13 +893,8 @@ except Exception as e:
                 script_path = os.path.join(self.all_data_dir, "gui_launcher.py")
                 args = f'"{script_path}" --updated'
 
-            # Handle config merging BEFORE creating batch script
-            # We do this now because the batch script is dumb and just copies files
             self.handle_config_merging(repo_dir)
-            
-            # Create the batch script content
-            # /T on taskkill kills child processes (solving the lingering python instance)
-            # Use ping for delay as timeout doesn't work well in hidden windows
+
             batch_content = f"""@echo off
 echo Waiting for WorkerBee to close...
 ping 127.0.0.1 -n 4 > NUL
@@ -1078,16 +913,12 @@ exit
 """
             with open(batch_script_path, "w") as f:
                 f.write(batch_content)
-            
-            # Create VBS script to run batch file hidden and detached
-            # This ensures the update continues even after Python exits
+
             with open(vbs_script_path, "w") as f:
                 f.write('Set WshShell = CreateObject("WScript.Shell")\n')
-                # Run with window style 0 (Hide) and waitOnReturn=False
                 f.write(f'WshShell.Run chr(34) & "{batch_script_path}" & chr(34), 0, False\n')
                 f.write('Set WshShell = Nothing\n')
-            
-            # Run cleanup if provided (to kill logger processes etc)
+
             if self.pre_exit_callback:
                 try:
                     self.pre_exit_callback()
@@ -1095,12 +926,9 @@ exit
                     logger.error(f"Error in pre-exit callback: {e}")
             
             logger.info(f"Launching silent updater: {vbs_script_path}")
-            
-            # Launch the VBS script detached
-            # wscript.exe runs scripts without a console window
+
             subprocess.Popen(["wscript.exe", vbs_script_path], shell=False, close_fds=True)
-            
-            # Force exit immediately
+
             os._exit(0)
             
         except Exception as e:
@@ -1108,12 +936,10 @@ exit
             return False
 
     def _is_staged_update(self):
-        # No longer used with batch method, but kept for compatibility if called
         return False
 
-# Helper function to run the updater
+
 def check_for_updates(repo_owner, repo_name, callback=None):
-    # Force update from Bonkier/WorkerBee
     repo_owner = "Bonkier"
     repo_name = "WorkerBee"
         
@@ -1140,7 +966,6 @@ def check_for_updates(repo_owner, repo_name, callback=None):
         return False
 
 def auto_update(repo_owner, repo_name, create_backup=False, preserve_only_last_3=True, callback=None, pre_exit_callback=None):
-    # Force update from Bonkier/WorkerBee
     repo_owner = "Bonkier"
     repo_name = "WorkerBee"
         
@@ -1154,13 +979,9 @@ def auto_update(repo_owner, repo_name, create_backup=False, preserve_only_last_3
         return None
 
 if __name__ == "__main__":
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
         datefmt='%d/%m/%Y %H:%M:%S'
     )
-    
-    
-    # Example usage
     check_for_updates("Bonkier", "WorkerBee")

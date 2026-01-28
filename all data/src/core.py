@@ -75,17 +75,16 @@ def battle():
             logger.warning("Server error detected during battle")
             common.mouse_up()
             reconnect()
-            
-        # Check for defeat screens
+
         if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
             common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or
             common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or
             common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or
             common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True)):
             logger.info("Defeat detected during battle")
-            return # Exit battle loop, let check_run handle it
+            return 
 
-        if common.element_exist("pictures/general/loading.png") and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png"): #Checks for loading screen to end the while loop
+        if common.element_exist("pictures/general/loading.png") and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png"):
             common.mouse_up()
             if common.element_exist("pictures/battle/winrate.png"):
                 logger.info("false read loading")
@@ -97,7 +96,7 @@ def battle():
             return
             
         common.mouse_move(*common.scale_coordinates_1080p(20, 1060))
-        if common.element_exist("pictures/events/skip.png"): #Checks for special battle skill checks prompt then calls skill check functions
+        if common.element_exist("pictures/events/skip.png"): 
             logger.info("Skip button found, handling skill check")
             common.mouse_up()
             while(True):
@@ -182,8 +181,7 @@ def ego_check():
         for x,y in bad_clashes:
             offset_x, offset_y = common.scale_offset_1440p(-55, 100)
             slot_x, slot_y = x + offset_x, y + offset_y
-            
-            # Check if EGO is already selected (sanity icon visible near slot)
+
             region_size = common.uniform_scale_single(100)
             if common.ifexist_match("pictures/battle/ego/sanity.png", threshold=0.8, 
                                   x1=max(0, int(slot_x - region_size)), y1=max(0, int(slot_y - region_size)), 
@@ -237,7 +235,7 @@ def battle_check():
         common.wait_skip("pictures/events/continue.png")
         return 0
         
-    elif common.element_exist("pictures/battle/NO.png"): #Woppily
+    elif common.element_exist("pictures/battle/NO.png"):
         logger.info("WOPPILY PT2")
         for i in range(3):
             common.click_matching("pictures/battle/NO.png")
@@ -251,12 +249,10 @@ def battle_check():
             while(not common.element_exist("pictures/battle/NO.png")):
                 common.mouse_click()
 
-    elif common.click_matching("pictures/battle/refuse.png", recursive=False): # Pink Shoes or rose
-        # TODO: handle this monkey patching, should find and click skip button instead
+    elif common.click_matching("pictures/battle/refuse.png", recursive=False):
         for _ in range(20):
             common.mouse_click()
             common.sleep(0.1)
-        # Fuck PM for inconsistency
         if common.element_exist("pictures/battle/rose_refuse.png"):
             logger.info("Event: [LINE 2] ROSE")
             common.wait_skip("pictures/events/continue.png")

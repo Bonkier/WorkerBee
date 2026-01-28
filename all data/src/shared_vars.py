@@ -7,22 +7,17 @@ def get_base_path():
     """Get the base directory path"""
     import sys
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
         return os.path.dirname(sys.executable)
     else:
-        # Running as script
         folder_path = os.path.dirname(os.path.abspath(__file__))
-        # Check if we're in the src folder or main folder
         if os.path.basename(folder_path) == 'src':
             return os.path.dirname(folder_path)
         return folder_path
 
-# Get base path for config access
 BASE_PATH = get_base_path()
 
 logger = logging.getLogger(__name__)
 
-# Config cache system
 _config_cache = {}
 _cache_lock = Lock()
 _scaled_coords_cache = {}
@@ -85,8 +80,7 @@ class ConfigCache:
                 if config_name not in _config_cache:
                     ConfigCache._load_config(config_name)
         logger.info(f"Preloaded {len(config_files)} config files")
-        
-        # Load image threshold configuration
+
         ConfigCache._load_config("image_thresholds")
 
 class ScaledCoordinates:
@@ -139,14 +133,13 @@ class ScaledCoordinates:
             }
             scaled_coords = {}
             for name, (x, y) in base_coords.items():
-                # Use 1440p scaling for character positions as per original code
                 scaled_coords[name] = common._uniform_scale_coordinates(x, y, common.REFERENCE_WIDTH_1440P, common.REFERENCE_HEIGHT_1440P, use_uniform=False)
             _scaled_coords_cache[coord_set_name] = scaled_coords
             logger.debug(f"Calculated scaled character positions for {coord_set_name}")
         
         elif coord_set_name == "battle_buttons":
             base_coords = {
-                "to_battle": (1722, 881),  # Squad selection to battle button
+                "to_battle": (1722, 881),  
             }
             scaled_coords = {}
             for name, (x, y) in base_coords.items():
@@ -156,21 +149,19 @@ class ScaledCoordinates:
         
         elif coord_set_name == "luxcavation_coords":
             base_coords = {
-                "latest_stage": (1613, 715),  # EXP latest stage click
-                "exp_drag_start": (397, 48),  # EXP drag movements
+                "latest_stage": (1613, 715),  
+                "exp_drag_start": (397, 48),  
                 "exp_drag_end": (1920, 48),
                 "exp_drag_middle": (1152, 48),
-                "thread_select": (564, 722),  # Thread selection
-                "latest_difficulty": (925, 725),  # Latest difficulty
-                "squad_scroll_offset": (90, 90),  # Squad scroll offset
+                "thread_select": (564, 722),  
+                "latest_difficulty": (925, 725),  
+                "squad_scroll_offset": (90, 90), 
             }
             scaled_coords = {}
             for name, (x, y) in base_coords.items():
                 if name == "squad_scroll_offset":
-                    # Use uniform scaling for squad offset
                     scaled_coords[name] = common.scale_coordinates_1440p(x, y)
                 else:
-                    # Use 1080p scaling for other coordinates
                     scaled_x = common.scale_x_1080p(x)
                     scaled_y = common.scale_y_1080p(y)
                     scaled_coords[name] = (scaled_x, scaled_y)
@@ -214,8 +205,7 @@ def _get_gui_values():
 def _load_shared_vars():
     """Load shared variables from config file and GUI defaults"""
     logger.info("Loading shared variables from configuration")
-    
-    # Get current values from GUI
+
     gui_values = _get_gui_values()
     
     try:
@@ -225,16 +215,13 @@ def _load_shared_vars():
             logger.debug(f"Loading configuration file: {config_path}")
             with open(config_path, 'r') as f:
                 config = json.load(f)
-            
-            # Get SharedVars section, fallback to Settings for backward compatibility
+
             shared_vars_data = config.get('SharedVars', {})
             if not shared_vars_data:
-                # Fallback to Settings section for backward compatibility
                 settings_data = config.get('Settings', {})
                 shared_vars_data = {key: settings_data.get(key, gui_values[key]) 
                                   for key in gui_values.keys() if key in settings_data}
-            
-            # Set module-level variables
+
             for var_name, gui_value in gui_values.items():
                 value = shared_vars_data.get(var_name, gui_value)
                 globals()[var_name] = value
@@ -243,21 +230,17 @@ def _load_shared_vars():
                 
         else:
             logger.warning(f"GUI config file not found at {config_path}, using GUI values")
-            # Set GUI values directly
             for var_name, gui_value in gui_values.items():
                 globals()[var_name] = gui_value
                 
     except Exception as e:
         logger.error(f"Error loading shared variables from config: {e}")
-        # Set GUI values on error
         for var_name, gui_value in gui_values.items():
             globals()[var_name] = gui_value
 
-# Dynamically export all loaded variables
 def _update_all_exports():
     """Update module exports list"""
     global __all__
-    # Get all variables from GUI values, plus utility functions
     config_vars = list(_get_gui_values().keys())
     __all__ = config_vars + ['reload_shared_vars']
 
@@ -265,17 +248,13 @@ def reload_shared_vars():
     """Reload shared variables from config"""
     _load_shared_vars()
 
-# Auto-load shared variables when module is imported
 _load_shared_vars()
 _update_all_exports()
 
-# Preload all configs and coordinates for performance
 ConfigCache.preload_all_configs()
 try:
     ScaledCoordinates.preload_all_coordinates()
 except (ImportError, AttributeError, TypeError):
-    # common module might not be available during early import, will load on first use
     logger.debug("Deferred coordinate preloading - common module not yet available")
 
-# Load image threshold configuration
 image_threshold_config = ConfigCache.get_config("image_thresholds")

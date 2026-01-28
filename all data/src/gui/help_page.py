@@ -19,8 +19,7 @@ def load_help_tab(parent, help_path, version_text, discord_callback):
                 content = f.read()
                 
             blocks = content.split('\n\n')
-            
-            # Intro card
+
             intro_card = CardFrame(scroll_frame)
             intro_card.pack(fill="x", padx=10, pady=10)
             ctk.CTkLabel(intro_card, text="General Info", font=UIStyle.SUBHEADER_FONT).pack(anchor="w", padx=20, pady=(15, 10))
@@ -49,8 +48,7 @@ def load_help_tab(parent, help_path, version_text, discord_callback):
                     label = ctk.CTkLabel(current_card, text=body, font=UIStyle.BODY_FONT, justify="left", text_color=UIStyle.TEXT_SECONDARY_COLOR)
                     label.pack(anchor="w", padx=20, pady=(0, 15))
                     text_labels.append(label)
-            
-            # About Card
+
             about_card = CardFrame(scroll_frame)
             about_card.pack(fill="x", padx=10, pady=10)
             ctk.CTkLabel(about_card, text="About", font=UIStyle.SUBHEADER_FONT).pack(anchor="w", padx=20, pady=(15, 10))

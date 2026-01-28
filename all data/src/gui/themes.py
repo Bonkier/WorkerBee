@@ -19,17 +19,14 @@ def load_available_themes(base_path):
                 if filename.endswith('.json'):
                     theme_name = os.path.splitext(filename)[0]
                     theme_path = os.path.join(themes_dir, filename)
-                    
-                    # Skip if it's already in our default themes
+
                     if theme_name in ["dark-blue", "blue", "green"]:
                         continue
                         
                     try:
-                        # Validate it's a proper theme file by checking for CTk key
                         with open(theme_path, 'r') as f:
                             theme_data = json.load(f)
                             if 'CTk' in theme_data:
-                                # Add custom theme with dark mode as default
                                 themes[theme_name] = {"mode": "Dark", "theme": theme_path}
                     except (json.JSONDecodeError, KeyError):
                         continue

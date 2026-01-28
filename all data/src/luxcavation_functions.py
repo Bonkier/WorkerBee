@@ -13,42 +13,31 @@ import mirror_utils
 import pyautogui
 import shared_vars
 
-# Determine if running as executable or script
 def get_base_path():
     """Get the base directory path"""
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
         return os.path.dirname(sys.executable)
     else:
-        # Running as script
         folder_path = os.path.dirname(os.path.abspath(__file__))
-        # Check if we're in the src folder or main folder
         if os.path.basename(folder_path) == 'src':
             return os.path.dirname(folder_path)
         return folder_path
 
-# Get base path for resource access
 BASE_PATH = get_base_path()
 
-# Logging configuration is handled by common.py
 logger = logging.getLogger(__name__)
 
-# Function to create Mirror instance based on config type
 def get_mirror_instance(config_type="status_selection"):
     """Get Mirror instance for specific config type"""
-    status = "poise"  # Default fallback
+    status = "poise" 
     
     try:
-        # Use cached config instead of file I/O
         data = shared_vars.ConfigCache.get_config(config_type)
         if data:
-            # Handle numbered priority format: {"1": "burn", "2": "poise"}
             if all(key.isdigit() for key in data.keys()):
-                # Sort by number and extract values in priority order
                 sorted_items = sorted(data.items(), key=lambda x: int(x[0]))
                 statuses = [item[1] for item in sorted_items]
             else:
-                # Fallback to old format: {"selected_statuses": [...]}
                 statuses = data.get("selected_statuses", [])
             if statuses:
                 status = statuses[0].strip().lower()
@@ -58,9 +47,8 @@ def get_mirror_instance(config_type="status_selection"):
         return mirror_instance
     except Exception as e:
         logger.error(f"Error initializing Mirror with {config_type}: {e}")
-        return mirror.Mirror("poise")  # Default fallback
+        return mirror.Mirror("poise") 
 
-# Create default mirror instance for backwards compatibility (mirror dungeon)
 m = get_mirror_instance("status_selection")
 
 screen_width, screen_height = common.get_resolution()
@@ -75,7 +63,7 @@ def click_matching_EXP(image_path, threshold=0.8, area="center",
     def verify_element_visible(image_path, threshold):
         try:
             if common.element_exist(image_path, threshold):
-                time.sleep(0.5)  # Wait to verify stability
+                time.sleep(0.5)  
                 
                 if common.element_exist(image_path, threshold):
                     return True
@@ -100,29 +88,26 @@ def click_matching_EXP(image_path, threshold=0.8, area="center",
         except Exception as e:
             logger.error(f"Exception during click attempt ({attempt_name}): {e}")
             return False
-    
-    # Attempt 1: Direct check and click
+
     if verify_element_visible(image_path, threshold):
         if try_click_element(image_path, threshold, area, "initial check"):
             return True
-    
-    # Attempt 2: First drag
+
     try:
         common.mouse_move(movewidth, moveheight)
         common.mouse_drag(dragwidth, dragheight, dragspeed)
-        time.sleep(0.5)  # Wait after drag
+        time.sleep(0.5)  
         
         if verify_element_visible(image_path, threshold):
             if try_click_element(image_path, threshold, area, "first drag"):
                 return True
     except Exception as e:
         logger.error(f"Exception during first drag attempt: {e}")
-    
-    # Attempt 3: Second drag
+
     try:
         common.mouse_move(move2width, move2height)
         common.mouse_drag(drag2width, drag2height, dragspeed)
-        time.sleep(0.5)  # Wait after drag
+        time.sleep(0.5)  
         
         if verify_element_visible(image_path, threshold):
             if try_click_element(image_path, threshold, area, "second drag"):
@@ -139,7 +124,7 @@ def click_continue():
 
     continue_clicked = False
 
-    while time.time() - start_time < 60:  # 60 second maximum check time
+    while time.time() - start_time < 60:  
         
         if common.click_matching("pictures/CustomAdded1080p/luxcavation/thread/confirminverted.png", recursive=False):
             logger.info(f"Confirmation dialog found, clicked it")
@@ -254,7 +239,6 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
     
     if Stage == "latest":
         logger.debug("Clicking latest stage using coordinates")
-        # Use pre-calculated latest stage coordinates
         lux_coords = shared_vars.ScaledCoordinates.get_scaled_coords("luxcavation_coords")
         latest_x, latest_y = lux_coords["latest_stage"]
         common.mouse_move_click(latest_x, latest_y)
@@ -266,8 +250,7 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
         }
         threshold = thresholds[Stage]
         stage_image = f"pictures/CustomAdded1080p/luxcavation/exp/stage{Stage}.png"
-        
-        # Use pre-calculated EXP drag coordinates
+
         lux_coords = shared_vars.ScaledCoordinates.get_scaled_coords("luxcavation_coords")
         drag_start_x, drag_start_y = lux_coords["exp_drag_start"]
         drag_end_x, drag_end_y = lux_coords["exp_drag_end"]
@@ -296,11 +279,10 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
         return
     
     logger.debug(f"Click successful, waiting for UI to settle...")
-    time.sleep(0.5)  # Wait 0.5 seconds for UI transition
+    time.sleep(0.5) 
     
     if common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png"):
         logger.info(f"Squad select screen detected")
-        # Get mirror instance for this config type
         mirror_instance = get_mirror_instance(config_type)
         squad_select_lux(mirror_instance, SelectTeam)
         common.key_press(Key="esc", presses=2)
@@ -332,8 +314,7 @@ def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_
         logger.warning("Enter button not found")
         navigate_to_threads(Difficulty, SelectTeam, config_type)
         return
-        
-    # Use pre-calculated thread select coordinates
+
     lux_coords = shared_vars.ScaledCoordinates.get_scaled_coords("luxcavation_coords")
     thread_x, thread_y = lux_coords["thread_select"]
     common.mouse_move_click(thread_x, thread_y)
@@ -341,7 +322,6 @@ def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_
     
     if Difficulty == "latest":
         logger.info(f"clicking latest using coordinates")
-        # Use pre-calculated latest difficulty coordinates
         lux_coords = shared_vars.ScaledCoordinates.get_scaled_coords("luxcavation_coords")
         latest_diff_x, latest_diff_y = lux_coords["latest_difficulty"]
         common.mouse_move_click(latest_diff_x, latest_diff_y)
@@ -363,11 +343,10 @@ def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_
             success = True
         
     logger.debug(f"Click successful, waiting for UI to settle...")
-    time.sleep(0.5)  # Wait 0.5 seconds for UI transition
+    time.sleep(0.5) 
         
     if common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png"):
         logger.info(f"Squad select screen detected")
-        # Get mirror instance for this config type
         mirror_instance = get_mirror_instance(config_type)
         squad_select_lux(mirror_instance, SelectTeam)
         common.key_press(Key="esc", presses=2)

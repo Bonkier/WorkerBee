@@ -11,51 +11,42 @@ logger = None
 def get_base_path():
     """Get the correct base path for the application"""
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
         base_path = os.path.dirname(sys.executable)
         return base_path
     else:
-        # Running as script - go up one level to reach the "all data" directory
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return base_path
 
 def setup_paths_and_imports():
     """Set up paths and import required modules"""
     BASE_PATH = get_base_path()
-    
-    # Add necessary paths
+
     src_path = os.path.join(BASE_PATH, 'src')
     sys.path.append(src_path)
     sys.path.append(BASE_PATH)
-    
-    # Verify config file exists
+
     config_path = os.path.join(BASE_PATH, "config")
     status_json_path = os.path.join(config_path, "status_selection.json")
     
     if os.path.exists(status_json_path):
         status_path = status_json_path
     else:
-        # Use basic logging since custom logger not initialized yet
         basic_logger = logging.getLogger(__name__)
         basic_logger.critical(f"Status selection file not found at: {status_json_path}")
         raise FileNotFoundError(f"Status selection file not found: {status_json_path}")
-    
-    # Import modules
+
     
     try:
-        # Import common FIRST to set up DirtyLogger before other modules
         import common
         from core import reconnect
         from common import error_screenshot, element_exist
         import mirror
-        
-        # Initialize logger after importing common (which sets up DirtyLogger)
+
         global logger
         logger = logging.getLogger(__name__)
         
         return BASE_PATH, status_path
     except ImportError as e:
-        # Create a basic logger for error reporting if imports fail
         basic_logger = logging.getLogger(__name__)
         basic_logger.critical(f"Failed to import modules: {e}")
         raise
@@ -64,13 +55,10 @@ def load_status_list(status_path):
     try:
         with open(status_path, "r") as f:
             data = json.load(f)
-            # Handle numbered priority format: {"1": "burn", "2": "poise"}
             if all(key.isdigit() for key in data.keys()):
-                # Sort by number and extract values in priority order
                 sorted_items = sorted(data.items(), key=lambda x: int(x[0]))
                 statuses = [item[1] for item in sorted_items]
             else:
-                # Fallback to old format: {"selected_statuses": [...]}
                 statuses = data.get("selected_statuses", [])
             return [status.strip().lower() for status in statuses if status.strip()]
     except Exception as e:
@@ -82,7 +70,7 @@ class ConnectionManager:
     
     def __init__(self):
         self.connection_event = threading.Event()
-        self.connection_event.set()  # Start with connection assumed good
+        self.connection_event.set() 
     
     def start_connection_monitor(self):
         """Start the connection monitoring thread"""
@@ -129,12 +117,10 @@ def sync_shared_vars(shared_vars_instance):
     
     while True:
         try:
-            # Update module variables from shared memory values
             sv_module.x_offset = shared_vars_instance.x_offset.value
             sv_module.y_offset = shared_vars_instance.y_offset.value
             sv_module.game_monitor = shared_vars_instance.game_monitor.value
-            
-            # Explicitly update common module if monitor changes
+
             if sv_module.game_monitor != last_monitor:
                 common.set_game_monitor(sv_module.game_monitor)
                 last_monitor = sv_module.game_monitor
@@ -158,7 +144,7 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.click_delay = shared_vars_instance.click_delay.value
             sv_module.stop_after_current_run = shared_vars_instance.stop_after_current_run.value
         except AttributeError:
-            pass # Ignore if shared_vars_instance is missing attributes during shutdown
+            pass
         except Exception:
             break
         time.sleep(1)
@@ -173,8 +159,7 @@ def update_stats(win, run_data=None):
         if os.path.exists(stats_path):
             with open(stats_path, 'r') as f:
                 data = json.load(f)
-        
-        # Ensure structure exists
+
         if "mirror" not in data: data["mirror"] = {"runs": 0, "wins": 0, "losses": 0}
         if "exp" not in data: data["exp"] = {"runs": 0}
         if "threads" not in data: data["threads"] = {"runs": 0}
@@ -182,8 +167,7 @@ def update_stats(win, run_data=None):
         data["mirror"]["runs"] += 1
         if win: data["mirror"]["wins"] += 1
         else: data["mirror"]["losses"] += 1
-        
-        # Update history if run_data provided
+
         if run_data:
             if "history" not in data["mirror"]:
                 data["mirror"]["history"] = []
@@ -197,7 +181,7 @@ def update_stats(win, run_data=None):
             }
             
             data["mirror"]["history"].insert(0, history_entry)
-            data["mirror"]["history"] = data["mirror"]["history"][:50]  # Keep last 50
+            data["mirror"]["history"] = data["mirror"]["history"][:50] 
         
         with open(stats_path, 'w') as f:
             json.dump(data, f, indent=4)
@@ -214,32 +198,26 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         win_count = 0
         lose_count = 0
 
-        # Ensure we have status selections
         if not status_list_file:
             logger.critical(f"Status list file is empty, cannot proceed")
             return
-            
-        # Create status list for runs
+
         status_list = (status_list_file * ((num_runs // len(status_list_file)) + 1))[:num_runs]
         unique_statuses = list(dict.fromkeys(status_list_file))
         logger.info(f"Starting Run with statuses: {unique_statuses}")
-        
-        # Start synchronization thread
+
         sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
         sync_thread.start()
-        
-        # Give time for shared vars to sync and monitor to be detected
+
         time.sleep(1.0)
         
         for i in range(num_runs):
-            # Check for stop signal before starting run
             if hasattr(shared_vars, 'stop_after_current_run') and shared_vars.stop_after_current_run.value:
                 logger.info("Stop after current run signal detected. Stopping sequence.")
                 break
 
             logger.info(f"Run {run_count + 1}")
-            
-            # Clear caches to prevent memory leaks over long sessions
+
             try:
                 common._template_cache.clear()
                 if hasattr(common._thread_local, "sct"):
@@ -258,7 +236,6 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                     if connection_manager.connection_event.is_set():
                         win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
-                        # Connection lost, wait for it to be restored
                         connection_manager.connection_event.wait()
                     
                     if element_exist("pictures/general/server_error.png"):
@@ -277,7 +254,6 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
             except Exception as e:
                 logger.exception(f"Error in run {run_count + 1}: {e}")
                 error_screenshot()
-                # Continue with next run instead of breaking out
                 run_count += 1
         
         logger.info(f'Completed all runs. Won: {win_count}, Lost: {lose_count}')
@@ -307,8 +283,8 @@ def main(num_runs, shared_vars):
             from common import error_screenshot
             error_screenshot()
         except:
-            pass  # Don't let screenshot errors crash the main error handler
-        return  # Return instead of sys.exit for multiprocessing
+            pass 
+        return  
 
 if __name__ == "__main__":
     """Legacy support for command line execution"""
@@ -317,8 +293,7 @@ if __name__ == "__main__":
         base_path, status_path = setup_paths_and_imports()
         
         logger.info(f"compiled_runner.py main execution started")
-        
-        # Get run count from command line
+
         if len(sys.argv) > 1:
             try:
                 count = int(sys.argv[1])
@@ -344,12 +319,10 @@ if __name__ == "__main__":
                         y_offset = int(sys.argv[3])
                     except ValueError:
                         pass
-                
-                # Create fake Value objects
+
                 from multiprocessing import Value
                 self.x_offset = Value('i', x_offset)
                 self.y_offset = Value('i', y_offset)
-                # Add other default values
                 self.debug_mode = Value('b', False)
                 self.click_delay = Value('f', 0.5)
         
@@ -371,6 +344,6 @@ if __name__ == "__main__":
             error_screenshot()
         except:
             pass
-        sys.exit(1)  # Exit with error code for command line
+        sys.exit(1) 
     
     logger.info(f"compiled_runner.py completed successfully")

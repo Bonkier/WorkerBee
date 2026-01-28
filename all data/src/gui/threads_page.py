@@ -12,14 +12,12 @@ def load_threads_tab(parent, config, shared_vars, callbacks, ui_context, base_pa
         
     scroll_frame = ctk.CTkScrollableFrame(parent, corner_radius=0, fg_color="transparent")
     scroll_frame.pack(fill="both", expand=True)
-    
-    # Run Configuration Card
+
     run_card = CardFrame(scroll_frame)
     run_card.pack(fill="x", padx=10, pady=10)
 
     ctk.CTkLabel(run_card, text="Run Configuration", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 10))
 
-    # Input row
     input_row = ctk.CTkFrame(run_card, fg_color="transparent")
     input_row.pack(pady=(0, 10))
 
@@ -51,8 +49,7 @@ def load_threads_tab(parent, config, shared_vars, callbacks, ui_context, base_pa
             diff_val = diff_var.get()
             if diff_val != "latest":
                 shared_vars.threads_difficulty.value = int(diff_val)
-            
-            # Save to config
+
             config['Settings']['threads_runs'] = runs
             config['Settings']['threads_difficulty'] = diff_val
             save_callback()
@@ -65,12 +62,10 @@ def load_threads_tab(parent, config, shared_vars, callbacks, ui_context, base_pa
     start_button.pack(pady=(10, 20))
     ui_context['threads_start_button'] = start_button
 
-    # Advanced Settings
     settings_card = CardFrame(scroll_frame)
     settings_card.pack(fill="x", padx=10, pady=10)
     ctk.CTkLabel(settings_card, text="Advanced Settings", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
-    
-    # Team Selection
+
     ctk.CTkLabel(settings_card, text="Your Team", font=UIStyle.SUBHEADER_FONT).pack(pady=(10, 5))
     team_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
     team_frame.pack(pady=5)
@@ -92,7 +87,6 @@ def load_threads_tab(parent, config, shared_vars, callbacks, ui_context, base_pa
 def update_threads_team(base_path, name, is_checked):
     path = os.path.join(base_path, "config", "threads_team_selection.json")
     data = load_json_data(path)
-    # Convert to list to manipulate
     current_list = [data[str(i)] for i in sorted([int(k) for k in data.keys()])] if data else []
     if is_checked and name not in current_list: current_list.append(name)
     elif not is_checked and name in current_list: current_list.remove(name)

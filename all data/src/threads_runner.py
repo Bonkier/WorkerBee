@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Threads Runner Script - Runs Luxcavation Thread automation
 This script is called by the GUI and runs as a separate process
@@ -17,7 +16,6 @@ def get_base_path():
     else:
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Set up paths
 BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)
 sys.path.append(os.path.join(BASE_PATH, 'src'))
@@ -25,7 +23,6 @@ sys.path.append(os.path.join(BASE_PATH, 'src'))
 import luxcavation_functions
 import common
 
-# Logging configuration is handled by common.py
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
@@ -34,7 +31,7 @@ class ConnectionManager:
     def __init__(self):
         """Initialize connection manager"""
         self.connection_event = threading.Event()
-        self.connection_event.set()  # Start with connection assumed good
+        self.connection_event.set()  
     
     def start_connection_monitor(self):
         """Start the connection monitoring thread"""
@@ -79,7 +76,6 @@ def sync_shared_vars(shared_vars_instance):
 
     while True:
         try:
-            # Update module variables from shared memory values
             if hasattr(shared_vars_instance, 'x_offset'): sv_module.x_offset = shared_vars_instance.x_offset.value
             if hasattr(shared_vars_instance, 'y_offset'): sv_module.y_offset = shared_vars_instance.y_offset.value
             if hasattr(shared_vars_instance, 'game_monitor'): sv_module.game_monitor = shared_vars_instance.game_monitor.value
@@ -108,7 +104,6 @@ def main(runs, difficulty, shared_vars=None):
     signal.signal(signal.SIGINT, signal_handler)
    
     try:
-        # Start synchronization thread
         if shared_vars:
             sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
             sync_thread.start()

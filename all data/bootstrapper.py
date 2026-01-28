@@ -5,8 +5,6 @@ import os
 import time
 
 def check_and_install():
-    # Check for all critical dependencies
-    # Map import name to package name
     dependencies = {
         "customtkinter": "customtkinter",
         "cv2": "opencv-python",
@@ -21,11 +19,9 @@ def check_and_install():
     if missing:
         print(f"Missing libraries found: {', '.join(missing)}")
         print("Installing requirements...")
-        
-        # Get the path to requirements.txt (assumed to be in the same folder)
+
         req_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
-        
-        # Sanitize requirements.txt if it contains null bytes (encoding issue fix)
+
         try:
             if os.path.exists(req_file):
                 with open(req_file, 'rb') as f:
@@ -39,7 +35,6 @@ def check_and_install():
             print(f"Warning: Failed to sanitize requirements.txt: {e}")
 
         try:
-            # Run pip install automatically
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
             print("Installation complete!")
         except subprocess.CalledProcessError:
@@ -52,7 +47,6 @@ def check_and_install():
             sys.exit(1)
 
 def launch_main_app():
-    # Run the main GUI launcher
     main_script = os.path.join(os.path.dirname(__file__), "gui_launcher.py")
     
     if not os.path.exists(main_script):
@@ -60,7 +54,6 @@ def launch_main_app():
         input("Press Enter to exit...")
         sys.exit(1)
 
-    # We use subprocess to run it so it starts with a fresh environment
     print(f"Launching {main_script}...")
     try:
         ret_code = subprocess.call([sys.executable, main_script])

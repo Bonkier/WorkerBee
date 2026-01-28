@@ -28,8 +28,7 @@ class SchedulerHandler:
                 
             if not schedule_data.get("enabled", False):
                 return
-                
-            # Don't start if something is already running
+
             if process_handler.is_any_process_running():
                 return
                 
@@ -42,31 +41,26 @@ class SchedulerHandler:
             for i, task in enumerate(tasks):
                 if not task.get("enabled", True):
                     continue
-                    
-                # Check days
+
                 days = task.get("days", "all")
                 if days != "all":
                     if isinstance(days, list) and current_day not in days:
                         continue
                     elif isinstance(days, int) and current_day != days:
                         continue
-                
-                # Check time
+
                 if task.get("time", "") != current_time_str:
                     continue
-                    
-                # Check if already executed for this time slot
+
                 exec_key = f"{i}_{now.strftime('%Y-%m-%d_%H:%M')}"
                 if exec_key in self.last_scheduled_execution:
                     continue
-                    
-                # Execute Task
+
                 task_type = task.get("type", "mirror")
                 logger.info(f"Scheduler: Starting task {task_type} at {current_time_str}")
                 
                 self._execute_task(task_type, task)
-                
-                # Mark executed
+
                 self.last_scheduled_execution[exec_key] = True
                 if len(self.last_scheduled_execution) > 50:
                     self.last_scheduled_execution.clear()

@@ -12,24 +12,18 @@ def get_base_path():
         return folder_path
 BASE_PATH = get_base_path()
 
-# Add src to path for imports
 sys.path.append(os.path.join(BASE_PATH, 'src'))
 
-# Import common to set up DirtyLogger
 import common
 
-# Logging configuration is handled by common.py
 logger = logging.getLogger("battler")
 
 def main():
     """Run the battle function and exit immediately"""
     try:
         try:
-            # Import core - shared_vars will be automatically loaded
             import core
-            
-            
-            # Call the battle function
+
             core.battle()
             
         except AttributeError:

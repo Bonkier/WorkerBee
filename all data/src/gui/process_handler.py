@@ -8,7 +8,6 @@ from src import compiled_runner, exp_runner, threads_runner, battlepass_collecto
 
 logger = logging.getLogger("gui_launcher")
 
-# Global process references
 process = None
 exp_process = None
 threads_process = None
@@ -122,7 +121,6 @@ def start_extraction():
 
 def start_battle(base_path, python_cmd):
     global battle_process
-    # Kill existing battle process if running
     if battle_process is not None and battle_process.poll() is None:
         try:
             os.kill(battle_process.pid, signal.SIGTERM)
@@ -133,8 +131,7 @@ def start_battle(base_path, python_cmd):
     try:
         env = os.environ.copy()
         env['PYTHONPATH'] = base_path + os.pathsep + os.path.join(base_path, 'src')
-        
-        # If frozen, python_cmd is the exe
+
         import sys
         if getattr(sys, 'frozen', False):
              battle_process = subprocess.Popen([python_cmd, "-m", "src.battler"], env=env)
@@ -179,11 +176,9 @@ def terminate_functions():
 
 def cleanup_processes():
     global process, exp_process, threads_process, battle_process, function_process_list, game_launcher_process, battlepass_process, extractor_process
-    
-    # Handle multiprocessing.Process objects
+
     mp_processes = [process, exp_process, threads_process, game_launcher_process, battlepass_process, extractor_process]
     
-    # 1. Send terminate signal to ALL active processes first (Parallel shutdown)
     for p in mp_processes:
         if p and p.is_alive():
             try:
@@ -191,7 +186,6 @@ def cleanup_processes():
             except Exception as e:
                 logger.error(f"Error terminating process: {e}")
 
-    # 2. Then wait for them to exit and force kill if necessary
     for p in mp_processes:
         if p and p.is_alive():
             try:
