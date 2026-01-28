@@ -145,10 +145,6 @@ class Mirror:
             self.logger.info("In gift selection")
             self.gift_selection()
 
-        if common.element_exist("pictures/mirror/general/gift_search_menu.png"): 
-            self.logger.info("In gift search menu")
-            self.gift_search_selection()
-    
     def check_run(self):
         """Check if run ended and return win status and completion flag"""
         run_complete = 0
@@ -238,17 +234,9 @@ class Mirror:
             common.sleep(1)
             common.click_matching("pictures/general/confirm_b.png")
             
-        elif common.element_exist("pictures/mirror/general/gift_search_menu.png"):
-            self.logger.info("Gift search menu detected in loop")
-            self.gift_search_selection()
-            
-        elif common.element_exist("pictures/mirror/gift_search/refuse_gift.png"):
-            self.logger.info("Refuse gift button detected in loop")
-            self.gift_search_selection()
-
         elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
             self.logger.info("Main menu detected in loop. Forcing run completion.")
-            return 1, 1, self.run_stats
+            return 0, 1, self.run_stats
 
         if self.loop_counter % 50 == 0:
             
@@ -258,8 +246,6 @@ class Mirror:
                 "pictures/battle/winrate.png",
                 "pictures/general/victory.png",
                 "pictures/mirror/general/encounter_reward.png",
-                "pictures/mirror/general/gift_search_menu.png",
-                "pictures/mirror/gift_search/refuse_gift.png"
             ]
             
             for img in stuck_images:
@@ -272,8 +258,6 @@ class Mirror:
                         self.event_choice()
                     elif "event_check.png" in img and common.click_matching(img, threshold=0.75):
                         common.wait_skip("pictures/events/continue.png")
-                    elif "gift_search_menu.png" in img or "refuse_gift.png" in img:
-                        self.gift_search_selection()
                     
                     break 
 
@@ -308,9 +292,10 @@ class Mirror:
         """selects the ego gift of the same status, fallsback on random if not unlocked"""
         self.logger.info("Starting EGO gift selection")
         
-        if common.element_exist("pictures/mirror/general/gift_search_disabled.png", 0.9):
-            logger.info("Turning on gift search.")
-            common.click_matching("pictures/mirror/general/gift_search_disabled.png")
+        if common.click_matching("pictures/mirror/general/gift_search_enabled.png", 0.58, recursive=False, enable_scaling=True, no_grayscale=True):
+            self.logger.info("Gift search was enabled, turning it off.")
+        else:
+            pass
 
         gift = mirror_utils.gift_choice(self.status)
         if not common.element_exist(gift,0.9): 
@@ -334,9 +319,12 @@ class Mirror:
 
         self.logger.info(f"Selecting gift: {gift}")
         common.click_matching(gift,0.9) 
+        
+
         for i in initial_gift_coords:
             scaled_x, _ = common.scale_coordinates_1440p(1640, 0)
             common.mouse_move_click(scaled_x, i)
+        
         common.key_press("enter")
         while not common.element_exist("pictures/mirror/general/ego_gift_get.png"):
             common.sleep(0.5)
@@ -346,29 +334,6 @@ class Mirror:
                 common.sleep(0.5)
         check_loading()
 
-    def gift_search_selection(self):
-        logger.warning("Gift search only support for tremor team.")
-
-        start_time = time.time()
-        while time.time() - start_time < 10: 
-            if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", recursive=False):
-                common.key_press("enter")
-                return
-            
-            if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", threshold=0.7, recursive=False):
-                common.key_press("enter")
-                return
-            common.sleep(0.5)
-            
-        self.logger.warning("Timed out waiting for refuse_gift.png. Attempting SCT reset.")
-        common.reset_sct()
-        if common.click_matching("pictures/mirror/gift_search/refuse_gift.png", threshold=0.7, recursive=False):
-            common.key_press("enter")
-        else:
-            self.logger.error("Failed to find refuse_gift.png. Skipping.")
-            common.key_press("enter")
-        return
-    
     def initial_squad_selection(self):
         """Searches for the squad name with the status type, if not found then uses the current squad"""
         self.logger.info("Performing initial squad selection")
@@ -483,7 +448,7 @@ class Mirror:
                     pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
                     except_packs_pos.extend(common.match_image(
                         pack_image, 
-                        0.7, 
+                        0.65, 
                         screenshot=screenshot, 
                         enable_scaling=True,
                         x1=min_x_scaled,
@@ -739,9 +704,7 @@ class Mirror:
             if selectable_packs_pos:
                 logger.info("Fallback: Selecting random available pack")
                 
-                target_coords = selectable_packs_pos[0]
-                identified_name = "unknown_pack"
-
+                pack_identities = {}
                 if floor:
                     try:
                         floor_num = floor[-1]
@@ -752,23 +715,31 @@ class Mirror:
                             all_packs = [f.replace(".png", "") for f in os.listdir(floor_dir) if f.endswith(".png")]
                             
                             for pack in all_packs:
-                                
                                 if pack in known_pack_names.values():
                                     continue
                                     
                                 pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
                                 matches = common.match_image(pack_image, 0.65, grayscale=True, screenshot=screenshot, enable_scaling=True, x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled)
                                 
-                                
-                                if matches and common.proximity_check([target_coords], matches, common.scale_x_1080p(250)):
-                                    identified_name = pack
-                                    logger.info(f"Identified fallback pack as: {pack}")
-                                    break
+                                if matches:
+                                    close_targets = common.proximity_check(selectable_packs_pos, matches, common.scale_x_1080p(250))
+                                    for t in close_targets:
+                                        pack_identities[t] = pack
                     except Exception as e:
-                        logger.error(f"Error identifying fallback pack: {e}")
+                        logger.error(f"Error identifying fallback packs: {e}")
 
-                select_pack(target_coords, identified_name)
-                return
+                for target_coords in selectable_packs_pos:
+                    pack_name = pack_identities.get(target_coords, "unknown_pack")
+                    
+                    if pack_name in exception_packs:
+                        logger.info(f"Fallback identified excluded pack '{pack_name}', skipping.")
+                        continue
+                    
+                    if pack_name != "unknown_pack":
+                        logger.info(f"Identified fallback pack as: {pack_name}")
+                        
+                    select_pack(target_coords, pack_name)
+                    return
 
         if retry_attempt == 0:
             logger.error("Something went wrong, not fixable after 10 retries.")
@@ -1002,7 +973,8 @@ class Mirror:
         """Execute fusion of selected gifts"""
 
         common.mouse_move(*common.scale_coordinates_1080p(50, 50))
-
+        common.sleep(0.3) 
+        
         start_time = time.time()
         while not common.click_matching("pictures/mirror/restshop/fusion/fuse_b.png", recursive=False):
             if time.time() - start_time > 10: 
@@ -1029,7 +1001,7 @@ class Mirror:
              
         return True
 
-    def find_gifts(self, statuses):
+    def find_gifts(self, statuses, excluded_statuses=None):
         """Find all gifts matching the given status list for fusion, with region optimization"""
         fusion_gifts = []
         gift_types = {} 
@@ -1083,6 +1055,15 @@ class Mirror:
                     for coord in market_coords:
                         if coord not in gift_types: gift_types[coord] = []
                         gift_types[coord].append(f"{i}_market")
+
+        if excluded_statuses:
+            for i in excluded_statuses:
+                status = mirror_utils.get_status_gift_template(i)
+                excluded_coords = common.ifexist_match(status, 0.75, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, quiet_failure=True)
+                if excluded_coords:
+                    self.logger.info(f"find_gifts: Detected {len(excluded_coords)} excluded '{i}' gifts, removing overlaps.")
+                    to_remove = common.proximity_check(fusion_gifts, excluded_coords, common.scale_x_1080p(50))
+                    fusion_gifts = [g for g in fusion_gifts if g not in to_remove]
 
         fusion_gifts = list(dict.fromkeys(fusion_gifts))
 
@@ -1218,6 +1199,8 @@ class Mirror:
             common.sleep(1) 
 
         statuses = ["burn","bleed","tremor","rupture","sinking","poise","charge","slash","pierce","blunt"] 
+        all_statuses = list(statuses)
+        excluded_statuses = [self.status]
         statuses.remove(self.status)
 
         try:
@@ -1229,6 +1212,7 @@ class Mirror:
                 exceptions_lower = [e.lower() for e in exceptions_data]
                 
                 statuses = [s for s in statuses if s not in exceptions_lower]
+                excluded_statuses.extend([s for s in exceptions_lower if s in all_statuses])
         except Exception as e:
             logger.warning(f"Error filtering fusion statuses: {e}")
 
@@ -1288,7 +1272,7 @@ class Mirror:
             max_scroll_attempts = 5 
 
             while len(selected_gifts_coords) < 3 and scroll_attempts < max_scroll_attempts:
-                current_screen_gifts = self.find_gifts(statuses)
+                current_screen_gifts = self.find_gifts(statuses, excluded_statuses)
                 self.logger.info(f"fuse_gifts: Loop start. Found {len(current_screen_gifts)} gifts on screen.")
                 
                 new_gifts_on_screen = current_screen_gifts
