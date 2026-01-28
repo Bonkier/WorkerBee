@@ -18,6 +18,7 @@ logger = logging.getLogger("updater")
 EXCLUDED_PATHS = [
     "backups/",    
     "temp/",      
+    "logs/",
     "*.log",       
     "profiles/",   
     "*.exe",       

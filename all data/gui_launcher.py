@@ -9,9 +9,17 @@ import platform
 import time
 import traceback
 
+def get_log_dir():
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "logs")
+
 def log_debug(msg):
     try:
-        with open("launcher_debug.log", "a") as f:
+        os.makedirs(get_log_dir(), exist_ok=True)
+        with open(os.path.join(get_log_dir(), "launcher_debug.log"), "a") as f:
             f.write(f"{time.strftime('%H:%M:%S')} - {msg}\n")
     except: pass
 
@@ -64,7 +72,8 @@ except Exception as e:
     err_msg = traceback.format_exc()
     print(err_msg)
     try:
-        with open("launcher_error.log", "w") as f:
+        os.makedirs(get_log_dir(), exist_ok=True)
+        with open(os.path.join(get_log_dir(), "launcher_error.log"), "w") as f:
             f.write(err_msg)
     except:
         pass
