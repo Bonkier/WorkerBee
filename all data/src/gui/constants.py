@@ -1,4 +1,4 @@
-DISCORD_INVITE = "https://discord.gg/vccsv4Q4ta"
+DISCORD_INVITE = "https://discord.gg/8z9npH2Q2B"
 
 STATUS_COLUMNS = [
     ["sinking", "burn", "poise"],
