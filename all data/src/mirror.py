@@ -1086,6 +1086,10 @@ class Mirror:
 
         self.logger.debug("Checking for fully upgraded (++) gifts...")
         fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True)
+        fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True, quiet_failure=True)
+        if fully_upgraded_coords_2:
+            fully_upgraded_coords.extend(fully_upgraded_coords_2)
+
         if fully_upgraded_coords:
              self.logger.info(f"find_gifts: Detected {len(fully_upgraded_coords)} fully upgraded (++) markers.")
 
@@ -1449,6 +1453,7 @@ class Mirror:
     def upgrade(self,gifts,status,shift_x,shift_y):
         """Upgrade gifts twice using power up button"""
         for x,y in gifts:
+            common.sleep(0.5)
             common.mouse_move_click(x, y)
             for _ in range(2): 
                 common.click_matching("pictures/mirror/restshop/enhance/power_up.png")
@@ -1474,6 +1479,10 @@ class Mirror:
                 gifts = [i for i in gifts if i[0] > common.scale_x(1200)] 
                 
                 fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.7, x1=x1, y1=y1, x2=x2, y2=y2)
+                fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.7, x1=x1, y1=y1, x2=x2, y2=y2, quiet_failure=True)
+                if fully_upgraded_coords_2:
+                    fully_upgraded_coords.extend(fully_upgraded_coords_2)
+
                 if fully_upgraded_coords:
                     
                     expand_left_scaled = common.scale_x_1080p(100)
