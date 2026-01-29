@@ -24,8 +24,6 @@ def market_choice(status):
 
 def enhance_shift(status):
     """Return x, y shift for enhancement based on status"""
-    if status == "burn":
-        return (0, -41)
     return (12, -41)
 
 def get_status_gift_template(status):

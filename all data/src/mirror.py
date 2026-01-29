@@ -51,23 +51,23 @@ class Mirror:
     @staticmethod
     def floor_id():
         """Detect current floor number from pack selection screen"""
-        floor = ""
-        if common.element_exist('pictures/mirror/packs/floor1.png', 0.8, grayscale=True):
-            floor = "floor1"
-        elif common.element_exist('pictures/mirror/packs/floor2.png', 0.8, grayscale=True):
-            floor = "floor2"
-        elif common.element_exist('pictures/mirror/packs/floor3.png', 0.8, grayscale=True):
-            floor = "floor3"
-        elif common.element_exist('pictures/mirror/packs/floor4.png', 0.8, grayscale=True):
-            floor = "floor4"
-        elif common.element_exist('pictures/mirror/packs/floor5.png', 0.8, grayscale=True):
-            floor = "floor5"
+        screenshot = common.capture_screen()
+        detected_floors = []
+        
+        for i in range(1, 6):
+            floor_name = f"floor{i}"
+            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.8, grayscale=True, screenshot=screenshot):
+                detected_floors.append(floor_name)
 
-        if floor:
-            logger.info(f"Current floor detected: {floor}")
+        if len(detected_floors) == 1:
+            logger.info(f"Current floor detected: {detected_floors[0]}")
+            return detected_floors[0]
+        elif len(detected_floors) > 1:
+            logger.warning(f"Multiple floors detected visually: {detected_floors}. Defaulting to {detected_floors[-1]}")
+            return detected_floors[-1]
         else:
-            logger.warning("Could not detect current floor")
-        return floor
+            logger.warning("Could not detect current floor visually")
+            return ""
 
     @staticmethod
     def set_sinner_order(status):
@@ -390,14 +390,27 @@ class Mirror:
         if floor == "floor1":
             common.sleep(0.5)
 
-        if common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", 0.9):
-            if shared_vars.hard_mode: 
-                common.click_matching("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", threshold=0.9, recursive=False)
+        self.logger.info(f"Hard Mode setting: {shared_vars.hard_mode}")
 
-        elif common.element_exist("pictures/mirror/packs/floor_hard.png", 0.9): 
-            common.sleep(5) 
-            if not shared_vars.hard_mode: 
-                common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.9, recursive=False)
+        if shared_vars.hard_mode:
+            if (common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", 0.8, quiet_failure=True) or
+                common.element_exist("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", 0.8, quiet_failure=True)):
+                self.logger.info("Detected Normal Mode, switching to Hard Mode")
+                if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", threshold=0.75, recursive=False, quiet_failure=True):
+                    self.logger.warning("Could not find normal_toggle.png. Attempting to click floor_normal.png as fallback.")
+                    common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", threshold=0.75, recursive=False, quiet_failure=True)
+        else:
+            if (common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", 0.8, quiet_failure=True) or 
+                common.element_exist("pictures/mirror/packs/floor_hard.png", 0.8, quiet_failure=True) or
+                common.element_exist("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", 0.8, quiet_failure=True) or
+                common.element_exist("pictures/mirror/packs/hard_toggle.png", 0.8, quiet_failure=True)): 
+                self.logger.info("Detected Hard Mode, switching to Normal Mode")
+                common.sleep(2) 
+                if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", threshold=0.75, recursive=False, quiet_failure=True):
+                    if not common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.75, recursive=False, quiet_failure=True):
+                        self.logger.warning("Could not find hard_toggle.png. Attempting to click floor_hard.png as fallback.")
+                        if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True):
+                            common.click_matching("pictures/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True)
 
         min_y_scaled = common.scale_y_1080p(260)
         max_y_scaled = common.scale_y_1080p(800)
@@ -415,9 +428,9 @@ class Mirror:
             floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
             exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
 
-            logger.debug(f"Pack Selection - Floor: '{floor}', Priorities: {list(floor_priorities.keys())}")
-            
-            self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {list(floor_priorities.keys())}")
+            # Sort priorities for clearer logging
+            sorted_priorities_log = sorted(floor_priorities.items(), key=lambda x: x[1])
+            self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log}")
             
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
@@ -1036,7 +1049,7 @@ class Mirror:
         for i in statuses:
             status = mirror_utils.get_status_gift_template(i)
 
-            threshold = 0.75
+            threshold = 0.7
             
             status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
             if status_coords:
@@ -1059,10 +1072,10 @@ class Mirror:
         if excluded_statuses:
             for i in excluded_statuses:
                 status = mirror_utils.get_status_gift_template(i)
-                excluded_coords = common.ifexist_match(status, 0.75, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, quiet_failure=True)
+                excluded_coords = common.ifexist_match(status, 0.70, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, quiet_failure=True)
                 if excluded_coords:
                     self.logger.info(f"find_gifts: Detected {len(excluded_coords)} excluded '{i}' gifts, removing overlaps.")
-                    to_remove = common.proximity_check(fusion_gifts, excluded_coords, common.scale_x_1080p(50))
+                    to_remove = common.proximity_check(fusion_gifts, excluded_coords, common.scale_x_1080p(70))
                     fusion_gifts = [g for g in fusion_gifts if g not in to_remove]
 
         fusion_gifts = list(dict.fromkeys(fusion_gifts))
@@ -1072,7 +1085,7 @@ class Mirror:
             self.logger.info(f"Candidate gift at {gift} identified as: {', '.join(types)}")
 
         self.logger.debug("Checking for fully upgraded (++) gifts...")
-        fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.55, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True)
+        fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True)
         if fully_upgraded_coords:
              self.logger.info(f"find_gifts: Detected {len(fully_upgraded_coords)} fully upgraded (++) markers.")
 
@@ -1275,6 +1288,9 @@ class Mirror:
                 current_screen_gifts = self.find_gifts(statuses, excluded_statuses)
                 self.logger.info(f"fuse_gifts: Loop start. Found {len(current_screen_gifts)} gifts on screen.")
                 
+                # Sort gifts by Y coordinate descending (bottom to top) to prioritize new gifts appearing at the bottom after scrolling
+                current_screen_gifts.sort(key=lambda p: p[1], reverse=True)
+                
                 new_gifts_on_screen = current_screen_gifts
 
                 self.logger.info(f"fuse_gifts: {len(new_gifts_on_screen)} new gifts available to click.")
@@ -1449,13 +1465,13 @@ class Mirror:
         x1, y1 = common.scale_coordinates_1080p(900, 300)
         x2, y2 = common.scale_coordinates_1080p(1700, 800)
         
+        attempted_gifts = []
+
         while(True):
-            gifts = common.ifexist_match(status, x1=x1, y1=y1, x2=x2, y2=y2)
+            raw_gifts = common.ifexist_match(status, x1=x1, y1=y1, x2=x2, y2=y2)
+            gifts = raw_gifts
             if gifts:
-                shift_x, shift_y = mirror_utils.enhance_shift(self.status) or (12, -41)
                 gifts = [i for i in gifts if i[0] > common.scale_x(1200)] 
-                shift_x_scaled, shift_y_scaled = common.scale_offset_1440p(shift_x, shift_y)
-                gifts = [i for i in gifts if common.luminence(i[0]+shift_x_scaled,i[1]+shift_y_scaled) > 21]
                 
                 fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.7, x1=x1, y1=y1, x2=x2, y2=y2)
                 if fully_upgraded_coords:
@@ -1468,25 +1484,39 @@ class Mirror:
                                                                                          expand_left=expand_left_scaled, 
                                                                                          expand_below=expand_below_scaled,
                                                                                          use_bounding_box=False, return_bool=True)]
-                if len(gifts):
-                    if not self.upgrade(gifts,status,shift_x,shift_y):
-                        break  
+                
+                if attempted_gifts:
+                    gifts = [g for g in gifts if not common.proximity_check([g], attempted_gifts, common.scale_x_1080p(30))]
 
-            wordless_gifts = common.ifexist_match("pictures/mirror/restshop/enhance/wordless_enhance.png", x1=x1, y1=y1, x2=x2, y2=y2)
+                if len(gifts):
+                    if not self.upgrade(gifts,status,0,0):
+                        break  
+                    attempted_gifts.extend(gifts)
+
+            raw_wordless = common.ifexist_match("pictures/mirror/restshop/enhance/wordless_enhance.png", x1=x1, y1=y1, x2=x2, y2=y2)
+            wordless_gifts = raw_wordless
             if wordless_gifts:
                 shift_x, shift_y = mirror_utils.enhance_shift("wordless")
                 shift_x_scaled, shift_y_scaled = common.scale_offset_1440p(shift_x, shift_y)
                 wordless_gifts = [i for i in wordless_gifts if common.luminence(i[0]+shift_x_scaled,i[1]+shift_y_scaled) > 22]
+                
+                if attempted_gifts:
+                    wordless_gifts = [g for g in wordless_gifts if not common.proximity_check([g], attempted_gifts, common.scale_x_1080p(30))]
+
                 if len(wordless_gifts):
                     if not self.upgrade(wordless_gifts,"pictures/mirror/restshop/enhance/wordless_enhance.png",shift_x,shift_y):
                         break  
+                    attempted_gifts.extend(wordless_gifts)
 
+            scrolled = False
             if common.element_exist("pictures/mirror/restshop/scroll_bar.png") and not common.element_exist("pictures/CustomAdded1080p/mirror/general/fully_scrolled.png"):
                 common.click_matching("pictures/mirror/restshop/scroll_bar.png")
                 for k in range(5):
                     common.mouse_scroll(-1000)
+                scrolled = True
+                attempted_gifts = []
 
-            if not gifts:
+            if not scrolled and not gifts and not wordless_gifts:
                 break
 
     def event_choice(self):
