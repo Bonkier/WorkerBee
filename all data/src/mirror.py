@@ -1049,9 +1049,11 @@ class Mirror:
         for i in statuses:
             status = mirror_utils.get_status_gift_template(i)
 
-            threshold = 0.7
+            threshold = 0.65
+            if i == "blunt":
+                threshold = 0.75
             
-            status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+            status_coords = common.ifexist_match(status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, no_grayscale=True)
             if status_coords:
                 self.logger.info(f"find_gifts: Detected {len(status_coords)} '{i}' gifts at {status_coords}")
                 fusion_gifts += status_coords
@@ -1061,7 +1063,7 @@ class Mirror:
             
             market_status = mirror_utils.market_choice(i)
             if market_status:
-                market_coords = common.ifexist_match(market_status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
+                market_coords = common.ifexist_match(market_status, threshold, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, no_grayscale=True)
                 if market_coords:
                     self.logger.info(f"find_gifts: Detected {len(market_coords)} '{i}' market gifts at {market_coords}")
                     fusion_gifts += market_coords
@@ -1072,7 +1074,7 @@ class Mirror:
         if excluded_statuses:
             for i in excluded_statuses:
                 status = mirror_utils.get_status_gift_template(i)
-                excluded_coords = common.ifexist_match(status, 0.70, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, quiet_failure=True)
+                excluded_coords = common.ifexist_match(status, 0.6, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, quiet_failure=True, no_grayscale=True)
                 if excluded_coords:
                     self.logger.info(f"find_gifts: Detected {len(excluded_coords)} excluded '{i}' gifts, removing overlaps.")
                     to_remove = common.proximity_check(fusion_gifts, excluded_coords, common.scale_x_1080p(70))
@@ -1085,8 +1087,8 @@ class Mirror:
             self.logger.info(f"Candidate gift at {gift} identified as: {', '.join(types)}")
 
         self.logger.debug("Checking for fully upgraded (++) gifts...")
-        fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True)
-        fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True, quiet_failure=True)
+        fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.6, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True, no_grayscale=True)
+        fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.6, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, enable_scaling=True, quiet_failure=True, no_grayscale=True)
         if fully_upgraded_coords_2:
             fully_upgraded_coords.extend(fully_upgraded_coords_2)
 
@@ -1154,7 +1156,7 @@ class Mirror:
                     continue
 
                 try:
-                    if common.ifexist_match(gift_img, 0.8, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot):
+                    if common.ifexist_match(gift_img, 0.7, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot, no_grayscale=True):
                         self.logger.info(f"Filtered gift at ({gift_x}, {gift_y}) - matched exception: {os.path.basename(gift_img)}")
                         is_exception = True
                         break
@@ -1468,30 +1470,31 @@ class Mirror:
         self.logger.info("Starting gift enhancement")
         
         x1, y1 = common.scale_coordinates_1080p(900, 300)
-        x2, y2 = common.scale_coordinates_1080p(1700, 680)
+        x2, y2 = common.scale_coordinates_1080p(1700, 800)
         
         attempted_gifts = []
 
         while(True):
-            raw_gifts = common.ifexist_match(status, threshold=0.75, x1=x1, y1=y1, x2=x2, y2=y2)
+            raw_gifts = common.ifexist_match(status, threshold=0.6, x1=x1, y1=y1, x2=x2, y2=y2, no_grayscale=True)
             gifts = raw_gifts
             if gifts:
                 gifts = [i for i in gifts if i[0] > common.scale_x(1200)] 
                 
-                fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.7, x1=x1, y1=y1, x2=x2, y2=y2)
-                fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.7, x1=x1, y1=y1, x2=x2, y2=y2, quiet_failure=True)
+                fully_upgraded_coords = common.ifexist_match("pictures/CustomAdded1080p/mirror/general/fully_upgraded.png", 0.6, x1=x1, y1=y1, x2=x2, y2=y2, no_grayscale=True)
+                fully_upgraded_coords_2 = common.ifexist_match("pictures/mirror/restshop/enhance/fully_upgraded.png", 0.6, x1=x1, y1=y1, x2=x2, y2=y2, quiet_failure=True, no_grayscale=True)
                 if fully_upgraded_coords_2:
                     fully_upgraded_coords.extend(fully_upgraded_coords_2)
 
                 if fully_upgraded_coords:
                     
-                    expand_left_scaled = common.scale_x_1080p(100)
-                    expand_below_scaled = common.scale_y_1080p(100)
+                    expand_scaled = common.scale_x_1080p(75)
                     
                     gifts = [gift for gift in gifts if not common.enhanced_proximity_check(fully_upgraded_coords,
                                                                                          [gift], 
-                                                                                         expand_left=expand_left_scaled, 
-                                                                                         expand_below=expand_below_scaled,
+                                                                                         expand_left=expand_scaled, 
+                                                                                         expand_right=expand_scaled,
+                                                                                         expand_above=expand_scaled,
+                                                                                         expand_below=expand_scaled,
                                                                                          use_bounding_box=False, return_bool=True)]
                 
                 if attempted_gifts:
