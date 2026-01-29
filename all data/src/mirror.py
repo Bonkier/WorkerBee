@@ -693,7 +693,7 @@ class Mirror:
                     logger.info("Refreshed via image detection.")
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(2.5)
+                    common.sleep(3.5)
                     refresh_count += 1
                     retry_attempt = 10
                     continue
@@ -704,7 +704,7 @@ class Mirror:
                     common.mouse_move_click(*common.scale_coordinates_1080p(1600, 50))
                     
                     common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-                    common.sleep(2.5)
+                    common.sleep(3.5)
                     refresh_count += 1
                     retry_attempt = 10
                     continue
@@ -1463,12 +1463,12 @@ class Mirror:
         self.logger.info("Starting gift enhancement")
         
         x1, y1 = common.scale_coordinates_1080p(900, 300)
-        x2, y2 = common.scale_coordinates_1080p(1700, 800)
+        x2, y2 = common.scale_coordinates_1080p(1700, 680)
         
         attempted_gifts = []
 
         while(True):
-            raw_gifts = common.ifexist_match(status, x1=x1, y1=y1, x2=x2, y2=y2)
+            raw_gifts = common.ifexist_match(status, threshold=0.75, x1=x1, y1=y1, x2=x2, y2=y2)
             gifts = raw_gifts
             if gifts:
                 gifts = [i for i in gifts if i[0] > common.scale_x(1200)] 
