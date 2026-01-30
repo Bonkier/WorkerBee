@@ -56,7 +56,7 @@ class Mirror:
         
         for i in range(1, 6):
             floor_name = f"floor{i}"
-            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.8, grayscale=True, screenshot=screenshot):
+            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.8, no_grayscale=True, screenshot=screenshot):
                 detected_floors.append(floor_name)
 
         if len(detected_floors) == 1:
@@ -380,8 +380,16 @@ class Mirror:
 
         visual_floor = self.floor_id()
         if visual_floor and visual_floor != floor:
-             self.logger.warning(f"Visual floor detection ({visual_floor}) mismatch with calculated ({floor}). Updating to visual floor.")
-             floor = visual_floor
+             try:
+                 visual_floor_num = int(visual_floor.replace("floor", ""))
+                 if visual_floor_num < floor_num:
+                     self.logger.warning(f"Visual floor detection ({visual_floor}) is lower than calculated ({floor}). Ignoring visual detection (False Positive).")
+                 else:
+                     self.logger.warning(f"Visual floor detection ({visual_floor}) mismatch with calculated ({floor}). Updating to visual floor.")
+                     floor = visual_floor
+             except Exception as e:
+                 self.logger.warning(f"Error parsing visual floor '{visual_floor}': {e}. Updating to visual floor.")
+                 floor = visual_floor
 
         if floor != self.current_floor_tracker:
             self.current_floor_tracker = floor
