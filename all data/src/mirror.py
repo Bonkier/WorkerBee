@@ -56,7 +56,7 @@ class Mirror:
         
         for i in range(1, 6):
             floor_name = f"floor{i}"
-            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.8, no_grayscale=True, screenshot=screenshot):
+            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.76, no_grayscale=True, screenshot=screenshot):
                 detected_floors.append(floor_name)
 
         if len(detected_floors) == 1:
