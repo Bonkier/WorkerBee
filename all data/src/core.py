@@ -427,4 +427,11 @@ def navigate_to_md():
             pass
         common.click_matching("pictures/general/window.png")
         common.click_matching("pictures/general/drive.png")
-    common.click_matching("pictures/general/MD.png")
+
+    timeout = time.time() + 10
+    while common.element_exist("pictures/general/MD.png"):
+        common.click_matching("pictures/general/MD.png")
+        common.sleep(0.5)
+        if time.time() > timeout:
+            logger.warning("navigate_to_md: Timed out waiting for MD click to register")
+            break
