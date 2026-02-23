@@ -398,6 +398,10 @@ def skill_check():
 
 def refill_enkephalin():
     """Try to refill enkephalin using modules"""
+    if not getattr(shared_vars, 'convert_enkephalin_to_modules', True):
+        logger.info("Enkephalin conversion disabled by settings.")
+        return False
+
     logger.info("Starting enkephalin refill")
     if common.click_matching("pictures/general/module.png", recursive=False):
         logger.debug("Module button clicked successfully")

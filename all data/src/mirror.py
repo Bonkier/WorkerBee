@@ -298,14 +298,33 @@ class Mirror:
             pass
 
         gift = mirror_utils.gift_choice(self.status)
-        if not common.element_exist(gift,0.9): 
+        
+        clicked_gift = False
+        if common.click_matching(gift, 0.8, recursive=False):
+            clicked_gift = True
+        else:
             self.logger.info(f"Gift {gift} not found immediately, scrolling...")
             found = common.match_image("pictures/mirror/general/gift_select.png")
-            x,y = found[0]
-            offset_x, offset_y = common.scale_offset_1440p(-1365, 50)
-            common.mouse_move(x + offset_x, y + offset_y)
-            for i in range(5):
-                common.mouse_scroll(-1000)
+            if found:
+                x,y = found[0]
+                offset_x, offset_y = common.scale_offset_1440p(-1365, 50)
+                common.mouse_move(x + offset_x, y + offset_y)
+                
+                for i in range(7):
+                    common.mouse_scroll(-1000)
+                    common.sleep(0.5)
+                    if common.click_matching(gift, 0.8, recursive=False):
+                        clicked_gift = True
+                        break
+                
+                if not clicked_gift:
+                    self.logger.info("Gift not found after scrolling down, scrolling up...")
+                    for i in range(10):
+                        common.mouse_scroll(1000)
+                        common.sleep(0.5)
+                        if common.click_matching(gift, 0.8, recursive=False):
+                            clicked_gift = True
+                            break
 
         found = common.match_image("pictures/mirror/general/gift_select.png")
         x,y = found[0]
@@ -316,10 +335,6 @@ class Mirror:
         gift_pos = [y, y+offset1, y+offset2]
 
         initial_gift_coords = gift_pos if self.status != "sinking" else [*gift_pos[1:], gift_pos[0]]  
-
-        self.logger.info(f"Selecting gift: {gift}")
-        common.click_matching(gift,0.9) 
-        
 
         for i in initial_gift_coords:
             scaled_x, _ = common.scale_coordinates_1440p(1640, 0)
@@ -441,7 +456,7 @@ class Mirror:
             self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log}")
             
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
-            common.sleep(0.2)
+            common.sleep(1.2)
             screenshot = common.capture_screen()
 
             selectable_packs_pos = common.match_image(
@@ -952,7 +967,8 @@ class Mirror:
                 
                 common.error_screenshot()
                 
-                self.navigation(drag_danteh=False)
+                if drag_danteh:
+                    self.navigation(drag_danteh=False)
                 return
             
             self.logger.info(f"Found {len(node_location)} possible navigation nodes")

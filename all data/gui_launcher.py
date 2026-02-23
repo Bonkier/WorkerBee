@@ -171,8 +171,9 @@ def save_settings():
         "prioritize_list_over_status", "debug_image_matches", "hard_mode",
         "convert_images_to_grayscale", "reconnection_delay", 
         "reconnect_when_internet_reachable", "good_pc_mode", "click_delay",
-        "retry_count", "claim_on_defeat", "pack_refreshes", "mirror_runs",
-        "exp_runs", "exp_stage", "threads_runs", "threads_difficulty"
+        "retry_count", "claim_on_defeat", "pack_refreshes", "mirror_runs", 
+        "exp_runs", "exp_stage", "threads_runs", "threads_difficulty",
+        "convert_enkephalin_to_modules"
     ]
     
     for v in vars_to_save:
@@ -203,8 +204,9 @@ def reset_settings_to_defaults():
                 'skip_sinner_healing', 'skip_ego_enhancing', 'skip_ego_buying',
                 'prioritize_list_over_status', 'debug_image_matches', 'hard_mode',
                 'convert_images_to_grayscale', 'reconnection_delay', 'reconnect_when_internet_reachable',
-                'good_pc_mode', 'click_delay', 'retry_count', 'claim_on_defeat', 'pack_refreshes', 'mirror_runs',
-                'exp_runs', 'exp_stage', 'threads_runs', 'threads_difficulty'
+                'good_pc_mode', 'click_delay', 'retry_count', 'claim_on_defeat', 'pack_refreshes', 'mirror_runs', 
+                'exp_runs', 'exp_stage', 'threads_runs', 'threads_difficulty',
+                'convert_enkephalin_to_modules'
             ]
             
             for field in fields:
