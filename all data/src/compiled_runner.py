@@ -4,6 +4,7 @@ import os
 import threading
 import json
 import time
+import subprocess
 import mirror
 
 logger = None
@@ -143,6 +144,7 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.good_pc_mode = shared_vars_instance.good_pc_mode.value
             sv_module.click_delay = shared_vars_instance.click_delay.value
             sv_module.stop_after_current_run = shared_vars_instance.stop_after_current_run.value
+            sv_module.convert_enkephalin_to_modules = shared_vars_instance.convert_enkephalin_to_modules.value
         except AttributeError:
             pass
         except Exception:
@@ -189,11 +191,44 @@ def update_stats(win, run_data=None):
     except Exception as e:
         logger.error(f"Failed to update stats: {e}")
 
+class LogWatchdog(logging.Handler):
+    def __init__(self, timeout=30):
+        super().__init__()
+        self.timeout = timeout
+        self.history = []
+        self.stuck_event = threading.Event()
+        self.last_check = 0
+        
+    def emit(self, record):
+        try:
+            msg = record.getMessage()
+            now = time.time()
+            self.history.append((now, msg))
+            
+            while self.history and now - self.history[0][0] > self.timeout:
+                self.history.pop(0)
+            
+            if now - self.last_check > 2:
+                self.last_check = now
+                if len(self.history) > 5:
+                    if self.history[-1][0] - self.history[0][0] > (self.timeout - 5):
+                        msgs = [m for t, m in self.history]
+                        unique = set(msgs)
+                        if len(unique) <= 4:
+                            self.stuck_event.set()
+        except:
+            pass
+
 def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_vars):
     """Main mirror dungeon run logic"""
+    watchdog = None
     try:
+        import common
         from common import element_exist, error_screenshot
         
+        watchdog = LogWatchdog(timeout=30)
+        logging.getLogger().addHandler(watchdog)
+
         run_count = 0
         win_count = 0
         lose_count = 0
@@ -228,11 +263,46 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
             
             try:
                 run_complete = 0
+                win_flag = 0
                 MD = mirror.Mirror(status_list[i])
                 logger.info(f"Current Team: " + status_list[i])
                 MD.setup_mirror()
                 
                 while run_complete != 1:
+                    if watchdog.stuck_event.is_set():
+                        logger.warning("Stuck state detected by watchdog. Saving progress and restarting.")
+                        
+                        try:
+                            remaining_runs = max(1, num_runs - run_count)
+                            base_path = get_base_path()
+                            config_path = os.path.join(base_path, "config", "gui_config.json")
+                            
+                            if os.path.exists(config_path):
+                                with open(config_path, 'r') as f:
+                                    cfg = json.load(f)
+                                if "Settings" not in cfg: cfg["Settings"] = {}
+                                cfg["Settings"]["mirror_runs"] = remaining_runs
+                                with open(config_path, 'w') as f:
+                                    json.dump(cfg, f, indent=4)
+                                logger.info(f"Updated config: {remaining_runs} runs remaining.")
+
+                            if getattr(sys, 'frozen', False):
+                                cmd = [sys.executable]
+                            else:
+                                launcher_path = os.path.join(base_path, "gui_launcher.py")
+                                cmd = [sys.executable, launcher_path]
+
+                            if sys.platform == 'win32':
+                                subprocess.Popen(cmd, creationflags=0x00000008)
+                                subprocess.Popen(f"taskkill /F /PID {os.getppid()}", shell=True)
+                            else:
+                                subprocess.Popen(cmd, start_new_session=True)
+                                
+                            os._exit(0)
+                        except Exception as e:
+                            logger.error(f"Failed to restart: {e}")
+                        break
+
                     if connection_manager.connection_event.is_set():
                         win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
@@ -262,6 +332,9 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         logger.exception(f"Critical error in mirror_dungeon_run: {e}")
         from common import error_screenshot
         error_screenshot()
+    finally:
+        if watchdog:
+            logging.getLogger().removeHandler(watchdog)
 
 def main(num_runs, shared_vars):
     try:

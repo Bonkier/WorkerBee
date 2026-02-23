@@ -199,7 +199,8 @@ def _get_gui_values():
         'claim_on_defeat': False,
         'retry_count': 0,
         'pack_refreshes': 7,
-        'stop_after_current_run': False
+        'stop_after_current_run': False,
+        'convert_enkephalin_to_modules': True
     }
 
 def _load_shared_vars():

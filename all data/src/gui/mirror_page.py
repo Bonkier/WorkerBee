@@ -150,6 +150,7 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     add_setting_checkbox("Skip EGO Buying", "skip_ego_buying", False)
     add_setting_checkbox("Prioritize List over Status", "prioritize_list_over_status", False)
     
+    add_setting_checkbox("Convert Enkephalin to Modules", "convert_enkephalin_to_modules", True)
     add_setting_checkbox("Claim Rewards on Defeat", "claim_on_defeat", False)
 
     retry_frame = ctk.CTkFrame(basic_frame, fg_color="transparent")
@@ -231,7 +232,16 @@ def save_team_selection(base_path):
     selected = [name for name, var in mirror_checkbox_vars.items() if var.get()]
 
     existing_data = load_json_data(status_path)
-    existing_list = [existing_data[str(i)] for i in sorted([int(k) for k in existing_data.keys()])] if existing_data else []
+    existing_list = []
+    
+    if existing_data and isinstance(existing_data, dict):
+        try:
+            if all(k.isdigit() for k in existing_data.keys()):
+                existing_list = [existing_data[str(i)] for i in sorted([int(k) for k in existing_data.keys()])]
+            elif "selected_statuses" in existing_data:
+                existing_list = existing_data.get("selected_statuses", [])
+        except Exception:
+            pass
 
     final_list = [s for s in existing_list if s in selected]
     for s in selected:
