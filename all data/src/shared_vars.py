@@ -133,7 +133,7 @@ class ScaledCoordinates:
             }
             scaled_coords = {}
             for name, (x, y) in base_coords.items():
-                scaled_coords[name] = common._uniform_scale_coordinates(x, y, common.REFERENCE_WIDTH_1440P, common.REFERENCE_HEIGHT_1440P, use_uniform=False)
+                scaled_coords[name] = common.scale_coordinates_1440p(x, y)
             _scaled_coords_cache[coord_set_name] = scaled_coords
             logger.debug(f"Calculated scaled character positions for {coord_set_name}")
         

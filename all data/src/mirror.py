@@ -936,18 +936,12 @@ class Mirror:
         else:
             
             node_location = []
-            if self.aspect_ratio == "16:10": 
-                node_y = [189,607,1036] 
-            else:
-                node_y = [263,689,1115] 
+            node_y = [263, 689, 1115] # Base Y coordinates for nodes at 1440p
 
             node_y = self.check_nodes(node_y)
 
             for y in node_y:
-                if self.aspect_ratio == "4:3":
-                    node_location.append(common.scale_coordinates_1440p(1440, y + 105))
-                else:
-                    node_location.append(common.scale_coordinates_1440p(1440, y))
+                node_location.append(common.scale_coordinates_1440p(1440, y))
             if drag_danteh and self.aspect_ratio == "16:9": 
                 common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                 if found := common.match_image("pictures/mirror/general/danteh.png"):

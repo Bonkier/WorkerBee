@@ -520,209 +520,265 @@ def _lazy_show_page(name):
 # =======================
 
 if __name__ == "__main__":
-    import multiprocessing
-    multiprocessing.freeze_support()
+    try:
+        import multiprocessing
+        multiprocessing.freeze_support()
 
-    log_debug("Initializing Main UI (ctk.CTk)...")
-    root = ctk.CTk()
-    root.title(original_title)
-    w = config.get("Settings", {}).get("window_width", 1200)
-    h = config.get("Settings", {}).get("window_height", 800)
-    root.geometry(f"{w}x{h}")
+        if platform.system() == "Windows":
+            try:
+                import ctypes
+                myappid = 'bonkier.workerbee.gui.2.0'
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+            except Exception as e:
+                log_debug(f"Failed to set AppUserModelID: {e}")
 
-    log_debug("Loading themes...")
-    available_themes = load_available_themes(BASE_PATH)
-    current_theme_name = config.get("Settings", {}).get("appearance_mode", "Dark")
-    if current_theme_name not in available_themes:
-        current_theme_name = "Dark"
+        log_debug("Initializing Main UI (ctk.CTk)...")
+        root = ctk.CTk()
+        root.title(original_title)
 
-    ctk.set_appearance_mode(available_themes[current_theme_name]["mode"])
-    ctk.set_default_color_theme(available_themes[current_theme_name]["theme"])
-
-    log_debug("Creating main container...")
-    main_container = ctk.CTkFrame(root, corner_radius=0, fg_color=UIStyle.MAIN_BG_COLOR)
-    main_container.pack(fill="both", expand=True)
-
-    sidebar_frame = ctk.CTkFrame(main_container, width=UIStyle.SIDEBAR_WIDTH, corner_radius=0, fg_color=UIStyle.SIDEBAR_COLOR)
-    sidebar_frame.pack(side="left", fill="y")
-    sidebar_frame.pack_propagate(False)
-
-    log_debug("Creating content area...")
-    content_area = ctk.CTkFrame(main_container, corner_radius=0, fg_color="transparent")
-    content_area.pack(side="right", fill="both", expand=True)
-
-    log_debug("Initializing SidebarNavigation...")
-    sidebar = SidebarNavigation(sidebar_frame, content_area)
-
-    tab_dashboard = sidebar.add_page("Dashboard")
-    tab_md = sidebar.add_page("Mirror Dungeon")
-    tab_exp = sidebar.add_page("Exp")
-    tab_threads = sidebar.add_page("Threads")
-    tab_schedule = sidebar.add_page("Schedule")
-    tab_others = sidebar.add_page("Others")
-    tab_statistics = sidebar.add_page("Statistics")
-    tab_settings = sidebar.add_page("Settings")
-    tab_logs = sidebar.add_page("Logs")
-    tab_help = sidebar.add_page("Help")
-
-    log_debug("Creating sidebar footer...")
-    sidebar_footer = ctk.CTkFrame(sidebar_frame, fg_color="transparent")
-    sidebar_footer.pack(side="bottom", fill="x", padx=10, pady=20)
-
-    version_label = ctk.CTkLabel(sidebar_footer, text=get_display_version(), font=UIStyle.SMALL_FONT, text_color=UIStyle.TEXT_SECONDARY_COLOR)
-    version_label.pack(anchor="w", padx=10)
-
-    ctk.CTkButton(sidebar_footer, text="Compact Mode", command=toggle_compact_mode, fg_color="transparent", border_width=1, text_color="gray90").pack(fill="x", pady=(10, 0))
-    ctk.CTkButton(sidebar_footer, text="Exit Application", command=on_closing, height=30, fg_color="#c42b1c", hover_color="#8f1f14", font=UIStyle.SMALL_FONT).pack(fill="x", pady=(10, 0))
-
-    log_debug("Creating compact mode frame...")
-    compact_frame = ctk.CTkFrame(main_container, fg_color=UIStyle.MAIN_BG_COLOR)
-    compact_status_label = ctk.CTkLabel(compact_frame, text="Idle", font=UIStyle.SUBHEADER_FONT, text_color=UIStyle.TEXT_SECONDARY_COLOR)
-    compact_status_label.pack(pady=(20, 5))
-    ui_context['compact_status_label'] = compact_status_label
-    compact_stop_btn = ctk.CTkButton(compact_frame, text="Stop", command=stop_running_process, fg_color="#c42b1c", hover_color="#8f1f14", width=100, height=UIStyle.BUTTON_HEIGHT)
-    compact_stop_btn.pack_forget()
-    ui_context['compact_stop_btn'] = compact_stop_btn
-    ctk.CTkButton(compact_frame, text="Expand", command=toggle_compact_mode, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="bottom", pady=20)
-
-    _original_show_page = sidebar.show_page
-    def _lazy_show_page_wrapper(name):
-        _lazy_show_page(name)
-        _original_show_page(name)
-    sidebar.show_page = _lazy_show_page_wrapper
-
-    callbacks = {
-        'toggle_mirror': toggle_mirror_dungeon,
-        'start_mirror': start_mirror_dungeon,
-        'toggle_exp': toggle_exp,
-        'start_exp': start_exp_luxcavation,
-        'toggle_threads': toggle_threads,
-        'start_threads': start_thread_luxcavation,
-        'stop_all': stop_running_process,
-        'toggle_chain': toggle_chain,
-        'start_chain': start_chain_automation,
-        'call_function': call_function,
-        'terminate_functions': terminate_functions,
-        'battle': start_battle,
-        'load_statistics_tab': load_statistics_tab,
-        'save_settings': save_settings
-    }
-
-    def make_safe_callback(func):
-        return lambda *args, **kwargs: root.after(0, lambda: func(*args, **kwargs))
-    
-    safe_keyboard_callbacks = {k: make_safe_callback(v) for k, v in callbacks.items()}
-
-    log_debug("Initializing handlers...")
-    keyboard_handler = KeyboardHandler(safe_keyboard_callbacks, config)
-    scheduler_handler = SchedulerHandler(BASE_PATH, shared_vars, callbacks)
-
-    keyboard_handler.start()
-
-    if len(sys.argv) > 2:
-        target_tab = sys.argv[2]
-        if target_tab in sidebar.buttons:
-            sidebar.show_page(target_tab)
-    else:
-        sidebar.show_page("Dashboard")
-
-    log_debug("Loading initial tabs...")
-    load_dashboard_tab()
-    load_mirror_tab()
-    load_exp_tab()
-    load_threads_tab()
-    setup_help_tab()
-    log_debug("Initial tabs loaded")
-
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-
-    log_debug("Entering main block")
-    def start_application():
         try:
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(("127.0.0.1", 47329)) # Arbitrary port for lock
-            globals()['_singleton_socket'] = s
-        except socket.error:
-
-            logger.warning("Another instance of WorkerBee appears to be running.")
-
-            if "--updated" in sys.argv:
-                time.sleep(2)
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.bind(("127.0.0.1", 47329))
-                    globals()['_singleton_socket'] = s
-                except:
-                    pass
-
-        """Initialize the application after GUI is loaded"""
-        try:
-            log_debug("Initializing application logic...")
-            
-            ensure_schedule_file(BASE_PATH)
-            load_schedule_tab()
-            load_others_tab()
-            load_statistics_tab()
-            
-            if "--updated" in sys.argv:
-                messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
-
-            if not common.check_internet_connection():
-                root.title("WorkerBee | Bonk (Offline)")
-                logger.warning("No internet connection detected. Running in offline mode.")
-                messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
+            icon_path = os.path.join(BASE_PATH, "app_icon.ico")
+            if os.path.exists(icon_path):
+                root.wm_iconbitmap(default=icon_path)
+                root.iconbitmap(icon_path)
+                
+                def _enforce_icon():
+                    try: root.iconbitmap(icon_path)
+                    except: pass
+                root.after(200, _enforce_icon)
             else:
-                if config['Settings'].get('auto_update', False):
-                    try:
-                        import updater
-                        def update_cb(success, msg):
-                            if success:
-                                logger.info(f"Auto-update: {msg}")
-                                perform_cleanup()
-                                os._exit(0)
-                            else:
-                                logger.info(f"Auto-update check: {msg}")
-                        updater.auto_update("Bonkier", "WorkerBee", create_backup=False, callback=update_cb, pre_exit_callback=perform_cleanup)
-                    except Exception as e:
-                        logger.error(f"Failed to initialize auto-updater: {e}")
-            
-            run_scheduler_check()
-            
+                log_debug(f"Window icon not found: {icon_path}")
         except Exception as e:
-            log_debug(f"Error in start_application: {e}")
-            logger.error(f"Error in start_application: {e}")
-    
-    log_debug("Creating data directory...")
+            log_debug(f"Failed to set window icon: {e}")
 
-    os.makedirs(BASE_PATH, exist_ok=True)
-
-    def delayed_common_init():
         try:
-            app_lifecycle.setup_environment(shared_vars)
-            monitor_index = shared_vars.game_monitor.value
-            common.set_game_monitor(monitor_index)
+            if platform.system() == "Windows":
+                root.update_idletasks()
+                import ctypes
+                from ctypes import windll, byref, c_int, sizeof
+                
+                hwnd = windll.user32.GetParent(root.winfo_id())
+                
+                # Helper to convert hex to BGR integer for Windows DWM
+                def hex_to_bgr(hex_color):
+                    r = int(hex_color[1:3], 16)
+                    g = int(hex_color[3:5], 16)
+                    b = int(hex_color[5:7], 16)
+                    return (b << 16) | (g << 8) | r
 
-            common.CLEAN_LOGS_ENABLED = config['Settings'].get('clean_logs', True)
-            common.initialize_async_logging()
-            if hasattr(common, 'set_logging_enabled'):
-                common.set_logging_enabled(config['Settings'].get('logging_enabled', True))
+                # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, byref(c_int(1)), sizeof(c_int))
+                # DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36
+                windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, byref(c_int(hex_to_bgr(UIStyle.MAIN_BG_COLOR))), sizeof(c_int))
+                windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, byref(c_int(hex_to_bgr(UIStyle.TEXT_COLOR))), sizeof(c_int))
         except Exception as e:
-            logger.error(f"Error initializing common module: {e}")
-    
-    log_debug("Scheduling startup tasks...")
-    root.after(5, start_application)
+            log_debug(f"Failed to customize title bar: {e}")
 
-    root.after(100, delayed_common_init)
+        w = config.get("Settings", {}).get("window_width", 1200)
+        h = config.get("Settings", {}).get("window_height", 800)
+        root.geometry(f"{w}x{h}")
 
-    # Initialize UI Updater
-    log_debug("Initializing UI Updater...")
-    ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
+        log_debug("Loading themes...")
+        available_themes = load_available_themes(BASE_PATH)
+        current_theme_name = config.get("Settings", {}).get("appearance_mode", "Dark")
+        if current_theme_name not in available_themes:
+            current_theme_name = "Dark"
 
-    ui_updater.check_processes()
-    ui_updater.update_compact_status()
-    ui_updater.check_stats_update()
-    ui_updater.check_chain_status()
-    
-    log_debug("Starting mainloop...")
-    root.mainloop()
+        ctk.set_appearance_mode(available_themes[current_theme_name]["mode"])
+        ctk.set_default_color_theme(available_themes[current_theme_name]["theme"])
+
+        log_debug("Creating main container...")
+        main_container = ctk.CTkFrame(root, corner_radius=0, fg_color=UIStyle.MAIN_BG_COLOR)
+        main_container.pack(fill="both", expand=True)
+
+        sidebar_frame = ctk.CTkFrame(main_container, width=UIStyle.SIDEBAR_WIDTH, corner_radius=0, fg_color=UIStyle.SIDEBAR_COLOR)
+        sidebar_frame.pack(side="left", fill="y")
+        sidebar_frame.pack_propagate(False)
+
+        log_debug("Creating content area...")
+        content_area = ctk.CTkFrame(main_container, corner_radius=0, fg_color="transparent")
+        content_area.pack(side="right", fill="both", expand=True)
+
+        log_debug("Initializing SidebarNavigation...")
+        sidebar = SidebarNavigation(sidebar_frame, content_area)
+
+        tab_dashboard = sidebar.add_page("Dashboard")
+        tab_md = sidebar.add_page("Mirror Dungeon")
+        tab_exp = sidebar.add_page("Exp")
+        tab_threads = sidebar.add_page("Threads")
+        tab_schedule = sidebar.add_page("Schedule")
+        tab_others = sidebar.add_page("Others")
+        tab_statistics = sidebar.add_page("Statistics")
+        tab_settings = sidebar.add_page("Settings")
+        tab_logs = sidebar.add_page("Logs")
+        tab_help = sidebar.add_page("Help")
+
+        log_debug("Creating sidebar footer...")
+        sidebar_footer = ctk.CTkFrame(sidebar_frame, fg_color="transparent")
+        sidebar_footer.pack(side="bottom", fill="x", padx=10, pady=20)
+
+        version_label = ctk.CTkLabel(sidebar_footer, text=get_display_version(), font=UIStyle.BODY_FONT, text_color=UIStyle.TEXT_SECONDARY_COLOR)
+        version_label.pack(anchor="w", padx=10)
+
+        ctk.CTkButton(sidebar_footer, text="Compact Mode", command=toggle_compact_mode, fg_color="transparent", border_width=1, text_color="gray90", font=UIStyle.BODY_FONT).pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(sidebar_footer, text="Exit Application", command=on_closing, height=30, fg_color="#c42b1c", hover_color="#8f1f14", font=UIStyle.BODY_FONT).pack(fill="x", pady=(10, 0))
+
+        log_debug("Creating compact mode frame...")
+        compact_frame = ctk.CTkFrame(main_container, fg_color=UIStyle.MAIN_BG_COLOR)
+        compact_status_label = ctk.CTkLabel(compact_frame, text="Idle", font=UIStyle.SUBHEADER_FONT, text_color=UIStyle.TEXT_SECONDARY_COLOR)
+        compact_status_label.pack(pady=(20, 5))
+        ui_context['compact_status_label'] = compact_status_label
+        compact_stop_btn = ctk.CTkButton(compact_frame, text="Stop", command=stop_running_process, fg_color="#c42b1c", hover_color="#8f1f14", width=100, height=UIStyle.BUTTON_HEIGHT)
+        compact_stop_btn.pack_forget()
+        ui_context['compact_stop_btn'] = compact_stop_btn
+        ctk.CTkButton(compact_frame, text="Expand", command=toggle_compact_mode, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="bottom", pady=20)
+
+        _original_show_page = sidebar.show_page
+        def _lazy_show_page_wrapper(name):
+            _lazy_show_page(name)
+            _original_show_page(name)
+        sidebar.show_page = _lazy_show_page_wrapper
+
+        callbacks = {
+            'toggle_mirror': toggle_mirror_dungeon,
+            'start_mirror': start_mirror_dungeon,
+            'toggle_exp': toggle_exp,
+            'start_exp': start_exp_luxcavation,
+            'toggle_threads': toggle_threads,
+            'start_threads': start_thread_luxcavation,
+            'stop_all': stop_running_process,
+            'toggle_chain': toggle_chain,
+            'start_chain': start_chain_automation,
+            'call_function': call_function,
+            'terminate_functions': terminate_functions,
+            'battle': start_battle,
+            'load_statistics_tab': load_statistics_tab,
+            'save_settings': save_settings
+        }
+
+        def make_safe_callback(func):
+            return lambda *args, **kwargs: root.after(0, lambda: func(*args, **kwargs))
+        
+        safe_keyboard_callbacks = {k: make_safe_callback(v) for k, v in callbacks.items()}
+
+        log_debug("Initializing handlers...")
+        keyboard_handler = KeyboardHandler(safe_keyboard_callbacks, config)
+        scheduler_handler = SchedulerHandler(BASE_PATH, shared_vars, callbacks)
+
+        keyboard_handler.start()
+
+        if len(sys.argv) > 2:
+            target_tab = sys.argv[2]
+            if target_tab in sidebar.buttons:
+                sidebar.show_page(target_tab)
+        else:
+            sidebar.show_page("Dashboard")
+
+        log_debug("Loading initial tabs...")
+        load_dashboard_tab()
+        load_mirror_tab()
+        load_exp_tab()
+        load_threads_tab()
+        setup_help_tab()
+        log_debug("Initial tabs loaded")
+
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+
+        log_debug("Entering main block")
+        def start_application():
+            try:
+                import socket
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.bind(("127.0.0.1", 47329)) # Arbitrary port for lock
+                globals()['_singleton_socket'] = s
+            except socket.error:
+
+                logger.warning("Another instance of WorkerBee appears to be running.")
+
+                if "--updated" in sys.argv:
+                    time.sleep(2)
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s.bind(("127.0.0.1", 47329))
+                        globals()['_singleton_socket'] = s
+                    except:
+                        pass
+
+            """Initialize the application after GUI is loaded"""
+            try:
+                log_debug("Initializing application logic...")
+                
+                ensure_schedule_file(BASE_PATH)
+                load_schedule_tab()
+                load_others_tab()
+                load_statistics_tab()
+                
+                if "--updated" in sys.argv:
+                    messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
+
+                if not common.check_internet_connection():
+                    root.title("WorkerBee | Bonk (Offline)")
+                    logger.warning("No internet connection detected. Running in offline mode.")
+                    messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
+                else:
+                    if config['Settings'].get('auto_update', False):
+                        try:
+                            import updater
+                            def update_cb(success, msg):
+                                if success:
+                                    logger.info(f"Auto-update: {msg}")
+                                    perform_cleanup()
+                                    os._exit(0)
+                                else:
+                                    logger.info(f"Auto-update check: {msg}")
+                            updater.auto_update("Bonkier", "WorkerBee", create_backup=False, callback=update_cb, pre_exit_callback=perform_cleanup)
+                        except Exception as e:
+                            logger.error(f"Failed to initialize auto-updater: {e}")
+                
+                run_scheduler_check()
+                
+            except Exception as e:
+                log_debug(f"Error in start_application: {e}")
+                logger.error(f"Error in start_application: {e}")
+        
+        log_debug("Creating data directory...")
+
+        os.makedirs(BASE_PATH, exist_ok=True)
+
+        def delayed_common_init():
+            try:
+                app_lifecycle.setup_environment(shared_vars)
+                monitor_index = shared_vars.game_monitor.value
+                common.set_game_monitor(monitor_index)
+
+                common.CLEAN_LOGS_ENABLED = config['Settings'].get('clean_logs', True)
+                common.initialize_async_logging()
+                if hasattr(common, 'set_logging_enabled'):
+                    common.set_logging_enabled(config['Settings'].get('logging_enabled', True))
+            except Exception as e:
+                logger.error(f"Error initializing common module: {e}")
+        
+        log_debug("Scheduling startup tasks...")
+        root.after(5, start_application)
+
+        root.after(100, delayed_common_init)
+
+        # Initialize UI Updater
+        log_debug("Initializing UI Updater...")
+        ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
+
+        ui_updater.check_processes()
+        ui_updater.update_compact_status()
+        ui_updater.check_stats_update()
+        ui_updater.check_chain_status()
+        
+        log_debug("Starting mainloop...")
+        root.mainloop()
+
+    except Exception as e:
+        log_debug(f"CRITICAL ERROR in main execution: {e}\n{traceback.format_exc()}")
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, f"Application crashed during startup:\n{e}\n\nCheck logs/launcher_debug.log for details.", "WorkerBee Critical Error", 0x10)
+        except:
+            print(f"CRITICAL ERROR: {e}")

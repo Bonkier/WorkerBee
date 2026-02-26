@@ -210,10 +210,9 @@ def ego_check():
                     common.mouse_click()
                     common.sleep(1)
             else:
-                logger.warning("No usable EGO found for bad clash")
-                if common.element_exist("pictures/battle/ego/sanity.png"):
-                    common.mouse_move_click(*common.scale_coordinates_1080p(20, 1060))
-                    common.sleep(1)
+                logger.warning("No usable EGO found for bad clash, closing menu.")
+                common.mouse_move_click(*common.scale_coordinates_1080p(20, 1060))
+                common.sleep(1)
         common.key_press("p")
         if not shared_vars.good_pc_mode:
             common.sleep(0.5)
