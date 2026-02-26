@@ -404,8 +404,8 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     
     base_width, base_height = get_template_reference_resolution(full_template_path)
     
-    scale_factor_x = screenshot_width / base_width
-    scale_factor_y = screenshot_height / base_height
+    scale_factor_x = EXPECTED_WIDTH / base_width
+    scale_factor_y = EXPECTED_HEIGHT / base_height
     scale_factor = min(scale_factor_x, scale_factor_y)
 
     if no_grayscale:
@@ -419,6 +419,8 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     else:
         original_template = cv2.imread(full_template_path, color_flag)
         if original_template is None:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Image file missing: {template_path} | File Exists: False", dirty=True)
             if quiet_failure:
                 return []
             raise FileNotFoundError(f"Template image '{full_template_path}' not found.")
@@ -471,8 +473,10 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     if enable_scaling and (debug or shared_vars.debug_image_matches):
         logger.debug(f"Multi-scale match for {os.path.basename(template_path)}: Best Scale={best_scale_found:.2f}, Confidence={best_max_val:.4f}", dirty=True)
     
-    if scale_factor < 0.75:
+    if scale_factor < 0.75: # Automatic adjustment for very low resolutions
         threshold = threshold - 0.05
+    elif scale_factor > 1.8: # Automatic adjustment for very high resolutions (4k+)
+        threshold = threshold - 0.03
     total_adjustment = get_total_threshold_adjustment(template_path)
     threshold = threshold + total_adjustment
     
@@ -501,9 +505,9 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
                     center_y = int((box[1] + box[3]) / 2) + crop_offset_y
                     locations.append(f"({center_x},{center_y})")
                 locations_str = ", ".join(locations)
-                logger.debug(f"Match found: {template_path} at {locations_str} - found {len(filtered_boxes)} matches - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
+                logger.debug(f"Match found: {template_path} | Confidence: {highest_match_rate:.4f} | File Exists: True | Locations: {locations_str} | Caller: {caller_info}", dirty=True)
             else:
-                logger.debug(f"Match not found: {template_path} - {caller_info}. Highest match rate: {highest_match_rate}", dirty=True)
+                logger.debug(f"Match not found: {template_path} | Confidence: {highest_match_rate:.4f} | File Exists: True | Caller: {caller_info}", dirty=True)
     
     if (debug or shared_vars.debug_image_matches) and len(filtered_boxes) > 0:
         
@@ -846,18 +850,18 @@ def scale_y_1080p(y: int, *, padding: bool = True) -> int:
 
 def uniform_scale_single(coord):
     """Scale a single coordinate using the minimum scale factor to maintain aspect ratio"""
-    scale_factor_x = MONITOR_WIDTH / REFERENCE_WIDTH_1440P
-    scale_factor_y = MONITOR_HEIGHT / REFERENCE_HEIGHT_1440P
+    scale_factor_x = EXPECTED_WIDTH / REFERENCE_WIDTH_1440P
+    scale_factor_y = EXPECTED_HEIGHT / REFERENCE_HEIGHT_1440P
     scale_factor = min(scale_factor_x, scale_factor_y)
     return round(scale_factor * coord)
 
 def uniform_scale_coordinates(x, y):
     """Scale (x, y) coordinates from 1440p reference to the current screen resolution."""
-    return _uniform_scale_coordinates(x, y, REFERENCE_WIDTH_1440P, REFERENCE_HEIGHT_1440P, use_uniform=False)
+    return scale_coordinates_1440p(x, y)
 
 def uniform_scale_coordinates_1080p(x, y):
     """Scale (x, y) coordinates from 1080p reference to the current screen resolution."""
-    return _uniform_scale_coordinates(x, y, REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P, use_uniform=False)
+    return scale_coordinates_1080p(x, y)
 
 def scale_coordinates_1440p(x, y):
     """Scale (x, y) coordinates from 1440p reference to actual screen resolution"""

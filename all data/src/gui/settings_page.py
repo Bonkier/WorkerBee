@@ -624,7 +624,7 @@ def _setup_theme(parent, config, save_callback, base_path, root, restart_callbac
 def _setup_danger_zone(parent, base_path):
     card = CardFrame(parent)
     card.pack(fill="x", pady=10, padx=10)
-    ctk.CTkLabel(card, text="Danger Zone", font=UIStyle.SUBHEADER_FONT, text_color="#ff5555").pack(pady=(15, 10))
+    ctk.CTkLabel(card, text="RESET", font=UIStyle.SUBHEADER_FONT, text_color="#ff5555").pack(pady=(15, 10))
     
     def reset():
         if messagebox.askyesno("Reset", "Reset all settings to default? This will restart the application."):
