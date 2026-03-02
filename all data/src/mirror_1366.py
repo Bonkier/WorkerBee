@@ -509,7 +509,7 @@ class Mirror:
             self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log}")
 
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
-            common.sleep(1.2)
+            common.sleep(0.2)
             screenshot = common.capture_screen()
 
             selectable_packs_pos = []
@@ -557,15 +557,6 @@ class Mirror:
                             if pack_name in floor_priorities:
                                 rank = floor_priorities[pack_name]
                                 found_priority_packs.append((rank, m, pack_name))
-
-                    for m in matches:
-                        selectable_packs_pos.append(m)
-                        pack_identities[m] = pack_name
-                        known_pack_names[m] = pack_name
-
-                        if pack_name in floor_priorities:
-                            rank = floor_priorities[pack_name]
-                            found_priority_packs.append((rank, m, pack_name))
 
             if len(selectable_packs_pos) == 0:
                 if retry_attempt > 0:
@@ -626,7 +617,7 @@ class Mirror:
                 drag_offset = round(350 * common.EXPECTED_HEIGHT / common.REFERENCE_HEIGHT_1080P)
                 dest_x, dest_y = common.get_MonCords(x, y + drag_offset)
                 dest_x, dest_y = common.get_MonCords(x, y + 350)
-                pyautogui.moveTo(dest_x, dest_y, duration=0.6)
+                pyautogui.moveTo(dest_x, dest_y, duration=0.3)
                 common.sleep(0.15)
                 pyautogui.mouseUp()
 
@@ -667,7 +658,7 @@ class Mirror:
                 robust_drag_pack(x, y)
 
                 wait_start = time.time()
-                while time.time() - wait_start < 4:
+                while time.time() - wait_start < 2:
                     if not self.is_pack_screen():
                         break
                     common.sleep(0.2)
@@ -686,7 +677,7 @@ class Mirror:
                 select_pack(best_pack[1], best_pack[2])
                 return
 
-            if floor_priorities and refresh_count < MAX_REFRESHES:
+            if floor_priorities and refresh_count < MAX_REFRESHES and shared_vars.prioritize_list_over_status:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
 
 
