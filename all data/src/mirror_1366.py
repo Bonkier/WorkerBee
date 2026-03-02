@@ -289,7 +289,11 @@ class Mirror:
         common.click_matching("pictures/1366/CustomAdded1080p/mirror/general/Enter.png")
         common.sleep(1)
         common.click_matching("pictures/1366/CustomAdded1080p/mirror/general/Confirm.png")
+        wait_start = time.time()
         while(not common.element_exist("pictures/1366/mirror/general/gift_select.png")):
+            if time.time() - wait_start > 5:
+                self.logger.warning("Timed out waiting for gift selection, assuming it was skipped because no graces were selected.")
+                return
             common.sleep(0.5)
 
     def gift_selection(self):

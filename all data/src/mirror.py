@@ -89,6 +89,9 @@ class Mirror:
             if floor_name == self.current_floor_tracker: continue
             if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', threshold, no_grayscale=True, quiet_failure=True):
                 return True
+        
+        if common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png", quiet_failure=True):
+            return True
         return False
 
     @staticmethod
@@ -289,7 +292,11 @@ class Mirror:
         common.click_matching("pictures/CustomAdded1080p/mirror/general/Enter.png")
         common.sleep(1)
         common.click_matching("pictures/CustomAdded1080p/mirror/general/Confirm.png")
-        while(not common.element_exist("pictures/mirror/general/gift_select.png")): 
+        wait_start = time.time()
+        while(not common.element_exist("pictures/mirror/general/gift_select.png")):
+            if time.time() - wait_start > 5:
+                self.logger.warning("Timed out waiting for gift selection, assuming it was skipped because no graces were selected.")
+                return
             common.sleep(0.5)
     
     def gift_selection(self):
