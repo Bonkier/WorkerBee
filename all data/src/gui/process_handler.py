@@ -4,7 +4,9 @@ import os
 import signal
 import logging
 import time
-from src import compiled_runner, exp_runner, threads_runner, battlepass_collector, extractor
+from src import compiled_runner, exp_runner, threads_runner, battlepass_collector, extractor, Game_Launcher
+from src.audio_manager import AudioManager
+from src.common import BASE_PATH
 
 logger = logging.getLogger("gui_launcher")
 
@@ -16,6 +18,9 @@ battlepass_process = None
 extractor_process = None
 function_process_list = []
 game_launcher_process = None
+current_shared_vars = None
+
+AudioManager().initialize(BASE_PATH)
 
 def is_any_process_running():
     global process, exp_process, threads_process, game_launcher_process, battlepass_process, extractor_process
@@ -42,7 +47,7 @@ def get_running_process_name():
     return None
 
 def start_mirror_dungeon(shared_vars, runs=1):
-    global process
+    global process, current_shared_vars
     if is_any_process_running():
         logger.warning("Cannot start Mirror Dungeon: Another process is running")
         return False
@@ -52,40 +57,46 @@ def start_mirror_dungeon(shared_vars, runs=1):
             logger.error("CRITICAL: gui_launcher is running as a daemon process! Cannot spawn children.")
             return False
 
+        current_shared_vars = shared_vars
         process = multiprocessing.Process(target=compiled_runner.main, args=(runs, shared_vars), daemon=True)
         process.start()
+        AudioManager().play_sound("on", shared_vars.audio_volume.value)
         return True
     except Exception as e:
         logger.error(f"Failed to start Mirror Dungeon: {e}")
         return False
 
-def start_exp_luxcavation(shared_vars):
-    global exp_process
+def start_exp_luxcavation(shared_vars, runs=None, stage=None):
+    global exp_process, current_shared_vars
     if is_any_process_running():
         logger.warning("Cannot start Exp: Another process is running")
         return False
         
     try:
-        runs = shared_vars.exp_runs.value
-        stage = shared_vars.exp_stage.value
+        current_shared_vars = shared_vars
+        if runs is None: runs = shared_vars.exp_runs.value
+        if stage is None: stage = shared_vars.exp_stage.value
         exp_process = multiprocessing.Process(target=exp_runner.main, args=(runs, stage, shared_vars), daemon=True)
         exp_process.start()
+        AudioManager().play_sound("on", shared_vars.audio_volume.value)
         return True
     except Exception as e:
         logger.error(f"Failed to start Exp: {e}")
         return False
 
-def start_thread_luxcavation(shared_vars):
-    global threads_process
+def start_thread_luxcavation(shared_vars, runs=None, difficulty=None):
+    global threads_process, current_shared_vars
     if is_any_process_running():
         logger.warning("Cannot start Threads: Another process is running")
         return False
         
     try:
-        runs = shared_vars.threads_runs.value
-        difficulty = shared_vars.threads_difficulty.value
+        current_shared_vars = shared_vars
+        if runs is None: runs = shared_vars.threads_runs.value
+        if difficulty is None: difficulty = shared_vars.threads_difficulty.value
         threads_process = multiprocessing.Process(target=threads_runner.main, args=(runs, difficulty, shared_vars), daemon=True)
         threads_process.start()
+        AudioManager().play_sound("on", shared_vars.audio_volume.value)
         return True
     except Exception as e:
         logger.error(f"Failed to start Threads: {e}")
@@ -100,6 +111,7 @@ def start_battlepass_collection():
     try:
         battlepass_process = multiprocessing.Process(target=battlepass_collector.main, daemon=True)
         battlepass_process.start()
+        AudioManager().play_sound("on", 1.0)
         return True
     except Exception as e:
         logger.error(f"Failed to start Battlepass Collector: {e}")
@@ -114,9 +126,25 @@ def start_extraction():
     try:
         extractor_process = multiprocessing.Process(target=extractor.main, daemon=True)
         extractor_process.start()
+        AudioManager().play_sound("on", 1.0)
         return True
     except Exception as e:
         logger.error(f"Failed to start Extractor: {e}")
+        return False
+
+def start_game_launcher():
+    global game_launcher_process
+    if is_any_process_running():
+        logger.warning("Cannot start Game Launcher: Another process is running")
+        return False
+        
+    try:
+        game_launcher_process = multiprocessing.Process(target=Game_Launcher.launch_limbus, daemon=True)
+        game_launcher_process.start()
+        AudioManager().play_sound("on", 1.0)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to start Game Launcher: {e}")
         return False
 
 def start_battle(base_path, python_cmd):
@@ -132,12 +160,16 @@ def start_battle(base_path, python_cmd):
         env = os.environ.copy()
         env['PYTHONPATH'] = base_path + os.pathsep + os.path.join(base_path, 'src')
 
+        creation_flags = 0
+        if sys.platform == "win32":
+            creation_flags = 0x08000000 
+
         import sys
         if getattr(sys, 'frozen', False):
-             battle_process = subprocess.Popen([python_cmd, "-m", "src.battler"], env=env)
+             battle_process = subprocess.Popen([python_cmd, "-m", "src.battler"], env=env, creationflags=creation_flags)
         else:
              script_path = os.path.join(base_path, "src", "battler.py")
-             battle_process = subprocess.Popen([python_cmd, script_path], env=env)
+             battle_process = subprocess.Popen([python_cmd, script_path], env=env, creationflags=creation_flags)
              
     except Exception as e:
         logger.error(f"Failed to start battle: {e}")
@@ -148,14 +180,18 @@ def call_function(function_name, base_path, python_cmd):
         env = os.environ.copy()
         env['PYTHONPATH'] = base_path + os.pathsep + os.path.join(base_path, 'src')
         
+        creation_flags = 0
+        if sys.platform == "win32":
+            creation_flags = 0x08000000
+
         import sys
         if getattr(sys, 'frozen', False):
             cmd = [python_cmd, "-m", "src.function_runner", function_name, "--listen-stdin"]
         else:
             script_path = os.path.join(base_path, "src", "function_runner.py")
             cmd = [python_cmd, script_path, function_name, "--listen-stdin"]
-            
-        proc = subprocess.Popen(cmd, env=env)
+
+        proc = subprocess.Popen(cmd, env=env, creationflags=creation_flags)
         function_process_list.append(proc)
     except Exception as e:
         logger.error(f"Failed to call function: {e}")
@@ -175,7 +211,9 @@ def terminate_functions():
     function_process_list.clear()
 
 def cleanup_processes():
-    global process, exp_process, threads_process, battle_process, function_process_list, game_launcher_process, battlepass_process, extractor_process
+    global process, exp_process, threads_process, battle_process, function_process_list, game_launcher_process, battlepass_process, extractor_process, current_shared_vars
+
+    was_running = is_any_process_running()
 
     mp_processes = [process, exp_process, threads_process, game_launcher_process, battlepass_process, extractor_process]
     
@@ -198,6 +236,7 @@ def cleanup_processes():
                 logger.error(f"Error cleaning up process: {e}")
             
     if battle_process and battle_process.poll() is None:
+        was_running = True
         try:
             battle_process.terminate()
             try:
@@ -209,3 +248,10 @@ def cleanup_processes():
             pass
             
     terminate_functions()
+
+    if was_running:
+        vol = 0.5
+        if current_shared_vars and hasattr(current_shared_vars, 'audio_volume'):
+            vol = current_shared_vars.audio_volume.value
+            
+        AudioManager().play_sound("off", vol)

@@ -59,5 +59,8 @@ def load_help_tab(parent, help_path, version_text, discord_callback):
     except Exception as e:
         ctk.CTkLabel(scroll_frame, text=f"Error loading help: {e}", font=UIStyle.BODY_FONT).pack(pady=20)
 
-    discord_button = ctk.CTkButton(scroll_frame, text="Join Discord", command=discord_callback, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
+    discord_button = ctk.CTkButton(scroll_frame, text="Join Discord", command=discord_callback, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                                   fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                   corner_radius=UIStyle.CORNER_RADIUS)
     discord_button.pack(pady=20)

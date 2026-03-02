@@ -17,7 +17,7 @@ def restart_app_with_theme():
         cmd.append(tab_name)
 
     if os.name == 'nt':
-        subprocess.Popen(cmd, shell=True)
+        subprocess.Popen(cmd, shell=True, creationflags=0x08000000)
     else:
         subprocess.Popen(cmd)
 

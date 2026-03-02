@@ -23,6 +23,27 @@ def log_debug(msg):
             f.write(f"{time.strftime('%H:%M:%S')} - {msg}\n")
     except: pass
 
+# --- Loader Launch Logic ---
+splash_process = None
+if __name__ == "__main__":
+    try:
+        if getattr(sys, 'frozen', False):
+             base_dir = os.path.dirname(sys.executable)
+        else:
+             base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        creation_flags = 0
+        if platform.system() == "Windows":
+            creation_flags = subprocess.CREATE_NO_WINDOW
+
+        loader_path = os.path.join(base_dir, "src", "gui", "loader.py")
+        if os.path.exists(loader_path):
+             splash_process = subprocess.Popen([sys.executable, loader_path], creationflags=creation_flags)
+    except Exception as e:
+        log_debug(f"Failed to launch splash screen: {e}")
+        pass
+# ---------------------------
+
 log_debug("Starting gui_launcher.py")
 
 try:
@@ -42,6 +63,7 @@ try:
     log_debug("Importing modules...")
     sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
     import common
+
     from src.mp_types import SharedVars
 
     from src.gui.styles import UIStyle
@@ -351,9 +373,13 @@ def restart_with_theme(theme_name):
     """Restart application to apply theme"""
     try:
         save_settings()
+        
+        creation_flags = 0
+        if platform.system() == "Windows":
+            creation_flags = subprocess.CREATE_NO_WINDOW
 
-        subprocess.Popen([sys.executable, THEME_RESTART_PATH, theme_name, "Settings"])
-
+        subprocess.Popen([sys.executable, THEME_RESTART_PATH, theme_name, "Settings"], creationflags=creation_flags)
+        
         os._exit(0)
     except Exception as e:
         logger.error(f"Error applying theme: {e}")
@@ -404,8 +430,45 @@ def perform_cleanup():
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
 
-def on_closing():
-    """Handle application exit cleanup"""
+def fade_in(window, duration=0.25, steps=15, on_finish=None):
+    """Fade in the window"""
+    try:
+        step_time = int((duration / steps) * 1000)
+        step_val = 1.0 / steps
+        
+        def _step(current):
+            if current >= 1.0:
+                window.attributes('-alpha', 1.0)
+                if on_finish: on_finish()
+                return
+            window.attributes('-alpha', current)
+            window.after(step_time, lambda: _step(current + step_val))
+            
+        _step(0.0)
+    except Exception:
+        window.attributes('-alpha', 1.0)
+        if on_finish: on_finish()
+
+def fade_out(window, duration=0.25, steps=15, callback=None):
+    """Fade out the window"""
+    try:
+        step_time = int((duration / steps) * 1000)
+        step_val = 1.0 / steps
+        
+        def _step(current):
+            if current <= 0.0:
+                window.attributes('-alpha', 0.0)
+                if callback: callback()
+                return
+            window.attributes('-alpha', current)
+            window.after(step_time, lambda: _step(current - step_val))
+            
+        _step(1.0)
+    except Exception:
+        if callback: callback()
+
+def _perform_exit():
+    """Actual exit logic after fade out"""
     try:
         if root:
             root.withdraw()
@@ -430,12 +493,16 @@ def on_closing():
             try:
                 subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T",
                                shell=True, 
-                               creationflags=0x08000000) # CREATE_NO_WINDOW
+                               creationflags=0x08000000)
                 time.sleep(0.2)
             except:
                 pass
         
         os._exit(0)
+
+def on_closing():
+    """Handle application exit with fade out"""
+    fade_out(root, callback=_perform_exit)
 
 def join_discord():
     """Open Discord invite link"""
@@ -458,7 +525,7 @@ def setup_help_tab():
 
 def load_dashboard_tab():
     try:
-        load_dashboard_page(tab_dashboard, sidebar, callbacks, ui_context)
+        load_dashboard_page(tab_dashboard, sidebar, callbacks, ui_context, BASE_PATH)
     except Exception as e:
         logger.error(f"Failed to load dashboard tab: {e}")
         log_debug(f"Failed to load dashboard tab: {e}")
@@ -534,6 +601,7 @@ if __name__ == "__main__":
 
         log_debug("Initializing Main UI (ctk.CTk)...")
         root = ctk.CTk()
+        root.attributes('-alpha', 0.0)
         root.title(original_title)
 
         try:
@@ -558,17 +626,14 @@ if __name__ == "__main__":
                 from ctypes import windll, byref, c_int, sizeof
                 
                 hwnd = windll.user32.GetParent(root.winfo_id())
-                
-                # Helper to convert hex to BGR integer for Windows DWM
+
                 def hex_to_bgr(hex_color):
                     r = int(hex_color[1:3], 16)
                     g = int(hex_color[3:5], 16)
                     b = int(hex_color[5:7], 16)
                     return (b << 16) | (g << 8) | r
 
-                # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
                 windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, byref(c_int(1)), sizeof(c_int))
-                # DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36
                 windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, byref(c_int(hex_to_bgr(UIStyle.MAIN_BG_COLOR))), sizeof(c_int))
                 windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, byref(c_int(hex_to_bgr(UIStyle.TEXT_COLOR))), sizeof(c_int))
         except Exception as e:
@@ -587,6 +652,34 @@ if __name__ == "__main__":
         ctk.set_appearance_mode(available_themes[current_theme_name]["mode"])
         ctk.set_default_color_theme(available_themes[current_theme_name]["theme"])
 
+        if current_theme_name != "Dark":
+            try:
+                from customtkinter import ThemeManager
+                def get_theme_color(widget, attribute, default):
+                    try:
+                        return ThemeManager.theme[widget][attribute]
+                    except:
+                        return default
+
+                UIStyle.BUTTON_COLOR = get_theme_color("CTkButton", "fg_color", UIStyle.BUTTON_COLOR)
+                UIStyle.BUTTON_HOVER_COLOR = get_theme_color("CTkButton", "hover_color", UIStyle.BUTTON_HOVER_COLOR)
+                UIStyle.BUTTON_BORDER_COLOR = get_theme_color("CTkButton", "border_color", UIStyle.BUTTON_BORDER_COLOR)
+                
+                UIStyle.OPTION_MENU_FG_COLOR = get_theme_color("CTkOptionMenu", "fg_color", UIStyle.OPTION_MENU_FG_COLOR)
+                UIStyle.OPTION_MENU_BUTTON_COLOR = get_theme_color("CTkOptionMenu", "button_color", UIStyle.OPTION_MENU_BUTTON_COLOR)
+                UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR = get_theme_color("CTkOptionMenu", "button_hover_color", UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR)
+                
+                UIStyle.DROPDOWN_FG_COLOR = get_theme_color("DropdownMenu", "fg_color", UIStyle.DROPDOWN_FG_COLOR)
+                UIStyle.DROPDOWN_HOVER_COLOR = get_theme_color("DropdownMenu", "hover_color", UIStyle.DROPDOWN_HOVER_COLOR)
+                UIStyle.DROPDOWN_TEXT_COLOR = get_theme_color("DropdownMenu", "text_color", UIStyle.DROPDOWN_TEXT_COLOR)
+
+                UIStyle.MAIN_BG_COLOR = get_theme_color("CTk", "fg_color", UIStyle.MAIN_BG_COLOR)
+                UIStyle.CARD_COLOR = get_theme_color("CTkFrame", "fg_color", UIStyle.CARD_COLOR)
+                UIStyle.SIDEBAR_COLOR = get_theme_color("CTkFrame", "top_fg_color", UIStyle.CARD_COLOR) or UIStyle.CARD_COLOR
+                UIStyle.TEXT_COLOR = get_theme_color("CTkLabel", "text_color", UIStyle.TEXT_COLOR)
+            except Exception as e:
+                log_debug(f"Failed to sync UIStyle with theme: {e}")
+
         log_debug("Creating main container...")
         main_container = ctk.CTkFrame(root, corner_radius=0, fg_color=UIStyle.MAIN_BG_COLOR)
         main_container.pack(fill="both", expand=True)
@@ -600,7 +693,7 @@ if __name__ == "__main__":
         content_area.pack(side="right", fill="both", expand=True)
 
         log_debug("Initializing SidebarNavigation...")
-        sidebar = SidebarNavigation(sidebar_frame, content_area)
+        sidebar = SidebarNavigation(sidebar_frame, content_area, shared_vars)
 
         tab_dashboard = sidebar.add_page("Dashboard")
         tab_md = sidebar.add_page("Mirror Dungeon")
@@ -689,7 +782,7 @@ if __name__ == "__main__":
             try:
                 import socket
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.bind(("127.0.0.1", 47329)) # Arbitrary port for lock
+                s.bind(("127.0.0.1", 47329))
                 globals()['_singleton_socket'] = s
             except socket.error:
 
@@ -712,6 +805,9 @@ if __name__ == "__main__":
                 load_schedule_tab()
                 load_others_tab()
                 load_statistics_tab()
+
+                root.after(500, load_settings_tab)
+                root.after(1000, setup_logs_tab)
                 
                 if "--updated" in sys.argv:
                     messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
@@ -721,7 +817,7 @@ if __name__ == "__main__":
                     logger.warning("No internet connection detected. Running in offline mode.")
                     messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
                 else:
-                    if config['Settings'].get('auto_update', False):
+                    if config['Settings'].get('auto_update', True):
                         try:
                             import updater
                             def update_cb(success, msg):
@@ -751,6 +847,10 @@ if __name__ == "__main__":
                 monitor_index = shared_vars.game_monitor.value
                 common.set_game_monitor(monitor_index)
 
+                w, h = common.get_resolution()
+                if w != 1920 or h != 1080:
+                    messagebox.showwarning("Resolution Warning", "The macro has the best performance on 1920x1080p and they should expect the macro to be completely broken when outside of this resolution.")
+
                 common.CLEAN_LOGS_ENABLED = config['Settings'].get('clean_logs', True)
                 common.initialize_async_logging()
                 if hasattr(common, 'set_logging_enabled'):
@@ -763,7 +863,6 @@ if __name__ == "__main__":
 
         root.after(100, delayed_common_init)
 
-        # Initialize UI Updater
         log_debug("Initializing UI Updater...")
         ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
 
@@ -773,6 +872,14 @@ if __name__ == "__main__":
         ui_updater.check_chain_status()
         
         log_debug("Starting mainloop...")
+        
+        def on_ui_ready():
+            if splash_process:
+                try:
+                    splash_process.terminate()
+                except: pass
+            
+        fade_in(root, on_finish=on_ui_ready)
         root.mainloop()
 
     except Exception as e:

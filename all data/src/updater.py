@@ -12,8 +12,11 @@ import platform
 import threading
 import fnmatch
 from datetime import datetime
+import ssl
 
 logger = logging.getLogger("updater")
+
+ssl_context = ssl._create_unverified_context()
 
 EXCLUDED_PATHS = [
     "backups/",    
@@ -133,14 +136,14 @@ class Updater:
             version_file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/all%20data/version.json?t={int(time.time())}"
 
             req = urllib.request.Request(version_file_url, headers={'User-Agent': 'WorkerBee-Updater'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:
                 if response.getcode() == 200:
                     repo_version = response.read().decode().strip()
                     if repo_version:
                         try:
                             commits_url = f"{self.api_url}/commits/main"
                             req_commit = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
-                            with urllib.request.urlopen(req_commit) as response_commit:
+                            with urllib.request.urlopen(req_commit, context=ssl_context) as response_commit:
                                 commit_data = json.loads(response_commit.read().decode())
                                 commit_hash = commit_data['sha']
                                 download_url = f"{self.api_url}/zipball/{commit_hash}"
@@ -156,7 +159,7 @@ class Updater:
             release_url = f"{self.api_url}/releases/latest"
 
             req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:
                 if response.getcode() == 200:
                     release_data = json.loads(response.read().decode())
                     release_info = (release_data['tag_name'], release_data['zipball_url'])
@@ -179,7 +182,7 @@ class Updater:
         try:
             commits_url = f"{self.api_url}/commits/main"
             req = urllib.request.Request(commits_url, headers={'User-Agent': 'WorkerBee-Updater'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:
                 commit_data = json.loads(response.read().decode())
                 commit_hash = commit_data['sha']
                 commit_date = commit_data['commit']['committer']['date'].split('T')[0].replace('-', '.')
@@ -279,7 +282,7 @@ class Updater:
             logger.info(f"Downloading update from {download_url}")
 
             req = urllib.request.Request(download_url, headers={'User-Agent': 'WorkerBee-Updater'})
-            with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
+            with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:
                 shutil.copyfileobj(response, out_file)
                 
             logger.info(f"Download completed: {zip_path}")
@@ -406,7 +409,7 @@ class Updater:
             logger.error(f"Error creating backup: {e}")
             return None
     
-    def apply_update(self, zip_path):
+    def apply_update(self, zip_path, auto_restart=True):
         if self._is_staged_update():
             return self._perform_staged_update()
             
@@ -454,7 +457,7 @@ class Updater:
                     logger.warning(f"Failed to verify version in update package: {e}")
 
             if platform.system() == "Windows":
-                return self._run_batch_update(repo_dir)
+                return self._run_batch_update(repo_dir, auto_restart)
 
             temp_config_backup = self.handle_config_merging(repo_dir)
             
@@ -748,23 +751,20 @@ import sys
 import time
 import subprocess
 
-# Redirect output to file to prevent hanging on closed console
 try:
     sys.stdout = open('{restart_log_path_esc}', 'w')
     sys.stderr = sys.stdout
 except:
     pass
 
-# Wait a moment to ensure files are fully written
 time.sleep(3)
 
-# Launch the application
 cmd = {repr(cmd)}
 print(f"Launching application with command: {{cmd}}")
 
 try:
     if sys.platform == 'win32':
-        subprocess.Popen(cmd, creationflags=0x08000000, close_fds=True) # CREATE_NO_WINDOW
+        subprocess.Popen(cmd, creationflags=0x08000000, close_fds=True)
     else:
         subprocess.Popen(cmd, start_new_session=True, close_fds=True)
     print("Application launched successfully")
@@ -841,7 +841,7 @@ except Exception as e:
         if not zip_path:
             return False, "Failed to download update"
 
-        if not self.apply_update(zip_path):
+        if not self.apply_update(zip_path, auto_restart):
             return False, "Failed to apply update"
 
         self.update_version_file(latest_version)
@@ -874,7 +874,7 @@ except Exception as e:
         thread.start()
         return thread
 
-    def _run_batch_update(self, repo_dir):
+    def _run_batch_update(self, repo_dir, auto_restart=True):
         """Create and run a batch script to handle the update process safely"""
         try:
             batch_script_path = os.path.join(self.temp_path, "install_update.bat")
@@ -906,12 +906,11 @@ taskkill /F /PID {current_pid} /T > NUL 2>&1
 echo Updating files...
 xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q > NUL
 
-echo Restarting WorkerBee...
-start "" "{executable}" {args}
-
-echo Done.
-exit
 """
+            if auto_restart:
+                batch_content += f'\necho Restarting WorkerBee...\nstart "" "{executable}" {args}\n'
+
+            batch_content += "\necho Done.\nexit\n"
             with open(batch_script_path, "w") as f:
                 f.write(batch_content)
 

@@ -4,7 +4,7 @@ import customtkinter as ctk
 from datetime import datetime
 from tkinter import messagebox
 from src.gui.styles import UIStyle
-from src.gui.components import CardFrame
+from src.gui.components import CardFrame, ModernEntry
 from src.gui.utils import load_json_data, save_json_data, ensure_schedule_file
 
 def load_schedule_tab(parent, base_path):
@@ -42,7 +42,7 @@ def load_schedule_tab(parent, base_path):
     input_frame.pack(pady=(0, 15), padx=20)
 
     ctk.CTkLabel(input_frame, text="Time (HH:MM):", font=UIStyle.BODY_FONT).grid(row=0, column=0, padx=5, pady=5)
-    sched_time_entry = ctk.CTkEntry(input_frame, width=100, font=UIStyle.BODY_FONT)
+    sched_time_entry = ModernEntry(input_frame, width=100)
     sched_time_entry.grid(row=0, column=1, padx=5, pady=5)
     sched_time_entry.insert(0, "12:00")
 
@@ -52,12 +52,17 @@ def load_schedule_tab(parent, base_path):
         input_frame, 
         variable=sched_type_var, 
         values=["Mirror Dungeon", "Exp", "Threads", "Chain Automation"],
-        font=UIStyle.BODY_FONT
+        font=UIStyle.BODY_FONT,
+        fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+        button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+        dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+        dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS
     )
     sched_type_dropdown.grid(row=0, column=3, padx=5, pady=5)
 
     ctk.CTkLabel(input_frame, text="Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=4, padx=5, pady=5)
-    sched_runs_entry = ctk.CTkEntry(input_frame, width=60, font=UIStyle.BODY_FONT)
+    sched_runs_entry = ModernEntry(input_frame, width=60)
     sched_runs_entry.grid(row=0, column=5, padx=5, pady=5)
     sched_runs_entry.insert(0, "1")
 
@@ -82,7 +87,10 @@ def load_schedule_tab(parent, base_path):
         save_json_data(schedule_path, data)
         load_schedule_tab(parent, base_path) 
 
-    ctk.CTkButton(add_task_card, text="Add Task", command=add_schedule_task, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=(0, 15))
+    ctk.CTkButton(add_task_card, text="Add Task", command=add_schedule_task, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(pady=(0, 15))
 
     ctk.CTkLabel(scroll_frame, text="Scheduled Tasks", font=UIStyle.SUBHEADER_FONT).pack(pady=(10, 5), anchor="w", padx=20)
     

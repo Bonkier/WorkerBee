@@ -21,19 +21,19 @@ class UIUpdater:
                 if not process_handler.process.is_alive():
                     process_handler.process = None
                     if 'mirror_start_button' in self.ui_context and self.ui_context['mirror_start_button']:
-                        self.ui_context['mirror_start_button'].configure(text="Start", command=self.commands['start_mirror'], fg_color=UIStyle.ACCENT_COLOR, hover_color=UIStyle.HOVER_COLOR)
+                        self.ui_context['mirror_start_button'].configure(text="Start", command=self.commands['start_mirror'], fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR)
 
             if process_handler.exp_process is not None:
                 if not process_handler.exp_process.is_alive():
                     process_handler.exp_process = None
                     if 'exp_start_button' in self.ui_context and self.ui_context['exp_start_button']:
-                        self.ui_context['exp_start_button'].configure(text="Start", command=self.commands['start_exp'], fg_color=UIStyle.ACCENT_COLOR, hover_color=UIStyle.HOVER_COLOR)
+                        self.ui_context['exp_start_button'].configure(text="Start", command=self.commands['start_exp'], fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR)
 
             if process_handler.threads_process is not None:
                 if not process_handler.threads_process.is_alive():
                     process_handler.threads_process = None
                     if 'threads_start_button' in self.ui_context and self.ui_context['threads_start_button']:
-                        self.ui_context['threads_start_button'].configure(text="Start", command=self.commands['start_threads'], fg_color=UIStyle.ACCENT_COLOR, hover_color=UIStyle.HOVER_COLOR)
+                        self.ui_context['threads_start_button'].configure(text="Start", command=self.commands['start_threads'], fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR)
 
             if process_handler.battle_process is not None:
                 if process_handler.battle_process.poll() is not None:
@@ -55,9 +55,17 @@ class UIUpdater:
             if 'status_label' in self.ui_context and self.ui_context['status_label']:
                 running_process = process_handler.get_running_process_name()
                 if running_process:
-                    self.ui_context['status_label'].configure(text=f"Running: {running_process}", text_color=UIStyle.ACCENT_COLOR)
+                    new_text = f"Running: {running_process}"
+                    if self.ui_context['status_label'].cget("text") != new_text:
+                        self.ui_context['status_label'].configure(text=new_text, text_color=UIStyle.ACCENT_COLOR)
+                        if 'status_indicator' in self.ui_context:
+                            self.ui_context['status_indicator'].configure(text_color="#ff9800") # Orange for running
                 else:
-                    self.ui_context['status_label'].configure(text="Idle", text_color=UIStyle.TEXT_SECONDARY_COLOR)
+                    new_text = "Idle"
+                    if self.ui_context['status_label'].cget("text") != new_text:
+                        self.ui_context['status_label'].configure(text=new_text, text_color=UIStyle.TEXT_SECONDARY_COLOR)
+                        if 'status_indicator' in self.ui_context:
+                            self.ui_context['status_indicator'].configure(text_color="#4caf50") # Green for idle
 
         except Exception as e:
             logging.getLogger("gui_launcher").error(f"Error in UI update loop: {e}")

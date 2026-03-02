@@ -9,9 +9,15 @@ def load_preferences(config, shared_vars):
 
     if "game_monitor" in settings: shared_vars.game_monitor.value = int(settings["game_monitor"])
     if "exp_runs" in settings: shared_vars.exp_runs.value = int(settings["exp_runs"])
-    if "exp_stage" in settings: shared_vars.exp_stage.value = int(settings["exp_stage"])
+    if "exp_stage" in settings:
+        try:
+            shared_vars.exp_stage.value = int(settings["exp_stage"])
+        except ValueError: pass 
     if "threads_runs" in settings: shared_vars.threads_runs.value = int(settings["threads_runs"])
-    if "threads_difficulty" in settings: shared_vars.threads_difficulty.value = int(settings["threads_difficulty"])
+    if "threads_difficulty" in settings:
+        try:
+            shared_vars.threads_difficulty.value = int(settings["threads_difficulty"])
+        except ValueError: pass 
 
     if "skip_restshop" in settings: shared_vars.skip_restshop.value = bool(settings["skip_restshop"])
     if "skip_ego_check" in settings: shared_vars.skip_ego_check.value = bool(settings["skip_ego_check"])
@@ -33,6 +39,8 @@ def load_preferences(config, shared_vars):
     if "pack_refreshes" in settings: shared_vars.pack_refreshes.value = int(settings["pack_refreshes"])
     if "x_offset" in settings: shared_vars.x_offset.value = int(settings["x_offset"])
     if "y_offset" in settings: shared_vars.y_offset.value = int(settings["y_offset"])
+    if "enable_animations" in settings: shared_vars.enable_animations.value = bool(settings["enable_animations"])
+    if "audio_volume" in settings: shared_vars.audio_volume.value = float(settings["audio_volume"])
 
 def setup_environment(shared_vars):
     """Initialize common settings from shared_vars"""

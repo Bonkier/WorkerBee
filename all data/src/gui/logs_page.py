@@ -157,9 +157,18 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear log file: {e}")
 
-    ctk.CTkButton(button_frame, text="Clear GUI", command=clear_gui_logs, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="left", padx=5, pady=5)
-    ctk.CTkButton(button_frame, text="Clear File", command=clear_log_file, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="left", padx=5, pady=5)
-    ctk.CTkButton(button_frame, text="Reload", command=lambda: load_log_file(reload_all=True), width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(side="left", padx=5, pady=5)
+    ctk.CTkButton(button_frame, text="Clear GUI", command=clear_gui_logs, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5, pady=5)
+    ctk.CTkButton(button_frame, text="Clear File", command=clear_log_file, width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5, pady=5)
+    ctk.CTkButton(button_frame, text="Reload", command=lambda: load_log_file(reload_all=True), width=100, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5, pady=5)
 
     auto_reload_var = ctk.BooleanVar(value=True)
     ctk.CTkSwitch(button_frame, text="Auto-reload", variable=auto_reload_var, font=UIStyle.BODY_FONT).pack(side="right", padx=5, pady=5)

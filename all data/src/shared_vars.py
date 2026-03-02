@@ -200,7 +200,9 @@ def _get_gui_values():
         'retry_count': 0,
         'pack_refreshes': 7,
         'stop_after_current_run': False,
-        'convert_enkephalin_to_modules': True
+        'convert_enkephalin_to_modules': True,
+        'enable_animations': True,
+        'audio_volume': 0.5
     }
 
 def _load_shared_vars():
