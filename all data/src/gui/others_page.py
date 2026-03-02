@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from src.gui.styles import UIStyle
-from src.gui.components import CardFrame
+from src.gui.components import CardFrame, ModernEntry
 
 def load_others_tab(parent, config, callbacks, ui_context):
     """Load and render the Others tab (Chain Automation & Function Runner)"""
@@ -20,19 +20,19 @@ def load_others_tab(parent, config, callbacks, ui_context):
     chain_grid.pack(pady=10)
 
     ctk.CTkLabel(chain_grid, text="Threads Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=0, padx=5, pady=5)
-    chain_threads_entry = ctk.CTkEntry(chain_grid, width=60)
+    chain_threads_entry = ModernEntry(chain_grid, width=60)
     chain_threads_entry.grid(row=0, column=1, padx=5, pady=5)
     chain_threads_entry.insert(0, str(config.get("Settings", {}).get("chain_threads_runs", 3)))
     ui_context['chain_threads_entry'] = chain_threads_entry
 
     ctk.CTkLabel(chain_grid, text="EXP Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=2, padx=5, pady=5)
-    chain_exp_entry = ctk.CTkEntry(chain_grid, width=60)
+    chain_exp_entry = ModernEntry(chain_grid, width=60)
     chain_exp_entry.grid(row=0, column=3, padx=5, pady=5)
     chain_exp_entry.insert(0, str(config.get("Settings", {}).get("chain_exp_runs", 2)))
     ui_context['chain_exp_entry'] = chain_exp_entry
 
     ctk.CTkLabel(chain_grid, text="Mirror Runs:", font=UIStyle.BODY_FONT).grid(row=0, column=4, padx=5, pady=5)
-    chain_mirror_entry = ctk.CTkEntry(chain_grid, width=60)
+    chain_mirror_entry = ModernEntry(chain_grid, width=60)
     chain_mirror_entry.grid(row=0, column=5, padx=5, pady=5)
     chain_mirror_entry.insert(0, str(config.get("Settings", {}).get("chain_mirror_runs", 1)))
     ui_context['chain_mirror_entry'] = chain_mirror_entry
@@ -60,7 +60,10 @@ def load_others_tab(parent, config, callbacks, ui_context):
     ctk.CTkCheckBox(chain_card, text="Collect Rewards When Finished", variable=collect_rewards_var, command=save_chain_settings).pack(pady=5)
     ui_context['collect_rewards_var'] = collect_rewards_var
     
-    chain_start_button = ctk.CTkButton(chain_card, text="Start Chain", command=start_chain_wrapper, height=UIStyle.BUTTON_HEIGHT)
+    chain_start_button = ctk.CTkButton(chain_card, text="Start Chain", command=start_chain_wrapper, height=UIStyle.BUTTON_HEIGHT,
+                                       fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                       border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                       corner_radius=UIStyle.CORNER_RADIUS)
     chain_start_button.pack(pady=10)
     ui_context['chain_start_button'] = chain_start_button
     
@@ -74,13 +77,19 @@ def load_others_tab(parent, config, callbacks, ui_context):
     ctk.CTkLabel(function_card, text="Call a function:", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
     ctk.CTkLabel(function_card, text="Type any function from any module, e.g., core.battle or time.sleep(1)", font=UIStyle.SMALL_FONT, text_color="gray").pack(pady=(0, 10))
     
-    function_entry = ctk.CTkEntry(function_card, width=300, height=UIStyle.ENTRY_HEIGHT, font=UIStyle.BODY_FONT)
+    function_entry = ModernEntry(function_card, width=300)
     function_entry.pack(pady=(0, 5))
     ui_context['function_entry'] = function_entry
 
-    function_call_button = ctk.CTkButton(function_card, text="Call", command=callbacks['call_function'], width=150, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
+    function_call_button = ctk.CTkButton(function_card, text="Call", command=callbacks['call_function'], width=150, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                                         fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                         border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                         corner_radius=UIStyle.CORNER_RADIUS)
     function_call_button.pack(pady=(0, 5))
     
-    function_terminate_button = ctk.CTkButton(function_card, text="Terminate All", command=callbacks['terminate_functions'], width=150, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT, state="disabled")
+    function_terminate_button = ctk.CTkButton(function_card, text="Terminate All", command=callbacks['terminate_functions'], width=150, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT, state="disabled",
+                                              fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                              border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                              corner_radius=UIStyle.CORNER_RADIUS)
     function_terminate_button.pack(pady=(0, 20))
     ui_context['function_terminate_button'] = function_terminate_button

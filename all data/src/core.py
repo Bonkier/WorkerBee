@@ -69,18 +69,22 @@ def battle():
     winrate_timeout = 5
     winrate_invisible_start = None
     winrate_invisible_timeout = 10
+    battle_start_time = time.time()
     
     while(battle_finished != 1):
+        # Hard timeout for battle (15 minutes) to prevent infinite stuck loops
+        if time.time() - battle_start_time > 900:
+            logger.warning("Battle timed out (15 minutes). Forcing restart.")
+            return
+
         if common.element_exist("pictures/general/server_error.png"):
             logger.warning("Server error detected during battle")
             common.mouse_up()
             reconnect()
 
-        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True)):
+        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True)):
             logger.info("Defeat detected during battle")
             return 
 
@@ -95,7 +99,7 @@ def battle():
             logger.info(f"Battle finished!")
             return
             
-        common.mouse_move(*common.scale_coordinates_1080p(20, 1060))
+        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
         if common.element_exist("pictures/events/skip.png"): 
             logger.info("Skip button found, handling skill check")
             common.mouse_up()
@@ -137,7 +141,7 @@ def battle():
                 common.mouse_down()
                 time.sleep(1)
                 if not common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png"):
-                    common.mouse_move_click(*common.scale_coordinates_1080p(20, 1060))
+                    common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
         else:
             if common.element_exist("pictures/mirror/general/encounter_reward.png"):
@@ -153,8 +157,9 @@ def battle():
             elif current_time - winrate_invisible_start > winrate_invisible_timeout:
                 winrate_invisible_start = None
                 logger.debug(f"No winrate for {winrate_invisible_timeout} seconds")
+                common.reset_sct()
                 common.mouse_up()
-                common.mouse_move_click(*common.scale_coordinates_1080p(20, 1060))
+                common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
 def ego_check():
     """Check for bad clashes and use EGO skills to counter them"""
@@ -211,7 +216,7 @@ def ego_check():
                     common.sleep(1)
             else:
                 logger.warning("No usable EGO found for bad clash, closing menu.")
-                common.mouse_move_click(*common.scale_coordinates_1080p(20, 1060))
+                common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
                 common.sleep(1)
         common.key_press("p")
         if not shared_vars.good_pc_mode:
@@ -425,11 +430,19 @@ def refill_enkephalin():
 
 def navigate_to_md():
     """Navigate to mirror dungeon interface"""
+    attempts = 0
+    max_attempts = 30  
+
     while not common.element_exist("pictures/general/MD.png"):
+        if attempts >= max_attempts:
+            logger.error(f"navigate_to_md: Failed to reach MD after {max_attempts} attempts — is the game at the main menu?")
+            return False
         while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
             pass
         common.click_matching("pictures/general/window.png")
+        common.sleep(0.5)
         common.click_matching("pictures/general/drive.png")
+        attempts += 1
 
     timeout = time.time() + 10
     while common.element_exist("pictures/general/MD.png"):

@@ -1,7 +1,7 @@
 import os
 import customtkinter as ctk
 from src.gui.styles import UIStyle
-from src.gui.components import CardFrame
+from src.gui.components import CardFrame, ModernEntry
 from src.gui.utils import load_json_data, save_json_data
 from src.gui.constants import TEAM_ORDER
 
@@ -22,7 +22,7 @@ def load_exp_tab(parent, config, shared_vars, callbacks, ui_context, base_path, 
     input_row.pack(pady=(0, 10))
 
     ctk.CTkLabel(input_row, text="Number of Runs:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
-    entry = ctk.CTkEntry(input_row, height=UIStyle.ENTRY_HEIGHT, font=UIStyle.BODY_FONT, width=80)
+    entry = ModernEntry(input_row, width=80)
     entry.pack(side="left")
     entry.insert(0, str(config.get('Settings', {}).get('exp_runs', 1)))
     ui_context['exp_runs_entry'] = entry
@@ -37,7 +37,12 @@ def load_exp_tab(parent, config, shared_vars, callbacks, ui_context, base_path, 
         width=200,
         height=UIStyle.ENTRY_HEIGHT,
         font=UIStyle.BODY_FONT,
-        dropdown_font=UIStyle.BODY_FONT
+        dropdown_font=UIStyle.BODY_FONT,
+        fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+        button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+        dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+        dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS
     )
     stage_dropdown.pack(pady=(0, 10))
     ui_context['exp_stage_var'] = stage_var
@@ -58,7 +63,10 @@ def load_exp_tab(parent, config, shared_vars, callbacks, ui_context, base_path, 
         except ValueError:
             pass
 
-    start_button = ctk.CTkButton(run_card, text="Start", command=start_exp_wrapper, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
+    start_button = ctk.CTkButton(run_card, text="Start", command=start_exp_wrapper, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                                 fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                                 border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                 corner_radius=UIStyle.CORNER_RADIUS)
     start_button.pack(pady=(10, 20))
     ui_context['exp_start_button'] = start_button
 

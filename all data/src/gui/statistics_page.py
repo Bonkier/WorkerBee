@@ -13,6 +13,14 @@ def load_statistics_tab(parent, base_path):
     
     stats_path = os.path.join(base_path, "config", "stats.json")
     data = load_json_data(stats_path)
+
+    if hasattr(parent, 'ui_cache') and parent.ui_cache:
+        try:
+            update_statistics_ui(parent.ui_cache, data)
+            return
+        except Exception:
+            # If update fails (e.g. widgets destroyed), clear cache and rebuild
+            del parent.ui_cache
     
     scroll_frame = ctk.CTkScrollableFrame(parent, corner_radius=0, fg_color="transparent")
     scroll_frame.pack(fill="both", expand=True)
@@ -26,16 +34,16 @@ def load_statistics_tab(parent, base_path):
     md_grid = ctk.CTkFrame(md_card, fg_color="transparent")
     md_grid.pack(pady=(0, 15), padx=20, fill="x")
     
-    md_stats = data.get("mirror", {})
-    runs = md_stats.get("runs", 0)
-    wins = md_stats.get("wins", 0)
-    losses = md_stats.get("losses", 0)
-    win_rate = (wins / runs * 100) if runs > 0 else 0
+    ui_cache = {}
     
-    ctk.CTkLabel(md_grid, text=f"Total Runs: {runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
-    ctk.CTkLabel(md_grid, text=f"Wins: {wins}", font=UIStyle.BODY_FONT, text_color="#4caf50").pack(side="left", expand=True)
-    ctk.CTkLabel(md_grid, text=f"Losses: {losses}", font=UIStyle.BODY_FONT, text_color="#f44336").pack(side="left", expand=True)
-    ctk.CTkLabel(md_grid, text=f"Win Rate: {win_rate:.1f}%", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
+    ui_cache['md_runs'] = ctk.CTkLabel(md_grid, text="", font=UIStyle.BODY_FONT)
+    ui_cache['md_runs'].pack(side="left", expand=True)
+    ui_cache['md_wins'] = ctk.CTkLabel(md_grid, text="", font=UIStyle.BODY_FONT, text_color="#4caf50")
+    ui_cache['md_wins'].pack(side="left", expand=True)
+    ui_cache['md_losses'] = ctk.CTkLabel(md_grid, text="", font=UIStyle.BODY_FONT, text_color="#f44336")
+    ui_cache['md_losses'].pack(side="left", expand=True)
+    ui_cache['md_rate'] = ctk.CTkLabel(md_grid, text="", font=UIStyle.BODY_FONT)
+    ui_cache['md_rate'].pack(side="left", expand=True)
 
     lux_card = CardFrame(scroll_frame)
     lux_card.pack(fill="x", padx=10, pady=10)
@@ -44,21 +52,58 @@ def load_statistics_tab(parent, base_path):
     lux_grid = ctk.CTkFrame(lux_card, fg_color="transparent")
     lux_grid.pack(pady=(0, 15), padx=20, fill="x")
     
-    exp_runs = data.get("exp", {}).get("runs", 0)
-    threads_runs = data.get("threads", {}).get("runs", 0)
+    ui_cache['exp_runs'] = ctk.CTkLabel(lux_grid, text="", font=UIStyle.BODY_FONT)
+    ui_cache['exp_runs'].pack(side="left", expand=True)
+    ui_cache['thread_runs'] = ctk.CTkLabel(lux_grid, text="", font=UIStyle.BODY_FONT)
+    ui_cache['thread_runs'].pack(side="left", expand=True)
+
+    hist_card = CardFrame(scroll_frame)
+    hist_card.pack(fill="x", padx=10, pady=10)
+    ctk.CTkLabel(hist_card, text="Recent Runs", font=UIStyle.SUBHEADER_FONT).pack(pady=10, padx=15, anchor="w")
     
-    ctk.CTkLabel(lux_grid, text=f"Exp Runs: {exp_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
-    ctk.CTkLabel(lux_grid, text=f"Thread Runs: {threads_runs}", font=UIStyle.BODY_FONT).pack(side="left", expand=True)
+    history_frame = ctk.CTkScrollableFrame(hist_card, height=300, fg_color="transparent")
+    history_frame.pack(fill="x", padx=10, pady=(0, 15))
+    ui_cache['history_frame'] = history_frame
+
+    def refresh():
+        # Force full reload if needed, though update_statistics_ui handles data updates
+        if hasattr(parent, 'ui_cache'):
+            del parent.ui_cache
+        load_statistics_tab(parent, base_path)
+        
+    ctk.CTkButton(scroll_frame, text="Refresh Stats", command=refresh, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=20)
+
+    try:
+        update_statistics_ui(ui_cache, data)
+        parent.ui_cache = ui_cache
+    except Exception as e:
+        ctk.CTkLabel(scroll_frame, text=f"Error loading stats: {e}", text_color="red").pack()
+
+def update_statistics_ui(ui_cache, data):
+    md_stats = data.get("mirror", {})
+    runs = md_stats.get("runs", 0)
+    wins = md_stats.get("wins", 0)
+    losses = md_stats.get("losses", 0)
+    win_rate = (wins / runs * 100) if runs > 0 else 0
+    
+    if not ui_cache['md_runs'].winfo_exists():
+        raise RuntimeError("Widgets destroyed")
+
+    ui_cache['md_runs'].configure(text=f"Total Runs: {runs}")
+    ui_cache['md_wins'].configure(text=f"Wins: {wins}")
+    ui_cache['md_losses'].configure(text=f"Losses: {losses}")
+    ui_cache['md_rate'].configure(text=f"Win Rate: {win_rate:.1f}%")
+    
+    ui_cache['exp_runs'].configure(text=f"Exp Runs: {data.get('exp', {}).get('runs', 0)}")
+    ui_cache['thread_runs'].configure(text=f"Thread Runs: {data.get('threads', {}).get('runs', 0)}")
 
     if "history" in md_stats and md_stats["history"]:
-        hist_card = CardFrame(scroll_frame)
-        hist_card.pack(fill="x", padx=10, pady=10)
-        ctk.CTkLabel(hist_card, text="Recent Runs", font=UIStyle.SUBHEADER_FONT).pack(pady=10, padx=15, anchor="w")
+        history_frame = ui_cache['history_frame']
+        for widget in history_frame.winfo_children():
+            widget.destroy()
         
-        history_frame = ctk.CTkScrollableFrame(hist_card, height=300, fg_color="transparent")
-        history_frame.pack(fill="x", padx=10, pady=(0, 15))
-        
-        for entry in md_stats["history"][:50]: 
+        # Limit to 10 recent runs to prevent UI lag
+        for entry in md_stats["history"][:10]: 
             result = entry.get("result", "Unknown")
             duration = entry.get("duration", 0)
             timestamp = entry.get("timestamp", 0)
@@ -103,8 +148,3 @@ def load_statistics_tab(parent, base_path):
             
             packs_str = " | ".join(pack_details) if pack_details else "No pack data"
             ctk.CTkLabel(bottom_row, text=f"Packs | {packs_str}", font=(UIStyle.FONT_FAMILY, 11), text_color="#a0a0a0", anchor="w", justify="left", wraplength=500).pack(fill="x")
-
-    def refresh():
-        load_statistics_tab(parent, base_path)
-        
-    ctk.CTkButton(scroll_frame, text="Refresh Stats", command=refresh, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT).pack(pady=20)

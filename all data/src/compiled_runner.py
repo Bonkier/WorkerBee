@@ -6,6 +6,8 @@ import json
 import time
 import subprocess
 import mirror
+import mirror_1366
+import common
 
 logger = None
 
@@ -166,20 +168,33 @@ def update_stats(win, run_data=None):
         if "exp" not in data: data["exp"] = {"runs": 0}
         if "threads" not in data: data["threads"] = {"runs": 0}
         
+        packs = run_data.get("packs", []) if run_data else []
+        is_dnf = len(packs) < 5
+
         data["mirror"]["runs"] += 1
-        if win: data["mirror"]["wins"] += 1
-        else: data["mirror"]["losses"] += 1
+        
+        if is_dnf:
+            if "dnf" not in data["mirror"]:
+                data["mirror"]["dnf"] = 0
+            data["mirror"]["dnf"] += 1
+        else:
+            if win: data["mirror"]["wins"] += 1
+            else: data["mirror"]["losses"] += 1
 
         if run_data:
             if "history" not in data["mirror"]:
                 data["mirror"]["history"] = []
             
+            result_str = "Win" if win else "Loss"
+            if is_dnf:
+                result_str = "DNF"
+
             history_entry = {
                 "timestamp": time.time(),
-                "result": "Win" if win else "Loss",
+                "result": result_str,
                 "duration": run_data.get("duration", 0),
                 "floor_times": run_data.get("floor_times", {}),
-                "packs": run_data.get("packs", [])
+                "packs": packs
             }
             
             data["mirror"]["history"].insert(0, history_entry)
@@ -187,49 +202,16 @@ def update_stats(win, run_data=None):
         
         with open(stats_path, 'w') as f:
             json.dump(data, f, indent=4)
-        logger.info(f"Statistics updated: Win={win}")
+        logger.info(f"Statistics updated: Win={win}, DNF={is_dnf}")
     except Exception as e:
         logger.error(f"Failed to update stats: {e}")
 
-class LogWatchdog(logging.Handler):
-    def __init__(self, timeout=30):
-        super().__init__()
-        self.timeout = timeout
-        self.history = []
-        self.stuck_event = threading.Event()
-        self.last_check = 0
-        
-    def emit(self, record):
-        try:
-            msg = record.getMessage()
-            now = time.time()
-            self.history.append((now, msg))
-            
-            while self.history and now - self.history[0][0] > self.timeout:
-                self.history.pop(0)
-            
-            if now - self.last_check > 2:
-                self.last_check = now
-                if len(self.history) > 5:
-                    if self.history[-1][0] - self.history[0][0] > (self.timeout - 5):
-                        msgs = [m for t, m in self.history]
-                        unique = set(msgs)
-                        if len(unique) <= 4:
-                            self.stuck_event.set()
-        except:
-            pass
-
 def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_vars):
     """Main mirror dungeon run logic"""
-    watchdog = None
     try:
         import common
         from common import element_exist, error_screenshot
-        
-        watchdog = LogWatchdog(timeout=30)
-        logging.getLogger().addHandler(watchdog)
 
-        run_count = 0
         win_count = 0
         lose_count = 0
 
@@ -241,17 +223,24 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         unique_statuses = list(dict.fromkeys(status_list_file))
         logger.info(f"Starting Run with statuses: {unique_statuses}")
 
+        res_w, _ = common.get_resolution()
+        #uncomment the line below for testing ONLY
+        # MirrorClass = mirror_1366.Mirror if res_w == 1366 else mirror.Mirror
+        MirrorClass = mirror.Mirror
+        logger.info(f"Resolution detected: {res_w}px — using mirror.Mirror (1366 disabled)")
+
         sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
         sync_thread.start()
 
         time.sleep(1.0)
         
-        for i in range(num_runs):
+        i = 0
+        while i < num_runs:
             if hasattr(shared_vars, 'stop_after_current_run') and shared_vars.stop_after_current_run.value:
                 logger.info("Stop after current run signal detected. Stopping sequence.")
                 break
 
-            logger.info(f"Run {run_count + 1}")
+            logger.info(f"Run {i + 1}")
 
             try:
                 common._template_cache.clear()
@@ -264,45 +253,11 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
             try:
                 run_complete = 0
                 win_flag = 0
-                MD = mirror.Mirror(status_list[i])
+                MD = MirrorClass(status_list[i])
                 logger.info(f"Current Team: " + status_list[i])
                 MD.setup_mirror()
                 
                 while run_complete != 1:
-                    if watchdog.stuck_event.is_set():
-                        logger.warning("Stuck state detected by watchdog. Saving progress and restarting.")
-                        
-                        try:
-                            remaining_runs = max(1, num_runs - run_count)
-                            base_path = get_base_path()
-                            config_path = os.path.join(base_path, "config", "gui_config.json")
-                            
-                            if os.path.exists(config_path):
-                                with open(config_path, 'r') as f:
-                                    cfg = json.load(f)
-                                if "Settings" not in cfg: cfg["Settings"] = {}
-                                cfg["Settings"]["mirror_runs"] = remaining_runs
-                                with open(config_path, 'w') as f:
-                                    json.dump(cfg, f, indent=4)
-                                logger.info(f"Updated config: {remaining_runs} runs remaining.")
-
-                            if getattr(sys, 'frozen', False):
-                                cmd = [sys.executable]
-                            else:
-                                launcher_path = os.path.join(base_path, "gui_launcher.py")
-                                cmd = [sys.executable, launcher_path]
-
-                            if sys.platform == 'win32':
-                                subprocess.Popen(cmd, creationflags=0x00000008)
-                                subprocess.Popen(f"taskkill /F /PID {os.getppid()}", shell=True)
-                            else:
-                                subprocess.Popen(cmd, start_new_session=True)
-                                
-                            os._exit(0)
-                        except Exception as e:
-                            logger.error(f"Failed to restart: {e}")
-                        break
-
                     if connection_manager.connection_event.is_set():
                         win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
@@ -313,18 +268,18 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
 
                 if win_flag == 1:
                     win_count += 1
-                    logger.info(f"Run {run_count + 1} completed with a win")
+                    logger.info(f"Run {i + 1} completed with a win")
                     update_stats(True, run_stats)
                 else:
                     lose_count += 1
-                    logger.info(f"Run {run_count + 1} completed with a loss")
+                    logger.info(f"Run {i + 1} completed with a loss")
                     update_stats(False, run_stats)
-                run_count += 1
+                i += 1
                 
             except Exception as e:
-                logger.exception(f"Error in run {run_count + 1}: {e}")
+                logger.exception(f"Error in run {i + 1}: {e}")
                 error_screenshot()
-                run_count += 1
+                i += 1
         
         logger.info(f'Completed all runs. Won: {win_count}, Lost: {lose_count}')
         
@@ -332,9 +287,6 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         logger.exception(f"Critical error in mirror_dungeon_run: {e}")
         from common import error_screenshot
         error_screenshot()
-    finally:
-        if watchdog:
-            logging.getLogger().removeHandler(watchdog)
 
 def main(num_runs, shared_vars):
     try:

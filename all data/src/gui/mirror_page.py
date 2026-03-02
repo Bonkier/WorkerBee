@@ -5,11 +5,10 @@ import threading
 import customtkinter as ctk
 from tkinter import messagebox
 from src.gui.styles import UIStyle
-from src.gui.components import CardFrame
+from src.gui.components import CardFrame, ModernEntry, animate_expand, animate_collapse
 from src.gui.utils import load_json_data, save_json_data
 from src.gui.constants import TEAM_ORDER
 
-# Global state for mirror page
 mirror_checkbox_vars = {}
 pack_dropdown_vars = {}
 pack_expand_frames = {}
@@ -25,8 +24,7 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
         
     scroll_frame = ctk.CTkScrollableFrame(parent, corner_radius=0, fg_color="transparent")
     scroll_frame.pack(fill="both", expand=True)
-    
-    # Run Configuration Card
+
     run_card = CardFrame(scroll_frame)
     run_card.pack(fill="x", padx=10, pady=10)
 
@@ -36,7 +34,7 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
     input_row.pack(pady=(0, 10))
 
     ctk.CTkLabel(input_row, text="Number of Runs:", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
-    entry = ctk.CTkEntry(input_row, height=UIStyle.ENTRY_HEIGHT, font=UIStyle.BODY_FONT, width=80)
+    entry = ModernEntry(input_row, width=80)
     entry.pack(side="left")
     entry.insert(0, str(config.get('Settings', {}).get('mirror_runs', 1)))
     ui_context['mirror_runs_entry'] = entry
@@ -63,7 +61,10 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
         except ValueError:
             pass
 
-    start_button = ctk.CTkButton(run_card, text="Start", command=start_mirror_wrapper, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT)
+    start_button = ctk.CTkButton(run_card, text="Start", command=start_mirror_wrapper, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.BODY_FONT,
+                                 fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                 border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                 corner_radius=UIStyle.CORNER_RADIUS)
     start_button.pack(pady=(0, 20))
     ui_context['mirror_start_button'] = start_button
 
@@ -81,17 +82,21 @@ def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_pat
     
     def toggle_master():
         if is_expanded.get():
-            master_content.pack_forget()
-            expand_btn.configure(text="▶ Settings")
+            animate_collapse(master_content)
+            expand_btn.configure(text="+ Settings")
             is_expanded.set(False)
         else:
-            master_content.pack(fill="x", pady=10)
-            expand_btn.configure(text="▼ Settings")
+            expand_btn.configure(text="- Settings")
             is_expanded.set(True)
             if not master_content.winfo_children():
                 load_mirror_settings(master_content, base_path, shared_vars, config, save_callback)
+                master_content.update_idletasks()
+            animate_expand(master_content, {"fill": "x", "pady": 10})
 
-    expand_btn = ctk.CTkButton(master_frame, text="▶ Settings", command=toggle_master, width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w")
+    expand_btn = ctk.CTkButton(master_frame, text="+ Settings", command=toggle_master, width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
+                               fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                               border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                               corner_radius=UIStyle.CORNER_RADIUS)
     expand_btn.pack(anchor="center")
 
 def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
@@ -159,7 +164,7 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     
     retry_val = config.get("Settings", {}).get("retry_count", 0)
     
-    retry_entry = ctk.CTkEntry(retry_frame, width=60, font=UIStyle.BODY_FONT)
+    retry_entry = ModernEntry(retry_frame, width=60)
     retry_entry.pack(side="left")
     retry_entry.insert(0, str(retry_val))
     
@@ -184,7 +189,7 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
         refresh_val = config.get("Settings", {}).get("pack_refreshes", 7)
     except: pass
     
-    refresh_entry = ctk.CTkEntry(refresh_frame, width=60, font=UIStyle.BODY_FONT)
+    refresh_entry = ModernEntry(refresh_frame, width=60)
     refresh_entry.pack(side="left")
     refresh_entry.insert(0, str(refresh_val))
     
@@ -205,17 +210,10 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     grace_frame.pack(fill="x", pady=5)
     load_grace_selection_ui(grace_frame, base_path)
 
-    ctk.CTkLabel(parent, text="Pack Priority", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
-    pack_frame = ctk.CTkFrame(parent, fg_color="transparent")
-    pack_frame.pack(fill="x", pady=5)
-    
-    load_pack_priority_ui(pack_frame, base_path)
-
-    ctk.CTkLabel(parent, text="Pack Exceptions", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
-    pack_ex_frame = ctk.CTkFrame(parent, fg_color="transparent")
-    pack_ex_frame.pack(fill="x", pady=5)
-    
-    load_pack_exceptions_ui(pack_ex_frame, base_path)
+    ctk.CTkLabel(parent, text="Pack Configuration", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
+    pack_config_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    pack_config_frame.pack(fill="x", pady=5)
+    load_pack_configuration_ui(pack_config_frame, base_path)
 
     ctk.CTkLabel(parent, text="Fuse Exceptions", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     fuse_frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -270,18 +268,21 @@ def load_grace_selection_ui(parent, base_path):
     wrapper = ctk.CTkFrame(parent, fg_color="transparent")
     wrapper.pack(fill="x", padx=10)
     
-    arrow_var = ctk.StringVar(value="▶")
+    arrow_var = ctk.StringVar(value="+")
     
     def toggle(btn=None):
         if grace_expand_frame.winfo_ismapped():
-            grace_expand_frame.pack_forget()
-            arrow_var.set("▶")
+            animate_collapse(grace_expand_frame)
+            arrow_var.set("+")
         else:
-            grace_expand_frame.pack(fill="x", pady=5)
-            arrow_var.set("▼")
+            animate_expand(grace_expand_frame, {"fill": "x", "pady": 5})
+            arrow_var.set("-")
         if btn: btn.configure(text=f"{arrow_var.get()} Grace Selection")
 
-    btn = ctk.CTkButton(wrapper, text="▶ Grace Selection", command=lambda: toggle(btn), width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w")
+    btn = ctk.CTkButton(wrapper, text="+ Grace Selection", command=lambda: toggle(btn), width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
+                        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                        corner_radius=UIStyle.CORNER_RADIUS)
     btn.pack(anchor="center")
     
     grace_expand_frame = ctk.CTkFrame(wrapper, fg_color="transparent")
@@ -289,27 +290,47 @@ def load_grace_selection_ui(parent, base_path):
     
     grace_dropdown_vars = []
     current_order = grace_selection_data.get("order", {})
-    reverse_map = {v: k for k, v in current_order.items()}
+    sorted_graces = sorted(current_order.items(), key=lambda x: x[1])
     
-    for i in range(10):
+    def add_grace_row(initial_val="None"):
+        idx = len(grace_dropdown_vars)
         row = ctk.CTkFrame(grace_expand_frame, fg_color="transparent")
         row.pack(pady=1, anchor="center")
         
-        ctk.CTkLabel(row, text=f"{i+1}.", width=30, anchor="e", text_color="#b0b0b0").pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(row, text=f"{idx+1}.", width=30, anchor="e", text_color="#b0b0b0").pack(side="left", padx=(0, 10))
         
-        var = ctk.StringVar(value=reverse_map.get(i+1, "None"))
+        var = ctk.StringVar(value=initial_val)
         grace_dropdown_vars.append(var)
         
-        def on_change(idx=i):
-            new_val = grace_dropdown_vars[idx].get()
+        def on_change(choice, i=idx):
+            new_val = choice
             if new_val != "None":
                 for j, v in enumerate(grace_dropdown_vars):
-                    if j != idx and v.get() == new_val:
+                    if j != i and v.get() == new_val:
                         v.set("None")
                         break
             save_grace_selection(base_path)
             
-        ctk.CTkOptionMenu(row, variable=var, values=GRACE_NAMES + ["None"], command=lambda _, i=i: on_change(i), width=200).pack(side="left")
+        ctk.CTkOptionMenu(row, variable=var, values=GRACE_NAMES + ["None"], command=lambda c, i=idx: on_change(c, i), width=200,
+                          fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                          button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                          dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                          dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                          corner_radius=UIStyle.CORNER_RADIUS).pack(side="left")
+
+    for grace_name, _ in sorted_graces:
+        add_grace_row(grace_name)
+
+    def add_new_grace():
+        add_grace_row("None")
+        add_btn.pack_forget()
+        add_btn.pack(pady=10, anchor="center")
+
+    add_btn = ctk.CTkButton(grace_expand_frame, text="+ Add Grace", command=add_new_grace, 
+                            width=100, height=24, font=UIStyle.SMALL_FONT,
+                            fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                            border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR, corner_radius=UIStyle.CORNER_RADIUS)
+    add_btn.pack(pady=10, anchor="center")
 
 def save_grace_selection(base_path):
     updated_order = {}
@@ -331,139 +352,189 @@ def load_floor_packs(base_path):
         packs = []
         if os.path.exists(floor_dir):
             for filename in os.listdir(floor_dir):
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                if filename.lower().endswith('.png'):
                     packs.append(os.path.splitext(filename)[0])
         packs.sort()
         floor_packs[floor_key] = packs
     return floor_packs
 
-def load_pack_priority_ui(parent, base_path):
-    global pack_dropdown_vars
-    pack_dropdown_vars = {} 
+def load_pack_configuration_ui(parent, base_path):
     floor_packs = load_floor_packs(base_path)
     pack_priority_path = os.path.join(base_path, "config", "pack_priority.json")
-    pack_priority_data = load_json_data(pack_priority_path)
+    exceptions_path = os.path.join(base_path, "config", "pack_exceptions.json")
     
-    columns = [["floor1", "floor2"], ["floor3", "floor4"], ["floor5"]]
+    floors = ["Floor 1", "Floor 2", "Floor 3", "Floor 4", "Floor 5"]
+    floor_map = {"Floor 1": "floor1", "Floor 2": "floor2", "Floor 3": "floor3", "Floor 4": "floor4", "Floor 5": "floor5"}
     
-    for i in range(len(columns)):
-        parent.grid_columnconfigure(i, weight=1)
+    seg_button = ctk.CTkSegmentedButton(
+        parent, 
+        values=floors, 
+        font=UIStyle.BODY_FONT,
+        selected_color=UIStyle.BUTTON_COLOR,
+        selected_hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        unselected_color=UIStyle.CARD_COLOR,
+        unselected_hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        text_color=UIStyle.TEXT_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS
+    )
+    seg_button.pack(pady=(0, 15))
     
-    for col_idx, group in enumerate(columns):
-        col = ctk.CTkFrame(parent, fg_color="transparent")
-        col.grid(row=0, column=col_idx, padx=10, sticky="n")
+    content_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    content_frame.pack(fill="x")
+    
+    floor_frames = {}
+
+    def on_priority_change(floor_key, index, new_val, all_vars, valid_packs):
+        if new_val not in valid_packs and new_val != "None":
+            return
+
+        if new_val != "None":
+            for i, var in enumerate(all_vars):
+                if i != index and var.get() == new_val:
+                    var.set("None")
         
-        for floor in group:
-            wrapper = ctk.CTkFrame(col, fg_color="transparent")
-            wrapper.pack(pady=5, fill="x")
+        full_data = load_json_data(pack_priority_path)
+        floor_data = {}
 
-            is_expanded = ctk.BooleanVar(value=False)
-            content = ctk.CTkFrame(wrapper, fg_color="transparent")
-            
-            def toggle(f=floor, c=content, v=is_expanded, btn=None):
-                if v.get():
-                    c.pack_forget()
-                    btn.configure(text=f"▶ {f.capitalize()}")
-                    v.set(False)
-                else:
-                    c.pack(fill="x")
-                    btn.configure(text=f"▼ {f.capitalize()}")
-                    v.set(True)
-            
-            btn = ctk.CTkButton(wrapper, text=f"▶ {floor.capitalize()}", width=150, height=30, anchor="w")
-            btn.configure(command=lambda b=btn, t=toggle: t(btn=b))
-            btn.pack(anchor="center")
-
-            if floor not in pack_dropdown_vars:
-                pack_dropdown_vars[floor] = []
-                
-            current_prio = pack_priority_data.get(floor, {})
-            reverse_map = {v: k for k, v in current_prio.items()}
-            
-            for i in range(len(floor_packs.get(floor, []))):
-                row = ctk.CTkFrame(content, fg_color="transparent")
-                row.pack(pady=1)
-                ctk.CTkLabel(row, text=f"{i+1}.", width=20).pack(side="left")
-                
-                var = ctk.StringVar(value=reverse_map.get(i+1, "None"))
-                pack_dropdown_vars[floor].append(var)
-
-                def make_callback(f_val, idx_val, v_var):
-                    def callback(choice):
-                        if choice != "None":
-                            for j, other_var in enumerate(pack_dropdown_vars[f_val]):
-                                if j != idx_val and other_var.get() == choice:
-
-                                    current_saved = load_json_data(pack_priority_path, {})
-                                    floor_data = current_saved.get(f_val, {})
-
-                                    old_key = next((k for k, val in floor_data.items() if val == idx_val + 1), None)
-                                    other_var.set(old_key if old_key else "None")
-                                    break
-                        
-                        save_pack_priority(base_path)
-                    return callback
-                
-                ctk.CTkOptionMenu(row, variable=var, values=floor_packs.get(floor, []) + ["None"], 
-                                  command=make_callback(floor, i, var), width=130).pack(side="left")
-
-def save_pack_priority(base_path):
-    data = {}
-    for floor, vars_list in pack_dropdown_vars.items():
-        data[floor] = {}
-        for i, var in enumerate(vars_list):
+        valid_packs = []
+        for i, var in enumerate(all_vars):
             val = var.get()
             if val != "None":
-                data[floor][val] = i + 1
-    
-    save_json_data(os.path.join(base_path, "config", "pack_priority.json"), data)
-    save_json_data(os.path.join(base_path, "config", "delayed_pack_priority.json"), data)
-
-# --- Pack Exceptions Logic ---
-def load_pack_exceptions_ui(parent, base_path):
-    floor_packs = load_floor_packs(base_path)
-    exceptions_path = os.path.join(base_path, "config", "pack_exceptions.json")
-    exceptions_data = load_json_data(exceptions_path)
-    
-    columns = [["floor1", "floor2"], ["floor3", "floor4"], ["floor5"]]
-    
-    for i in range(len(columns)):
-        parent.grid_columnconfigure(i, weight=1)
-    
-    for col_idx, group in enumerate(columns):
-        col = ctk.CTkFrame(parent, fg_color="transparent")
-        col.grid(row=0, column=col_idx, padx=10, sticky="n")
+                valid_packs.append(val)
         
-        for floor in group:
-            wrapper = ctk.CTkFrame(col, fg_color="transparent")
-            wrapper.pack(pady=5, fill="x")
+        for i, pack in enumerate(valid_packs):
+            floor_data[pack] = i + 1
+        
+        full_data[floor_key] = floor_data
+        save_json_data(pack_priority_path, full_data)
+        save_json_data(os.path.join(base_path, "config", "delayed_pack_priority.json"), full_data)
+
+    def build_floor_ui(container, floor_key):
+        current_data = load_json_data(pack_priority_path).get(floor_key, {})
+        sorted_items = sorted(current_data.items(), key=lambda x: x[1])
+        
+        packs = floor_packs.get(floor_key, [])
+        if not packs:
+            ctk.CTkLabel(container, text="No packs found.", font=UIStyle.BODY_FONT, text_color="gray").pack(pady=10)
+            return
+
+        prio_frame = ctk.CTkFrame(container, fg_color="transparent")
+        prio_frame.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(prio_frame, text="Priority", font=UIStyle.SUBHEADER_FONT).pack(pady=(0, 10))
+
+        current_floor_vars = []
+        
+        def add_row(initial_val="None"):
+            idx = len(current_floor_vars)
+            row = ctk.CTkFrame(prio_frame, fg_color="transparent")
+            row.pack(pady=2, anchor="center")
             
-            is_expanded = ctk.BooleanVar(value=False)
-            content = ctk.CTkFrame(wrapper, fg_color="transparent")
+            ctk.CTkLabel(row, text=f"{idx+1}.", width=30, anchor="e", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
             
-            def toggle(f=floor, c=content, v=is_expanded, btn=None):
-                if v.get():
-                    c.pack_forget()
-                    btn.configure(text=f"▶ {f.capitalize()}")
-                    v.set(False)
+            var = ctk.StringVar(value=initial_val)
+            current_floor_vars.append(var)
+            
+            full_values = packs + ["None"]
+            
+            dropdown = ctk.CTkComboBox(
+                row, 
+                variable=var, 
+                values=full_values,
+                width=200,
+                fg_color=UIStyle.OPTION_MENU_FG_COLOR, 
+                button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, 
+                dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                corner_radius=UIStyle.CORNER_RADIUS,
+                command=lambda val, fk=floor_key, i=idx, av=current_floor_vars, vp=packs: on_priority_change(fk, i, val, av, vp)
+            )
+            dropdown.pack(side="left")
+            
+            def filter_callback(event):
+                text = var.get().lower()
+                if text == "":
+                    dropdown.configure(values=full_values)
                 else:
-                    c.pack(fill="x")
-                    btn.configure(text=f"▼ {f.capitalize()}")
-                    v.set(True)
+                    filtered = [v for v in full_values if text in v.lower()]
+                    dropdown.configure(values=filtered)
             
-            btn = ctk.CTkButton(wrapper, text=f"▶ {floor.capitalize()}", width=150, height=30, anchor="w")
-            btn.configure(command=lambda b=btn, t=toggle: t(btn=b))
-            btn.pack(anchor="center")
+            dropdown._entry.bind("<KeyRelease>", filter_callback)
+
+        for pack_name, rank in sorted_items:
+            add_row(pack_name)
+
+        def add_new_slot():
+            add_row("None")
+            add_btn.pack_forget()
+            add_btn.pack(pady=10, anchor="center")
+
+        add_btn = ctk.CTkButton(prio_frame, text="+ Add Pack", command=add_new_slot, 
+                                width=100, height=24, font=UIStyle.SMALL_FONT,
+                                fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                                border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR, corner_radius=UIStyle.CORNER_RADIUS)
+        add_btn.pack(pady=10, anchor="center")
+
+        ex_frame = ctk.CTkFrame(container, fg_color="transparent")
+        ex_frame.pack(fill="x")
+        ctk.CTkLabel(ex_frame, text="Exceptions", font=UIStyle.SUBHEADER_FONT).pack(pady=(0, 10))
+
+        action_frame = ctk.CTkFrame(ex_frame, fg_color="transparent")
+        action_frame.pack(fill="x", pady=(0, 10))
+
+        def clear_exceptions():
+            data = load_json_data(exceptions_path)
+            data[floor_key] = []
+            save_json_data(exceptions_path, data)
+            save_json_data(os.path.join(base_path, "config", "delayed_pack_exceptions.json"), data)
+            for widget in grid_frame.winfo_children():
+                if isinstance(widget, ctk.CTkCheckBox):
+                    widget.deselect()
+
+        btn_container = ctk.CTkFrame(action_frame, fg_color="transparent")
+        btn_container.pack(anchor="center")
+
+        ctk.CTkButton(btn_container, text="Clear All", command=clear_exceptions, width=80, height=24, 
+                      fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                      border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                      corner_radius=UIStyle.CORNER_RADIUS, font=UIStyle.SMALL_FONT).pack(side="left", padx=5)
+
+        current_exceptions = load_json_data(exceptions_path).get(floor_key, [])
+        
+        grid_frame = ctk.CTkFrame(ex_frame, fg_color="transparent")
+        grid_frame.pack(pady=5)
+        
+        cols = 3
+        for i, pack in enumerate(packs):
+            var = ctk.BooleanVar(value=pack in current_exceptions)
             
-            current_exceptions = exceptions_data.get(floor, [])
-            
-            for pack in floor_packs.get(floor, []):
-                var = ctk.BooleanVar(value=pack in current_exceptions)
+            def on_toggle(f=floor_key, p=pack, v=var):
+                update_pack_exception(base_path, f, p, v.get())
                 
-                def on_toggle(f=floor, p=pack, v=var):
-                    update_pack_exception(base_path, f, p, v.get())
-                    
-                ctk.CTkCheckBox(content, text=pack, variable=var, command=on_toggle, font=UIStyle.SMALL_FONT).pack(anchor="w")
+            chk = ctk.CTkCheckBox(
+                grid_frame, 
+                text=pack, 
+                variable=var, 
+                command=on_toggle, 
+                font=UIStyle.BODY_FONT
+            )
+            chk.grid(row=i//cols, column=i%cols, padx=10, pady=5, sticky="w")
+
+    for floor_label in floors:
+        f_key = floor_map[floor_label]
+        frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        build_floor_ui(frame, f_key)
+        floor_frames[floor_label] = frame
+
+    def show_floor(value):
+        for f in floor_frames.values():
+            f.pack_forget()
+        floor_frames[value].pack(fill="x")
+
+    seg_button.configure(command=show_floor)
+    seg_button.set("Floor 1")
+    show_floor("Floor 1")
 
 def update_pack_exception(base_path, floor, pack, is_checked):
     path = os.path.join(base_path, "config", "pack_exceptions.json")
@@ -511,7 +582,7 @@ def load_fuse_exceptions_ui(parent, base_path):
                 continue
             
             full_path = os.path.join(fuse_dir, item)
-            if os.path.isdir(full_path) or item.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if os.path.isdir(full_path) or item.lower().endswith('.png'):
                 other_items.append(item)
 
     wrapper = ctk.CTkFrame(parent, fg_color="transparent")
@@ -521,13 +592,16 @@ def load_fuse_exceptions_ui(parent, base_path):
     
     def toggle(btn):
         if content_frame.winfo_ismapped():
-            content_frame.pack_forget()
-            btn.configure(text="▶ Fuse Exceptions")
+            animate_collapse(content_frame)
+            btn.configure(text="+ Fuse Exceptions")
         else:
-            content_frame.pack(fill="x", pady=5)
-            btn.configure(text="▼ Fuse Exceptions")
+            animate_expand(content_frame, {"fill": "x", "pady": 5})
+            btn.configure(text="- Fuse Exceptions")
 
-    btn = ctk.CTkButton(wrapper, text="▶ Fuse Exceptions", width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w")
+    btn = ctk.CTkButton(wrapper, text="+ Fuse Exceptions", width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
+                        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                        corner_radius=UIStyle.CORNER_RADIUS)
     btn.configure(command=lambda: toggle(btn))
     btn.pack(anchor="center")
 

@@ -39,6 +39,7 @@ IS_NON_STANDARD_RATIO: bool | None = None
 
 _thread_local = threading.local()
 
+
 def get_sct():
     """Get thread-local MSS instance"""
     if not hasattr(_thread_local, "sct"):
@@ -313,6 +314,8 @@ def get_template_reference_resolution(template_path):
     """Determine which reference resolution to use based on the template path"""
     if is_custom_1080p_image(template_path):
         return REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P
+    elif "/1366/" in template_path or "\\1366\\" in template_path:
+        return 1366, 768
     else:
         return REFERENCE_WIDTH_1440P, REFERENCE_HEIGHT_1440P
 
@@ -473,9 +476,7 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     if enable_scaling and (debug or shared_vars.debug_image_matches):
         logger.debug(f"Multi-scale match for {os.path.basename(template_path)}: Best Scale={best_scale_found:.2f}, Confidence={best_max_val:.4f}", dirty=True)
     
-    if scale_factor < 0.75: # Automatic adjustment for very low resolutions
-        threshold = threshold - 0.05
-    elif scale_factor > 1.8: # Automatic adjustment for very high resolutions (4k+)
+    if scale_factor > 1.8:
         threshold = threshold - 0.03
     total_adjustment = get_total_threshold_adjustment(template_path)
     threshold = threshold + total_adjustment

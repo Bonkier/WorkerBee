@@ -11,7 +11,8 @@ def check_and_install():
         "PIL": "Pillow",
         "keyboard": "keyboard",
         "mss": "mss",
-        "pyautogui": "PyAutoGUI"
+        "pyautogui": "PyAutoGUI",
+        "pygame": "pygame"
     }
     
     missing = [pkg for import_name, pkg in dependencies.items() if importlib.util.find_spec(import_name) is None]

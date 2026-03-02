@@ -10,7 +10,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from src.gui.styles import UIStyle
-from src.gui.components import CardFrame, ToolTip
+from src.gui.components import CardFrame, ToolTip, ModernEntry, animate_expand, animate_collapse
 from src.gui.utils import load_json_data, save_json_data
 from src.gui.constants import STATUS_COLUMNS, SINNER_LIST, TEAM_ORDER
 from src.gui.themes import load_available_themes
@@ -19,6 +19,7 @@ import common
 
 squad_data = {}
 dropdown_vars = {}
+dropdown_widgets = {}
 expand_frames = {}
 settings_ui_vars = {}
 
@@ -49,7 +50,7 @@ def load_settings_tab(parent, config, shared_vars, save_callback, base_path, roo
     _setup_sinner_assignment(scroll_frame, base_path)
     _setup_display_settings(scroll_frame, shared_vars, save_callback)
     _setup_mouse_offsets(scroll_frame, shared_vars, save_callback, root_ref)
-    _setup_misc_settings(scroll_frame, shared_vars, save_callback, config)
+    _setup_misc_settings(scroll_frame, shared_vars, save_callback, config, base_path)
     _setup_image_thresholds(scroll_frame, base_path)
     _setup_automation_settings(scroll_frame, shared_vars, save_callback)
     _setup_shortcuts(scroll_frame, config, save_callback, root_ref, update_shortcuts_callback)
@@ -95,7 +96,7 @@ def _setup_profiles(parent, base_path, save_callback):
     actions_frame = ctk.CTkFrame(card, fg_color="transparent")
     actions_frame.pack(fill="x", padx=10, pady=(0, 15))
     
-    new_profile_entry = ctk.CTkEntry(actions_frame, placeholder_text="New Profile Name", height=UIStyle.ENTRY_HEIGHT, font=UIStyle.BODY_FONT)
+    new_profile_entry = ModernEntry(actions_frame, placeholder_text="New Profile Name")
     new_profile_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
     
     def save_profile():
@@ -138,8 +139,14 @@ def _setup_profiles(parent, base_path, save_callback):
         
         messagebox.showinfo("Success", "Profile loaded. Please restart application.")
 
-    ctk.CTkButton(actions_frame, text="Save", command=save_profile, width=80).pack(side="left", padx=5)
-    ctk.CTkButton(actions_frame, text="Load", command=load_profile, width=80).pack(side="left", padx=5)
+    ctk.CTkButton(actions_frame, text="Save", command=save_profile, width=80,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
+    ctk.CTkButton(actions_frame, text="Load", command=load_profile, width=80,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
 
 def _setup_sinner_assignment(parent, base_path):
     card = CardFrame(parent)
@@ -161,21 +168,24 @@ def _setup_sinner_assignment(parent, base_path):
             wrapper = ctk.CTkFrame(col, fg_color="transparent")
             wrapper.grid(row=row_idx, column=0, sticky="nw")
             
-            arrow_var = ctk.StringVar(value="▶")
+            arrow_var = ctk.StringVar(value="+")
             
             def make_toggle(stat=status, arrow=arrow_var, btn_ref=None):
                 def toggle():
                     if expand_frames[stat].winfo_ismapped():
-                        expand_frames[stat].pack_forget()
-                        arrow.set("▶")
+                        animate_collapse(expand_frames[stat])
+                        arrow.set("+")
                     else:
                         _populate_sinner_dropdowns(expand_frames[stat], stat, base_path)
-                        expand_frames[stat].pack(pady=(2, 8), fill="x")
-                        arrow.set("▼")
+                        animate_expand(expand_frames[stat], {"pady": (2, 8), "fill": "x"})
+                        arrow.set("-")
                     if btn_ref: btn_ref.configure(text=f"{arrow.get()} {stat.capitalize()}")
                 return toggle
             
-            btn = ctk.CTkButton(wrapper, text=f"▶ {status.capitalize()}", width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w")
+            btn = ctk.CTkButton(wrapper, text=f"+ {status.capitalize()}", width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
+                                fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                                border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                corner_radius=UIStyle.CORNER_RADIUS)
             btn.configure(command=make_toggle(status, arrow_var, btn))
             btn.pack(anchor="w", pady=(0, 6))
             
@@ -183,6 +193,7 @@ def _setup_sinner_assignment(parent, base_path):
             expand_frames[status] = frame
             frame.pack_forget()
             dropdown_vars[status] = []
+            dropdown_widgets[status] = []
 
 def _populate_sinner_dropdowns(frame, status, base_path):
     if len(frame.winfo_children()) > 0: return
@@ -201,19 +212,56 @@ def _populate_sinner_dropdowns(frame, status, base_path):
         pretty = next((x for x in SINNER_LIST if sinner_key(x) == raw_name), "None") if raw_name else "None"
         var.set(pretty)
         
-        def callback(s=status, idx=i, v=var):
+        def callback(choice, s=status, idx=i, v=var):
+            clean = choice.replace(" (Assigned)", "")
+            if clean != choice:
+                v.set(clean)
             _dropdown_callback(s, idx, base_path)
             
-        dropdown = ctk.CTkOptionMenu(row, variable=var, values=SINNER_LIST + ["None"], width=180, command=lambda _: callback())
+        dropdown = ctk.CTkOptionMenu(row, variable=var, values=["None"] + SINNER_LIST, width=180, command=callback,
+                                     fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                                     button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                                     dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                                     dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                                     corner_radius=UIStyle.CORNER_RADIUS)
         dropdown.pack(side="left")
         dropdown_vars[status].append(var)
+        dropdown_widgets[status].append(dropdown)
+    
+    _update_sinner_dropdown_menus(status)
+
+def _update_sinner_dropdown_menus(status):
+    """Update dropdown values to indicate assigned sinners"""
+    if status not in dropdown_vars or status not in dropdown_widgets:
+        return
+
+    selections = []
+    for var in dropdown_vars[status]:
+        val = var.get().replace(" (Assigned)", "")
+        selections.append(val)
+
+    for i, widget in enumerate(dropdown_widgets[status]):
+        current_val = selections[i]
+        new_values = ["None"]
+        
+        for sinner in SINNER_LIST:
+            if sinner in selections and sinner != current_val:
+                new_values.append(f"{sinner} (Assigned)")
+            else:
+                new_values.append(sinner)
+        
+        widget.configure(values=new_values)
 
 def _dropdown_callback(status, index, base_path):
     try:
-        new_val = dropdown_vars[status][index].get()
+        current_var = dropdown_vars[status][index]
+        new_val = current_var.get().replace(" (Assigned)", "")
+        if current_var.get() != new_val:
+            current_var.set(new_val)
+
         if new_val != "None":
             for i, var in enumerate(dropdown_vars[status]):
-                if i != index and var.get() == new_val:
+                if i != index and var.get().replace(" (Assigned)", "") == new_val:
                     old_key = next((k for k, v in squad_data.get(status, {}).items() if v == index + 1), None)
                     pretty_old = next((x for x in SINNER_LIST if sinner_key(x) == old_key), "None") if old_key else "None"
                     var.set(pretty_old)
@@ -222,13 +270,15 @@ def _dropdown_callback(status, index, base_path):
         entries = dropdown_vars[status]
         updated = {}
         for i, var in enumerate(entries):
-            val = var.get()
+            val = var.get().replace(" (Assigned)", "")
             if val != "None":
                 updated[sinner_key(val)] = i + 1
         
         squad_data[status] = updated
         save_json_data(get_squad_json_path(base_path), squad_data)
         save_json_data(get_slow_squad_json_path(base_path), squad_data)
+        
+        _update_sinner_dropdown_menus(status)
         
     except Exception as e:
         print(f"Error in dropdown callback: {e}")
@@ -263,7 +313,12 @@ def _setup_display_settings(parent, shared_vars, save_callback):
         except:
             pass
             
-    ctk.CTkOptionMenu(frame, variable=var, values=options, command=update_monitor, width=200).pack(side="left")
+    ctk.CTkOptionMenu(frame, variable=var, values=options, command=update_monitor, width=200,
+                      fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                      button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                      dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                      dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                      corner_radius=UIStyle.CORNER_RADIUS).pack(side="left")
 
 def _setup_mouse_offsets(parent, shared_vars, save_callback, root):
     card = CardFrame(parent)
@@ -277,7 +332,7 @@ def _setup_mouse_offsets(parent, shared_vars, save_callback, root):
         row = ctk.CTkFrame(frame)
         row.pack(pady=5)
         ctk.CTkLabel(row, text=label, width=100, anchor="e").pack(side="left", padx=10)
-        entry = ctk.CTkEntry(row, width=100)
+        entry = ModernEntry(row, width=100)
         entry.pack(side="left", padx=10)
         
         val = getattr(shared_vars, var_name).value
@@ -299,7 +354,7 @@ def _setup_mouse_offsets(parent, shared_vars, save_callback, root):
     
     ctk.CTkLabel(frame, text="Positive values move right/down, negative left/up.", font=UIStyle.SMALL_FONT, text_color="gray").pack(pady=5)
 
-def _setup_misc_settings(parent, shared_vars, save_callback, config):
+def _setup_misc_settings(parent, shared_vars, save_callback, config, base_path):
     card = CardFrame(parent)
     card.pack(fill="x", pady=10, padx=10)
     ctk.CTkLabel(card, text="Misc Settings", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 10))
@@ -318,8 +373,41 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config):
     add_bool("Debug Image Matches", "debug_image_matches")
     add_bool("Convert to Grayscale (Speed Boost)", "convert_images_to_grayscale")
     add_bool("Reconnect only when Internet Reachable", "reconnect_when_internet_reachable")
+    add_bool("Enable Animations", "enable_animations")
 
-    auto_upd = ctk.BooleanVar(value=config.get("Settings", {}).get("auto_update", False))
+    audio_frame = ctk.CTkFrame(frame, fg_color="transparent")
+    audio_frame.pack(fill="x", pady=5)
+    ctk.CTkLabel(audio_frame, text="Audio Volume:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left")
+    
+    vol_slider = ctk.CTkSlider(audio_frame, from_=0, to=1, number_of_steps=100)
+    vol_slider.set(shared_vars.audio_volume.value)
+    vol_slider.pack(side="left", fill="x", expand=True, padx=10)
+    
+    def save_vol(val):
+        shared_vars.audio_volume.value = float(val)
+        save_callback()
+    vol_slider.configure(command=save_vol)
+
+    def test_audio():
+        from src.audio_manager import AudioManager
+        mgr = AudioManager()
+        if not mgr.initialized:
+            mgr.initialize(base_path)
+            
+        if not mgr.initialized:
+            messagebox.showerror("Audio Error", "Audio system could not be initialized.\nCheck logs for details.")
+            return
+            
+        if "on" not in mgr.sounds:
+            messagebox.showwarning("File Missing", "The 'on.mp3' file was not found in the audio folder.\nPlease ensure 'all data/audio/on.mp3' exists.")
+            return
+            
+        if not mgr.play_sound("on", shared_vars.audio_volume.value, force=True):
+            messagebox.showerror("Playback Error", "Failed to play sound.\nCheck logs for details.")
+        
+    ctk.CTkButton(audio_frame, text="Test", command=test_audio, width=60, height=24, font=UIStyle.SMALL_FONT).pack(side="right", padx=5)
+
+    auto_upd = ctk.BooleanVar(value=config.get("Settings", {}).get("auto_update", True))
     def toggle_upd():
         config["Settings"]["auto_update"] = auto_upd.get()
         save_callback()
@@ -328,7 +416,7 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config):
     row = ctk.CTkFrame(frame, fg_color="transparent")
     row.pack(fill="x", pady=5)
     ctk.CTkLabel(row, text="Reconnection Delay (s):", width=200, anchor="w").pack(side="left")
-    rec_entry = ctk.CTkEntry(row, width=80)
+    rec_entry = ModernEntry(row, width=80)
     rec_entry.pack(side="left")
     rec_entry.insert(0, str(shared_vars.reconnection_delay.value))
     
@@ -344,7 +432,7 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config):
     row2 = ctk.CTkFrame(frame, fg_color="transparent")
     row2.pack(fill="x", pady=5)
     ctk.CTkLabel(row2, text="Click Delay (s):", width=200, anchor="w").pack(side="left")
-    click_entry = ctk.CTkEntry(row2, width=80)
+    click_entry = ModernEntry(row2, width=80)
     click_entry.pack(side="left")
     click_entry.insert(0, str(shared_vars.click_delay.value))
     
@@ -367,7 +455,7 @@ def _setup_image_thresholds(parent, base_path):
     global_row.pack(pady=5, fill="x", padx=20)
     
     ctk.CTkLabel(global_row, text="Global Adjustment:", width=150, anchor="w", font=UIStyle.BODY_FONT).pack(side="left")
-    global_entry = ctk.CTkEntry(global_row, width=80, font=UIStyle.BODY_FONT)
+    global_entry = ModernEntry(global_row, width=80)
     global_entry.pack(side="left", padx=(0, 10))
     
     apply_global_var = ctk.BooleanVar()
@@ -402,7 +490,7 @@ def _setup_image_thresholds(parent, base_path):
 
     def folder_has_images(path):
         for root, _, files in os.walk(path):
-            if any(f.lower().endswith(('.png', '.jpg')) for f in files): return True
+            if any(f.lower().endswith('.png') for f in files): return True
         return False
 
     def create_folder_node(parent_frame, folder_name, rel_path, level):
@@ -420,17 +508,18 @@ def _setup_image_thresholds(parent, base_path):
         
         def toggle():
             if is_expanded.get():
-                children_frame.pack_forget()
-                btn.configure(text="▶")
+                animate_collapse(children_frame)
+                btn.configure(text=">")
                 is_expanded.set(False)
             else:
-                children_frame.pack(fill="x")
-                btn.configure(text="▼")
+                # children_frame.pack(fill="x")
+                btn.configure(text="v")
                 is_expanded.set(True)
                 if not children_frame.winfo_children():
                     load_children(children_frame, rel_path, level + 1)
+                animate_expand(children_frame, {"fill": "x"})
 
-        btn = ctk.CTkButton(header, text="▶", width=20, height=20, command=toggle, fg_color="transparent", text_color="gray")
+        btn = ctk.CTkButton(header, text=">", width=20, height=20, command=toggle, fg_color="transparent", text_color="gray")
         btn.pack(side="left")
         
         lbl = ctk.CTkLabel(header, text=f"📁 {folder_name}", font=UIStyle.SMALL_FONT, cursor="hand2")
@@ -444,9 +533,9 @@ def _setup_image_thresholds(parent, base_path):
             except: pass
         lbl.bind("<Double-Button-1>", open_folder)
 
-        has_direct = any(f.lower().endswith(('.png', '.jpg')) for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f)))
+        has_direct = any(f.lower().endswith('.png') for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f)))
         if has_direct:
-            f_entry = ctk.CTkEntry(header, width=60, placeholder_text="0.0", font=UIStyle.SMALL_FONT)
+            f_entry = ModernEntry(header, width=60, placeholder_text="0.0", font=UIStyle.SMALL_FONT)
             f_entry.pack(side="left", padx=10)
             
             curr = sv.image_threshold_config.get("folder_adjustments", {}).get(rel_path, 0.0)
@@ -476,7 +565,7 @@ def _setup_image_thresholds(parent, base_path):
         lbl = ctk.CTkLabel(wrapper, text=f"🖼️ {image_name}", font=UIStyle.SMALL_FONT)
         lbl.pack(side="left", padx=25)
         
-        i_entry = ctk.CTkEntry(wrapper, width=60, placeholder_text="0.0", font=UIStyle.SMALL_FONT)
+        i_entry = ModernEntry(wrapper, width=60, placeholder_text="0.0", font=UIStyle.SMALL_FONT)
         i_entry.pack(side="left", padx=10)
         
         curr = sv.image_threshold_config.get("image_adjustments", {}).get(rel_path, 0.0)
@@ -512,7 +601,7 @@ def _setup_image_thresholds(parent, base_path):
                     rel = f"{current_path}/{item}" if current_path else item
                     if folder_has_images(item_path):
                         folders.append((item, rel))
-                elif item.lower().endswith(('.png', '.jpg')):
+                elif item.lower().endswith('.png'):
                     rel = f"{current_path}/{item}" if current_path else item
                     images.append((item, rel))
             
@@ -579,12 +668,12 @@ def _setup_shortcuts(parent, config, save_callback, root, update_callback):
         current_val = config['Shortcuts'].get(shortcut_key, "")
         var = ctk.StringVar(value=current_val)
         
-        entry = ctk.CTkEntry(row, width=150, font=UIStyle.BODY_FONT, textvariable=var)
+        entry = ModernEntry(row, width=150, textvariable=var)
         entry.pack(side="left", padx=(0, 10))
         
         def save_shortcut(event=None):
             new_val = var.get()
-            config['Shortcuts'][shortcut_key] = new_val
+            config['Shortcuts'][shortcut_key] = new_val.lower()
             save_callback()
             if update_callback:
                 update_callback()
@@ -619,7 +708,12 @@ def _setup_theme(parent, config, save_callback, base_path, root, restart_callbac
         if restart_callback:
             restart_callback(new_theme)
         
-    ctk.CTkOptionMenu(card, values=list(themes.keys()), command=change_theme, variable=ctk.StringVar(value=current)).pack(pady=(0, 15))
+    ctk.CTkOptionMenu(card, values=list(themes.keys()), command=change_theme, variable=ctk.StringVar(value=current),
+                      fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                      button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                      dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                      dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                      corner_radius=UIStyle.CORNER_RADIUS).pack(pady=(0, 15))
 
 def _setup_danger_zone(parent, base_path):
     card = CardFrame(parent)

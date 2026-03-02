@@ -7,13 +7,15 @@ logger = logging.getLogger(__name__)
 def load_available_themes(base_path):
     """Load all theme JSON files from the themes directory"""
     themes_dir = os.path.join(base_path, "themes")
-    
-    # Check if our custom monochrome theme exists
+
     sleek_mono_path = os.path.join(themes_dir, "sleek_mono.json")
     default_dark_theme = sleek_mono_path if os.path.exists(sleek_mono_path) else "blue"
     
     themes = {
         "Dark": {"mode": "Dark", "theme": default_dark_theme},
+        "Blue": {"mode": "Dark", "theme": "blue"},
+        "Green": {"mode": "Dark", "theme": "green"},
+        "Dark-Blue": {"mode": "Dark", "theme": "dark-blue"},
         "Light": {"mode": "Light", "theme": "blue"},
         "System": {"mode": "System", "theme": "blue"}
     }
@@ -25,9 +27,6 @@ def load_available_themes(base_path):
                     theme_name = os.path.splitext(filename)[0]
                     theme_path = os.path.join(themes_dir, filename)
 
-                    if theme_name in ["dark-blue", "blue", "green"]:
-                        continue
-                        
                     try:
                         with open(theme_path, 'r') as f:
                             theme_data = json.load(f)

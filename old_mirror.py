@@ -46,21 +46,17 @@ class Mirror:
         }
         self.current_floor_tracker = None
         self.retries_used = 0
+        self.loop_counter = 0
 
     @staticmethod
     def floor_id():
         """Detect current floor number from pack selection screen"""
         screenshot = common.capture_screen()
         detected_floors = []
-
-        if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True, screenshot=screenshot):
-            return ""
         
-        threshold = 0.76
-
         for i in range(1, 6):
             floor_name = f"floor{i}"
-            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', threshold, no_grayscale=True, screenshot=screenshot):
+            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', 0.76, no_grayscale=True, screenshot=screenshot):
                 detected_floors.append(floor_name)
 
         if len(detected_floors) == 1:
@@ -72,24 +68,6 @@ class Mirror:
         else:
             logger.warning("Could not detect current floor visually")
             return ""
-
-    def is_pack_screen(self):
-        """Check if currently on pack selection screen by looking for floor indicators"""
-        if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True):
-            return False
-
-        threshold = 0.76
-
-        if self.current_floor_tracker:
-             if common.element_exist(f'pictures/mirror/packs/{self.current_floor_tracker}.png', threshold, no_grayscale=True, quiet_failure=True):
-                return True
-
-        for i in range(1, 6):
-            floor_name = f"floor{i}"
-            if floor_name == self.current_floor_tracker: continue
-            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', threshold, no_grayscale=True, quiet_failure=True):
-                return True
-        return False
 
     @staticmethod
     def set_sinner_order(status):
@@ -104,32 +82,24 @@ class Mirror:
         
         if (common.element_exist("pictures/mirror/general/danteh.png", quiet_failure=True) or
             common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", quiet_failure=True) or
             common.element_exist("pictures/events/skip.png", quiet_failure=True) or
             common.element_exist("pictures/mirror/restshop/shop.png", quiet_failure=True) or
-            self.is_pack_screen() or
+            common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png", quiet_failure=True) or
             common.element_exist("pictures/mirror/general/reward_select.png", quiet_failure=True) or
             common.element_exist("pictures/mirror/general/encounter_reward.png", quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or
             common.element_exist("pictures/CustomAdded1080p/general/squads/clear_selection.png", quiet_failure=True)):
              self.logger.info("Detected existing run state, skipping setup.")
              return
 
         refill_enkephalin()
-
-        if not (common.element_exist("pictures/general/resume.png", quiet_failure=True)
-                or common.element_exist("pictures/mirror/general/md_enter.png", quiet_failure=True)):
+        if not (common.element_exist("pictures/general/resume.png", quiet_failure=True) or common.element_exist("pictures/mirror/general/md_enter.png", quiet_failure=True)):
             navigate_to_md()
         self.logger.info("Setting up Mirror Dungeon run...")
 
-        setup_start_time = time.time()
-        while time.time() - setup_start_time < 30:
-            if common.element_exist("pictures/mirror/general/md_enter.png", quiet_failure=True):
-                common.sleep(1.5)
-                if common.click_matching("pictures/mirror/general/md_enter.png", recursive=False):
-                    break
-
+        while not common.click_matching("pictures/mirror/general/md_enter.png", recursive=False):
+            
             if (common.element_exist("pictures/mirror/general/explore_reward.png", quiet_failure=True) or
                 common.element_exist("pictures/general/resume.png", quiet_failure=True) or
                 common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png", quiet_failure=True)):
@@ -142,7 +112,7 @@ class Mirror:
             if common.element_exist("pictures/mirror/general/clear.png"):
                 common.click_matching("pictures/general/md_claim.png")
                 if common.click_matching("pictures/general/confirm_w.png", recursive=False):
-                    while True:
+                    while True:  
                         if common.element_exist("pictures/mirror/general/weekly_reward.png"):
                             common.key_press("enter")
                         if common.element_exist("pictures/mirror/general/pass_level.png"):
@@ -154,7 +124,7 @@ class Mirror:
                 common.click_matching("pictures/general/give_up.png")
                 common.click_matching("pictures/general/cancel.png")
 
-        if common.click_matching("pictures/general/resume.png", recursive=False):
+        if common.click_matching("pictures/general/resume.png", recursive=False): 
             self.logger.info("Resuming existing run...")
             check_loading()
 
@@ -179,9 +149,11 @@ class Mirror:
         """Check if run ended and return win status and completion flag"""
         run_complete = 0
         win_flag = 0
-        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or 
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True)):
+        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or 
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True)):
             self.logger.info("Defeat detected in check_run")
             run_ended = self.defeat()
             if run_ended:
@@ -202,6 +174,7 @@ class Mirror:
 
     def mirror_loop(self):
         """Handles all the mirror dungeon logic in this"""
+        self.loop_counter += 1
         if common.element_exist("pictures/general/maint.png"): 
             common.click_matching("pictures/general/close.png", recursive=False)
             common.sleep(0.5)
@@ -219,11 +192,6 @@ class Mirror:
         elif common.click_matching("pictures/events/proceed.png", recursive=False):
             self.logger.info("Event proceed button detected")
             self.event_choice()
-
-        elif common.element_exist("pictures/battle/winrate.png"):
-            self.logger.info("Battle winrate button detected")
-            battle()
-            check_loading()
 
         elif common.element_exist("pictures/mirror/general/danteh.png"): 
             self.logger.info("Navigation screen detected (danteh)")
@@ -245,13 +213,18 @@ class Mirror:
             self.logger.info("Rest shop detected")
             self.rest_shop()
 
-        elif common.element_exist("pictures/mirror/general/encounter_reward.png"):
+        elif common.element_exist("pictures/mirror/general/encounter_reward.png"): 
             self.logger.info("Encounter reward detected")
-            self.encounter_reward_select()
+            self.encounter_reward_select()            
 
-        elif self.is_pack_screen(): 
+        elif common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png"): 
             self.logger.info("Pack selection detected")
             self.pack_selection()
+
+        elif common.element_exist("pictures/battle/winrate.png"):
+            self.logger.info("Battle winrate button detected")
+            battle()
+            check_loading()
 
         elif common.element_exist("pictures/mirror/general/event_effect.png"):
             self.logger.info("Event effect selection detected")
@@ -264,6 +237,29 @@ class Mirror:
         elif common.element_exist("pictures/general/module.png") or common.element_exist("pictures/mirror/general/md_enter.png"):
             self.logger.info("Main menu detected in loop. Forcing run completion.")
             return 0, 1, self.run_stats
+
+        if self.loop_counter % 50 == 0:
+            
+            stuck_images = [
+                "pictures/events/proceed.png",
+                "pictures/battle/event_check.png",
+                "pictures/battle/winrate.png",
+                "pictures/general/victory.png",
+                "pictures/mirror/general/encounter_reward.png",
+            ]
+            
+            for img in stuck_images:
+                if common.element_exist(img, threshold=0.7, quiet_failure=True):
+                    self.logger.warning(f"Anti-stuck: Found {os.path.basename(img)} with low threshold. Refreshing SCT.")
+                    common.reset_sct()
+                    
+                    
+                    if "proceed.png" in img and common.click_matching(img, threshold=0.75):
+                        self.event_choice()
+                    elif "event_check.png" in img and common.click_matching(img, threshold=0.75):
+                        common.wait_skip("pictures/events/continue.png")
+                    
+                    break 
 
         return self.check_run()
 
@@ -303,7 +299,6 @@ class Mirror:
 
         gift = mirror_utils.gift_choice(self.status)
         
-
         clicked_gift = False
         if common.click_matching(gift, 0.8, recursive=False):
             clicked_gift = True
@@ -315,7 +310,6 @@ class Mirror:
                 offset_x, offset_y = common.scale_offset_1440p(-1365, 50)
                 common.mouse_move(x + offset_x, y + offset_y)
                 
-
                 for i in range(7):
                     common.mouse_scroll(-1000)
                     common.sleep(0.5)
@@ -323,7 +317,6 @@ class Mirror:
                         clicked_gift = True
                         break
                 
-
                 if not clicked_gift:
                     self.logger.info("Gift not found after scrolling down, scrolling up...")
                     for i in range(10):
@@ -334,47 +327,21 @@ class Mirror:
                             break
 
         found = common.match_image("pictures/mirror/general/gift_select.png")
-        if found:
-            x,y = found[0]
-            _, offset_y = common.scale_offset_1440p(0, 235)
-            y = y + offset_y
-            _, offset1 = common.scale_offset_1440p(0, 190)
-            _, offset2 = common.scale_offset_1440p(0, 380)
-            gift_pos = [y, y+offset1, y+offset2]
+        x,y = found[0]
+        _, offset_y = common.scale_offset_1440p(0, 235)
+        y = y + offset_y
+        _, offset1 = common.scale_offset_1440p(0, 190)
+        _, offset2 = common.scale_offset_1440p(0, 380)
+        gift_pos = [y, y+offset1, y+offset2]
 
-            initial_gift_coords = gift_pos if self.status not in ["sinking", "bleed"] else [*gift_pos[1:], gift_pos[0]]
+        initial_gift_coords = gift_pos if self.status != "sinking" else [*gift_pos[1:], gift_pos[0]]  
 
-            for i in initial_gift_coords:
-                scaled_x, _ = common.scale_coordinates_1440p(1640, 0)
-                common.mouse_move_click(scaled_x, i)
+        for i in initial_gift_coords:
+            scaled_x, _ = common.scale_coordinates_1440p(1640, 0)
+            common.mouse_move_click(scaled_x, i)
         
-        common.sleep(0.2)
         common.key_press("enter")
-        wait_start = time.time()
         while not common.element_exist("pictures/mirror/general/ego_gift_get.png"):
-            if time.time() - wait_start > 2.0:
-                self.logger.info("Waiting for gift confirmation... Retrying selection.")
-                
-                if clicked_gift:
-                    common.click_matching(gift, 0.8, recursive=False)
-
-                found = common.match_image("pictures/mirror/general/gift_select.png")
-                if found:
-                    x,y = found[0]
-                    _, offset_y = common.scale_offset_1440p(0, 235)
-                    y = y + offset_y
-                    _, offset1 = common.scale_offset_1440p(0, 190)
-                    _, offset2 = common.scale_offset_1440p(0, 380)
-                    gift_pos = [y, y+offset1, y+offset2]
-
-                    initial_gift_coords = gift_pos if self.status not in ["sinking", "bleed"] else [*gift_pos[1:], gift_pos[0]]
-
-                    for i in initial_gift_coords:
-                        scaled_x, _ = common.scale_coordinates_1440p(1640, 0)
-                        common.mouse_move_click(scaled_x, i)
-
-                common.key_press("enter")
-                wait_start = time.time()
             common.sleep(0.5)
         for i in range(3):
             if common.element_exist("pictures/mirror/general/ego_gift_get.png"): 
@@ -480,15 +447,11 @@ class Mirror:
         retry_attempt = 10
         while retry_attempt > 0:
             retry_attempt -= 1
-            
-            if (common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or 
-                common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True)):
-                self.logger.info("Battle detected inside pack_selection loop. Aborting.")
-                return
 
             floor_priorities = shared_vars.ConfigCache.get_config("pack_priority").get(floor, {})
             exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
 
+            # Sort priorities for clearer logging
             sorted_priorities_log = sorted(floor_priorities.items(), key=lambda x: x[1])
             self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log}")
             
@@ -496,60 +459,14 @@ class Mirror:
             common.sleep(1.2)
             screenshot = common.capture_screen()
 
-            selectable_packs_pos = []
-            pack_identities = {}
-            found_priority_packs = []
-
-            if floor:
-                floor_char = floor[-1]
-                floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
-
-                if os.path.exists(floor_dir):
-                    all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
-
-                    for pack_file in all_packs:
-                        pack_name = pack_file.replace(".png", "")
-
-                        if pack_name in exception_packs:
-                            continue
-
-                        pack_image = f"pictures/mirror/packs/f{floor_char}/{pack_file}"
-
-                        matches = common.match_image(
-                            pack_image, 0.65, grayscale=True,
-                            screenshot=screenshot, enable_scaling=True,
-                            x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                        )
-                        if not matches:
-                            matches = common.match_image(
-                                pack_image, 0.55, grayscale=True,
-                                screenshot=screenshot, enable_scaling=True,
-                                x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                            )
-                        if not matches:
-                            matches = common.match_image(
-                                pack_image, 0.50, no_grayscale=True,
-                                screenshot=screenshot, enable_scaling=True,
-                                x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                            )
-
-                        for m in matches:
-                            selectable_packs_pos.append(m)
-                            pack_identities[m] = pack_name
-                            known_pack_names[m] = pack_name
-
-                            if pack_name in floor_priorities:
-                                rank = floor_priorities[pack_name]
-                                found_priority_packs.append((rank, m, pack_name))
-
-                    for m in matches:
-                        selectable_packs_pos.append(m)
-                        pack_identities[m] = pack_name
-                        known_pack_names[m] = pack_name
-
-                        if pack_name in floor_priorities:
-                            rank = floor_priorities[pack_name]
-                            found_priority_packs.append((rank, m, pack_name))
+            selectable_packs_pos = common.match_image(
+                "pictures/CustomAdded1080p/mirror/packs/inpack.png", 
+                screenshot=screenshot,
+                x1=min_x_scaled,
+                y1=min_y_scaled,
+                x2=max_x_scaled,
+                y2=max_y_scaled
+            )
             
             if len(selectable_packs_pos) == 0:
                 if retry_attempt > 0:
@@ -558,6 +475,112 @@ class Mirror:
                     continue
             
             self.logger.debug(f"Found {len(selectable_packs_pos)} selectable packs")
+
+            except_packs_pos = []
+            if floor:
+                for pack in exception_packs:
+                    floor_num = floor[-1]
+                    image_floor = f"f{floor_num}"
+                    pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                    except_packs_pos.extend(common.match_image(
+                        pack_image, 
+                        0.65, 
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    ))
+            
+            self.logger.debug(f"Found {len(except_packs_pos)} exception packs")
+
+            found_priority_packs = [] 
+            
+            if floor and floor_priorities:
+                sorted_priorities = sorted(floor_priorities.items(), key=lambda x: x[1])
+                
+                for pack, rank in sorted_priorities:
+                    if pack in exception_packs:
+                        continue
+                        
+                    floor_num = floor[-1]
+                    image_floor = f"f{floor_num}"
+                    pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                    
+                    
+                    high_conf_matches = common.match_image(
+                        pack_image, 
+                        0.85, 
+                        grayscale=True,
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    )
+
+                    matches = common.match_image(
+                        pack_image, 
+                        0.60, 
+                        grayscale=True,
+                        screenshot=screenshot, 
+                        enable_scaling=True,
+                        x1=min_x_scaled,
+                        y1=min_y_scaled,
+                        x2=max_x_scaled,
+                        y2=max_y_scaled
+                    )
+
+                    if not matches:
+                        matches = common.match_image(
+                            pack_image, 
+                            0.55, 
+                            grayscale=False,
+                            no_grayscale=True,
+                            screenshot=screenshot, 
+                            enable_scaling=True,
+                            x1=min_x_scaled,
+                            y1=min_y_scaled,
+                            x2=max_x_scaled,
+                            y2=max_y_scaled
+                        )
+                    
+                    if matches:
+                        
+                        high_conf_set = set()
+                        if high_conf_matches:
+                            high_conf_overlaps = common.proximity_check(matches, high_conf_matches, common.scale_x_1080p(10))
+                            high_conf_set = set(high_conf_overlaps)
+
+                        
+                        overlaps = common.proximity_check(matches, except_packs_pos, common.scale_x_1080p(100))
+                        
+                        valid_matches = []
+                        for m in matches:
+                            if m in high_conf_set:
+                                
+                                valid_matches.append(m)
+                                if m in overlaps:
+                                    logger.debug(f"Keeping high confidence priority pack '{pack}' despite exception overlap")
+                            elif m not in overlaps:
+                                
+                                valid_matches.append(m)
+                            else:
+                                logger.debug(f"Filtered low confidence priority pack '{pack}' due to exception overlap")
+
+                        if valid_matches:
+                            logger.debug(f"Found priority pack '{pack}' (Rank {rank})")
+                            for m in valid_matches:
+                                known_pack_names[m] = pack
+                                found_priority_packs.append((rank, m, pack))
+
+            packs_to_remove = common.proximity_check(selectable_packs_pos, except_packs_pos, common.scale_y_1080p(450))
+            selectable_packs_pos = [p for p in selectable_packs_pos if p not in packs_to_remove]
+
+            offset_x, offset_y = common.scale_offset_1440p(-100, 150)
+            selectable_packs_pos = [(pos[0]+offset_x, pos[1]+offset_y) for pos in selectable_packs_pos]
 
             status_gift_pos = common.match_image(
                 status, 
@@ -594,21 +617,11 @@ class Mirror:
             status_selectable_packs_pos = common.proximity_check(selectable_packs_pos, status_gift_pos, common.scale_x_1080p(432))
             status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
 
-            if not status_selectable_packs_pos and status_gift_pos:
-                status_selectable_packs_pos = [
-                    pos for pos in status_gift_pos
-                    if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled
-                ]
-                if status_selectable_packs_pos:
-                    self.logger.info("Using status icon positions directly (artwork detection fallback)")
-
             def robust_drag_pack(x, y):
                 common.mouse_move(x, y)
                 common.sleep(0.15)
                 pyautogui.mouseDown()
                 common.sleep(0.15)
-                drag_offset = round(350 * common.EXPECTED_HEIGHT / common.REFERENCE_HEIGHT_1080P)
-                dest_x, dest_y = common.get_MonCords(x, y + drag_offset)
                 dest_x, dest_y = common.get_MonCords(x, y + 350)
                 pyautogui.moveTo(dest_x, dest_y, duration=0.6)
                 common.sleep(0.15)
@@ -633,7 +646,7 @@ class Mirror:
                     for i in range(1, 6):
                         
                         found = False
-                        for ext in [".png"]:
+                        for ext in [".png", ".jpg", ".jpeg"]:
                             check_path = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{i}/{raw_name}{ext}")
                             if os.path.exists(check_path):
                                 detected_floor = f"Floor {i}"
@@ -651,8 +664,9 @@ class Mirror:
                 robust_drag_pack(x, y)
 
                 wait_start = time.time()
-                while time.time() - wait_start < 4:
-                    if not self.is_pack_screen():
+                while time.time() - wait_start < 5:
+                    if not common.element_exist("pictures/CustomAdded1080p/mirror/packs/inpack.png", 
+                                              threshold=0.8, x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled, quiet_failure=True):
                         break
                     common.sleep(0.2)
 
@@ -726,6 +740,30 @@ class Mirror:
             if selectable_packs_pos:
                 logger.info("Fallback: Selecting random available pack")
                 
+                pack_identities = {}
+                if floor:
+                    try:
+                        floor_num = floor[-1]
+                        image_floor = f"f{floor_num}"
+                        floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/{image_floor}")
+                        
+                        if os.path.exists(floor_dir):
+                            all_packs = [f.replace(".png", "") for f in os.listdir(floor_dir) if f.endswith(".png")]
+                            
+                            for pack in all_packs:
+                                if pack in known_pack_names.values():
+                                    continue
+                                    
+                                pack_image = f"pictures/mirror/packs/{image_floor}/{pack}.png"
+                                matches = common.match_image(pack_image, 0.65, grayscale=True, screenshot=screenshot, enable_scaling=True, x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled)
+                                
+                                if matches:
+                                    close_targets = common.proximity_check(selectable_packs_pos, matches, common.scale_x_1080p(250))
+                                    for t in close_targets:
+                                        pack_identities[t] = pack
+                    except Exception as e:
+                        logger.error(f"Error identifying fallback packs: {e}")
+
                 for target_coords in selectable_packs_pos:
                     pack_name = pack_identities.get(target_coords, "unknown_pack")
                     
@@ -786,7 +824,7 @@ class Mirror:
             for pos in owned_ego_gift_matches:
                 selectable_ego_gift_matches.remove(pos)
 
-        found = common.match_image(status_effect, 0.93)
+        found = common.match_image(status_effect,0.85)
         if not found:
             logger.info("No gift matching status found.")
         
@@ -809,7 +847,7 @@ class Mirror:
                 selected_gift = common.proximity_check(selectable_ego_gift_matches, [(x, y)], common.scale_x_1080p(200))
                 for pos in selected_gift:
                     selectable_ego_gift_matches.remove(pos)
-            elif len(selectable_ego_gift_matches) > 0:
+            if len(selectable_ego_gift_matches) > 0:
 
                 x,y = common.random_choice(selectable_ego_gift_matches)
                 
@@ -837,72 +875,50 @@ class Mirror:
                             "pictures/mirror/encounter_reward/gift.png",
                             "pictures/mirror/encounter_reward/resource.png"]
         common.sleep(0.5)
-
+        
         min_x = common.scale_x_1080p(360)
         max_x = common.scale_x_1080p(1555)
         min_y = common.scale_y_1080p(225)
         max_y = common.scale_y_1080p(845)
-
-        max_attempts = 1
-        for attempt in range(max_attempts):
-            clicked = False
-            for rewards in encounter_reward:
-                if common.click_matching(rewards, recursive=False, x1=min_x, y1=min_y, x2=max_x, y2=max_y):
-                    clicked = True
-                    common.click_matching("pictures/general/confirm_b.png")
-                    common.sleep(1)
-                    if common.element_exist("pictures/mirror/encounter_reward/prompt.png"):
-                        common.click_matching("pictures/CustomAdded1080p/mirror/general/BorderedConfirm.png")
-                        break
-                    if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
-                        common.click_matching("pictures/general/confirm_b.png", recursive=False)
+        for rewards in encounter_reward:
+            if common.click_matching(rewards, recursive=False, x1=min_x, y1=min_y, x2=max_x, y2=max_y):
+                common.click_matching("pictures/general/confirm_b.png")
+                common.sleep(1)
+                if common.element_exist("pictures/mirror/encounter_reward/prompt.png"):
+                    common.click_matching("pictures/CustomAdded1080p/mirror/general/BorderedConfirm.png")
                     break
-            if clicked:
+                if common.element_exist("pictures/mirror/general/ego_gift_get.png"): 
+                    common.click_matching("pictures/general/confirm_b.png", recursive=False)
                 break
-            if attempt < max_attempts - 1:
-                self.logger.warning(f"encounter_reward_select: no reward found (attempt {attempt + 1}/{max_attempts}), waiting for tiles...")
-                common.reset_sct()
-                common.sleep(1.5)
-        common.sleep(3)
+        common.sleep(3) 
 
     def check_nodes(self,nodes):
         """Check which navigation nodes exist on the current floor"""
         screenshot = common.capture_screen()
         non_exist = [1,1,1]
-        threshold = 0.75
-        top = common.greyscale_match_image("pictures/mirror/general/node_1.png", threshold, screenshot=screenshot)
-        top_alt = common.greyscale_match_image("pictures/mirror/general/node_1_o.png", threshold, screenshot=screenshot)
-        middle = common.greyscale_match_image("pictures/mirror/general/node_2.png", threshold, screenshot=screenshot)
-        middle_alt = common.greyscale_match_image("pictures/mirror/general/node_2_o.png", threshold, screenshot=screenshot)
-        bottom = common.greyscale_match_image("pictures/mirror/general/node_3_o.png", threshold, screenshot=screenshot)
-        bottom_alt = common.greyscale_match_image("pictures/mirror/general/node_3.png", threshold, screenshot=screenshot)
+        top = common.greyscale_match_image("pictures/mirror/general/node_1.png",0.75, screenshot=screenshot)
+        top_alt = common.greyscale_match_image("pictures/mirror/general/node_1_o.png",0.75, screenshot=screenshot)
+        middle = common.greyscale_match_image("pictures/mirror/general/node_2.png",0.75, screenshot=screenshot)
+        middle_alt = common.greyscale_match_image("pictures/mirror/general/node_2_o.png",0.75, screenshot=screenshot)
+        bottom = common.greyscale_match_image("pictures/mirror/general/node_3_o.png",0.75, screenshot=screenshot)
+        bottom_alt = common.greyscale_match_image("pictures/mirror/general/node_3.png",0.75, screenshot=screenshot)
         if not top and not top_alt:
             non_exist[0] = 0
         if not middle and not middle_alt:
             non_exist[1] = 0
         if not bottom and not bottom_alt:
             non_exist[2] = 0
-        result = [y for y, exists in zip(nodes, non_exist) if exists != 0]
-        if not result:
-            self.logger.warning("check_nodes: no nodes detected, assuming all exist as fallback")
-            return nodes
-        return result
+        nodes = [y for y, exists in zip(nodes, non_exist) if exists != 0]
+        return nodes
 
-    def navigation(self, drag_danteh=True, _depth=0):
+    def navigation(self, drag_danteh=True):
         """Core navigation function to reach the end of floor"""
-        if _depth >= 2:
-            self.logger.warning("Navigation: recursion limit reached, giving up")
-            return
         self.logger.info("Navigating floor nodes")
-        nav_threshold = 0.65 if self.res_x < 1920 else 0.8
-        nav_x1 = common.scale_x_1080p(1100)
-        
-        if common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
+        if common.click_matching("pictures/mirror/general/nav_enter.png", recursive=False):
             return
 
         duration = 5
         end_time = time.time() + duration
-        nav_start_time = time.time()
 
         while not (
             common.click_matching("pictures/mirror/general/danteh.png", recursive=False) or
@@ -914,19 +930,19 @@ class Mirror:
         while common.element_exist("pictures/general/connection_o.png"):
             pass
 
-        if common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
+        if common.click_matching("pictures/mirror/general/nav_enter.png", recursive=False):
             return
-
+        
         else:
             
             node_location = []
-            node_y = [263, 689, 1115]
+            node_y = [263, 689, 1115] # Base Y coordinates for nodes at 1440p
 
             node_y = self.check_nodes(node_y)
 
             for y in node_y:
                 node_location.append(common.scale_coordinates_1440p(1440, y))
-            if drag_danteh and (self.aspect_ratio == "16:9" or self.res_x < 1920):
+            if drag_danteh and self.aspect_ratio == "16:9": 
                 common.mouse_move(*common.scale_coordinates_1080p(200, 200))
                 if found := common.match_image("pictures/mirror/general/danteh.png"):
                     x,y = found[0]
@@ -946,33 +962,31 @@ class Mirror:
                 common.error_screenshot()
                 
                 if drag_danteh:
-                    self.navigation(drag_danteh=False, _depth=_depth + 1)
+                    self.navigation(drag_danteh=False)
                 return
-
+            
             self.logger.info(f"Found {len(node_location)} possible navigation nodes")
 
-            while(not common.element_exist("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1)):
-                if time.time() - nav_start_time > 180:
-                    self.logger.warning("Navigation timed out (3 minutes). Forcing restart.")
-                    return
-
-                if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or
-                    common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True) or
-                    common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True) or
+            while(not common.element_exist("pictures/mirror/general/nav_enter.png")):
+                if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True) or 
+                    common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True) or 
                     common.element_exist("pictures/general/victory.png")):
                     return
                 nav_found = False
                 for x,y in node_location:
                     common.mouse_move_click(x, y)
                     common.sleep(1)
-                    if common.element_exist("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
+                    if common.element_exist("pictures/mirror/general/nav_enter.png"):
                         nav_found = True
                         break
-
+                
                 if not nav_found:
-                    self.navigation(drag_danteh=False, _depth=_depth + 1)
+                    self.navigation(drag_danteh=False)
                     return
-            common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1)
+            common.click_matching("pictures/mirror/general/nav_enter.png")
 
     def sell_gifts(self):
         """Handles Selling gifts"""
@@ -1188,11 +1202,11 @@ class Mirror:
                     if os.path.isdir(folder_path):
                         
                         for file in os.listdir(folder_path):
-                            if file.lower().endswith('.png'):
+                            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
                                 exception_gifts.append(f"pictures/CustomFuse/{name}/{file}")
                     else:
                         found_file = False
-                        for ext in ['.png']:
+                        for ext in ['.png', '.jpg', '.jpeg']:
                             probe_path = f"pictures/CustomFuse/{name}{ext}"
                             if os.path.exists(os.path.join(BASE_PATH, probe_path)):
                                 exception_gifts.append(probe_path)
@@ -1297,7 +1311,8 @@ class Mirror:
             while len(selected_gifts_coords) < 3 and scroll_attempts < max_scroll_attempts:
                 current_screen_gifts = self.find_gifts(statuses, excluded_statuses)
                 self.logger.info(f"fuse_gifts: Loop start. Found {len(current_screen_gifts)} gifts on screen.")
-
+                
+                # Sort gifts by Y coordinate descending (bottom to top) to prioritize new gifts appearing at the bottom after scrolling
                 current_screen_gifts.sort(key=lambda p: p[1], reverse=True)
                 
                 new_gifts_on_screen = current_screen_gifts
@@ -1384,7 +1399,7 @@ class Mirror:
 
                 common.click_matching("pictures/mirror/restshop/heal_all.png")
                 common.sleep(1)
-                common.click_matching("pictures/mirror/restshop/leave.png")
+                common.click_matching("pictures/mirror/restshop/return.png")
 
             if not shared_vars.skip_ego_enhancing:
                 self.logger.info("Attempting enhancing")
@@ -1648,8 +1663,10 @@ class Mirror:
         self.logger.info("Defeat detected. Checking for retry or forfeit options...")
         while True:
             retry_img = None
-            if common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True):
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.6, quiet_failure=True):
                 retry_img = "pictures/CustomAdded1080p/mirror/general/retrystage.png"
+            elif common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.6, quiet_failure=True):
+                retry_img = "pictures/CustomAdded1080p/mirror/general/retrystage.jpg"
             if retry_img:
                 retry_limit = getattr(shared_vars, 'retry_count', 0)
                 if self.retries_used < retry_limit:
@@ -1657,11 +1674,11 @@ class Mirror:
 
                     retry_start = time.time()
                     while time.time() - retry_start < 15:
-                        if common.click_matching(retry_img, threshold=0.72, quiet_failure=True):
+                        if common.click_matching(retry_img, threshold=0.6, quiet_failure=True):
                             
                             wait_start = time.time()
                             while time.time() - wait_start < 4:
-                                if common.click_matching("pictures/general/confirm_w.png", threshold=0.72, quiet_failure=True):
+                                if common.click_matching("pictures/general/confirm_w.png", threshold=0.6, quiet_failure=True):
                                     self.retries_used += 1
                                     common.sleep(3) 
                                     return False 
@@ -1670,12 +1687,15 @@ class Mirror:
                 else:
                     self.logger.debug("Retry button found but retries exhausted/disabled.")
                     pass
-            if common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True):
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.6, quiet_failure=True):
                 self.logger.info("Battle defeat detected. Proceeding to forfeit...")
                 break 
-            if common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True):
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.6, quiet_failure=True):
                 self.logger.info("Accept defeat detected. Proceeding to forfeit...")
-                break
+                break 
+            if common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.6, quiet_failure=True):
+                self.logger.info("Accept defeat detected (JPG). Proceeding to forfeit...")
+                break 
             
             self.logger.debug("Waiting for retry/forfeit buttons...")
             common.sleep(0.5)
@@ -1688,12 +1708,18 @@ class Mirror:
                 break
 
             accept_clicked = False
-            if common.click_matching("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.7, quiet_failure=True, recursive=False, grayscale=True):
+            if common.click_matching("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.5, quiet_failure=True, recursive=False, grayscale=True):
                 self.logger.info("Clicked acceptdefeat button (PNG)")
+                accept_clicked = True
+            elif common.click_matching("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.5, quiet_failure=True, recursive=False, grayscale=True):
+                self.logger.info("Clicked acceptdefeat button (JPG)")
                 accept_clicked = True
             else:
                 
                 matches = common.match_image("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.4, quiet_failure=True, enable_scaling=True, grayscale=True)
+                if not matches:
+                    matches = common.match_image("pictures/CustomAdded1080p/mirror/general/acceptdefeat.jpg", threshold=0.4, quiet_failure=True, enable_scaling=True, grayscale=True)
+                
                 if matches:
                     common.mouse_move_click(matches[0][0], matches[0][1])
                     self.logger.info("Clicked acceptdefeat button (scaled)")
@@ -1701,6 +1727,9 @@ class Mirror:
                 else:
                     
                     retry_matches = common.match_image("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.5, quiet_failure=True, enable_scaling=True, grayscale=True)
+                    if not retry_matches:
+                        retry_matches = common.match_image("pictures/CustomAdded1080p/mirror/general/retrystage.jpg", threshold=0.5, quiet_failure=True, enable_scaling=True, grayscale=True)
+                        
                     if retry_matches:
 
                         rx, ry = retry_matches[0]
