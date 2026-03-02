@@ -335,6 +335,9 @@ def _setup_mouse_offsets(parent, shared_vars, save_callback, root):
         entry = ModernEntry(row, width=100)
         entry.pack(side="left", padx=10)
         
+        if not hasattr(shared_vars, var_name):
+            return
+            
         val = getattr(shared_vars, var_name).value
         entry.insert(0, str(val))
         
@@ -363,10 +366,15 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config, base_path):
     frame.pack(pady=(0, 15), padx=20, fill="x")
     
     def add_bool(label, var_name):
+        if not hasattr(shared_vars, var_name):
+            return
+            
         val = getattr(shared_vars, var_name).value
         var = ctk.BooleanVar(value=val)
         def cmd():
             getattr(shared_vars, var_name).value = var.get()
+            if hasattr(sv, var_name):
+                setattr(sv, var_name, var.get())
             save_callback()
         ctk.CTkCheckBox(frame, text=label, variable=var, command=cmd).pack(anchor="w", pady=5)
         
@@ -374,38 +382,40 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config, base_path):
     add_bool("Convert to Grayscale (Speed Boost)", "convert_images_to_grayscale")
     add_bool("Reconnect only when Internet Reachable", "reconnect_when_internet_reachable")
     add_bool("Enable Animations", "enable_animations")
+    add_bool("Disable Audio", "disable_audio")
 
-    audio_frame = ctk.CTkFrame(frame, fg_color="transparent")
-    audio_frame.pack(fill="x", pady=5)
-    ctk.CTkLabel(audio_frame, text="Audio Volume:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left")
-    
-    vol_slider = ctk.CTkSlider(audio_frame, from_=0, to=1, number_of_steps=100)
-    vol_slider.set(shared_vars.audio_volume.value)
-    vol_slider.pack(side="left", fill="x", expand=True, padx=10)
-    
-    def save_vol(val):
-        shared_vars.audio_volume.value = float(val)
-        save_callback()
-    vol_slider.configure(command=save_vol)
-
-    def test_audio():
-        from src.audio_manager import AudioManager
-        mgr = AudioManager()
-        if not mgr.initialized:
-            mgr.initialize(base_path)
-            
-        if not mgr.initialized:
-            messagebox.showerror("Audio Error", "Audio system could not be initialized.\nCheck logs for details.")
-            return
-            
-        if "on" not in mgr.sounds:
-            messagebox.showwarning("File Missing", "The 'on.mp3' file was not found in the audio folder.\nPlease ensure 'all data/audio/on.mp3' exists.")
-            return
-            
-        if not mgr.play_sound("on", shared_vars.audio_volume.value, force=True):
-            messagebox.showerror("Playback Error", "Failed to play sound.\nCheck logs for details.")
+    if hasattr(shared_vars, 'audio_volume'):
+        audio_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        audio_frame.pack(fill="x", pady=5)
+        ctk.CTkLabel(audio_frame, text="Audio Volume:", width=100, anchor="w", font=UIStyle.BODY_FONT).pack(side="left")
         
-    ctk.CTkButton(audio_frame, text="Test", command=test_audio, width=60, height=24, font=UIStyle.SMALL_FONT).pack(side="right", padx=5)
+        vol_slider = ctk.CTkSlider(audio_frame, from_=0, to=1, number_of_steps=100)
+        vol_slider.set(shared_vars.audio_volume.value)
+        vol_slider.pack(side="left", fill="x", expand=True, padx=10)
+        
+        def save_vol(val):
+            shared_vars.audio_volume.value = float(val)
+            save_callback()
+        vol_slider.configure(command=save_vol)
+
+        def test_audio():
+            from src.audio_manager import AudioManager
+            mgr = AudioManager()
+            if not mgr.initialized:
+                mgr.initialize(base_path)
+                
+            if not mgr.initialized:
+                messagebox.showerror("Audio Error", "Audio system could not be initialized.\nCheck logs for details.")
+                return
+                
+            if "on" not in mgr.sounds:
+                messagebox.showwarning("File Missing", "The 'on.mp3' file was not found in the audio folder.\nPlease ensure 'all data/audio/on.mp3' exists.")
+                return
+                
+            if not mgr.play_sound("on", shared_vars.audio_volume.value, force=True):
+                messagebox.showerror("Playback Error", "Failed to play sound.\nCheck logs for details.")
+            
+        ctk.CTkButton(audio_frame, text="Test", command=test_audio, width=60, height=24, font=UIStyle.SMALL_FONT).pack(side="right", padx=5)
 
     auto_upd = ctk.BooleanVar(value=config.get("Settings", {}).get("auto_update", True))
     def toggle_upd():

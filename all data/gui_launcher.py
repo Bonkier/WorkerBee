@@ -8,6 +8,7 @@ import threading
 import platform
 import time
 import traceback
+import multiprocessing
 
 def get_log_dir():
     if getattr(sys, 'frozen', False):
@@ -195,7 +196,8 @@ def save_settings():
         "reconnect_when_internet_reachable", "good_pc_mode", "click_delay",
         "retry_count", "claim_on_defeat", "pack_refreshes", "mirror_runs", 
         "exp_runs", "exp_stage", "threads_runs", "threads_difficulty",
-        "convert_enkephalin_to_modules"
+        "convert_enkephalin_to_modules", "audio_volume", "disable_audio",
+        "x_offset", "y_offset", "enable_animations"
     ]
     
     for v in vars_to_save:
@@ -207,6 +209,22 @@ logger = logging.getLogger("gui_launcher")
 
 log_debug("Initializing SharedVars and Config...")
 shared_vars = SharedVars()
+
+# Ensure critical shared variables exist (patch for missing fields in SharedVars class)
+try:
+    defaults = {
+        'audio_volume': ('d', 0.5),
+        'disable_audio': ('i', 0),
+        'enable_animations': ('i', 1),
+        'x_offset': ('i', 0),
+        'y_offset': ('i', 0)
+    }
+    for name, (t, v) in defaults.items():
+        if not hasattr(shared_vars, name):
+            setattr(shared_vars, name, multiprocessing.Value(t, v))
+except Exception as e:
+    log_debug(f"Error patching shared_vars: {e}")
+
 config = load_json_data(os.path.join(BASE_PATH, "config", "gui_config.json"))
 if not config:
     config = {"Settings": {}}
@@ -228,7 +246,8 @@ def reset_settings_to_defaults():
                 'convert_images_to_grayscale', 'reconnection_delay', 'reconnect_when_internet_reachable',
                 'good_pc_mode', 'click_delay', 'retry_count', 'claim_on_defeat', 'pack_refreshes', 'mirror_runs', 
                 'exp_runs', 'exp_stage', 'threads_runs', 'threads_difficulty',
-                'convert_enkephalin_to_modules'
+                'convert_enkephalin_to_modules', "audio_volume", "disable_audio",
+                "x_offset", "y_offset", "enable_animations"
             ]
             
             for field in fields:

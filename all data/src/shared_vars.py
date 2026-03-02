@@ -202,7 +202,8 @@ def _get_gui_values():
         'stop_after_current_run': False,
         'convert_enkephalin_to_modules': True,
         'enable_animations': True,
-        'audio_volume': 0.5
+        'audio_volume': 0.5,
+        'disable_audio': False
     }
 
 def _load_shared_vars():

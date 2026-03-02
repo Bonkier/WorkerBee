@@ -309,7 +309,10 @@ class Mirror:
 
 
         clicked_gift = False
-        if common.click_matching(gift, 0.8, recursive=False):
+        _matches = common.match_image(gift, 0.8)
+        if _matches:
+            best = min(_matches, key=lambda m: m[1])
+            common.mouse_move_click(best[0], best[1])
             clicked_gift = True
         else:
             self.logger.info(f"Gift {gift} not found immediately, scrolling...")
@@ -323,7 +326,10 @@ class Mirror:
                 for i in range(7):
                     common.mouse_scroll(-1000)
                     common.sleep(0.5)
-                    if common.click_matching(gift, 0.8, recursive=False):
+                    _matches = common.match_image(gift, 0.8)
+                    if _matches:
+                        best = min(_matches, key=lambda m: m[1])
+                        common.mouse_move_click(best[0], best[1])
                         clicked_gift = True
                         break
 
@@ -333,7 +339,10 @@ class Mirror:
                     for i in range(10):
                         common.mouse_scroll(1000)
                         common.sleep(0.5)
-                        if common.click_matching(gift, 0.8, recursive=False):
+                        _matches = common.match_image(gift, 0.8)
+                        if _matches:
+                            best = min(_matches, key=lambda m: m[1])
+                            common.mouse_move_click(best[0], best[1])
                             clicked_gift = True
                             break
 
@@ -360,7 +369,10 @@ class Mirror:
                 self.logger.info("Waiting for gift confirmation... Retrying selection.")
 
                 if clicked_gift:
-                    common.click_matching(gift, 0.8, recursive=False)
+                    _matches = common.match_image(gift, 0.8)
+                    if _matches:
+                        best = min(_matches, key=lambda m: m[1])
+                        common.mouse_move_click(best[0], best[1])
 
                 found = common.match_image("pictures/1366/mirror/general/gift_select.png")
                 if found:

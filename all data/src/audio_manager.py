@@ -4,31 +4,12 @@ import logging
 import threading
 import subprocess
 import sys
+import shared_vars
 
 logger = logging.getLogger("audio_manager")
 
 AUDIO_AVAILABLE = False
-try:
-    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-    import pygame
-    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=2048)
-    pygame.init()
-    AUDIO_AVAILABLE = True
-except ImportError:
-    try:
-        logger.info("Pygame not found. Attempting to install...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"])
-        import pygame
-        pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=2048)
-        pygame.init()
-        AUDIO_AVAILABLE = True
-        logger.info("Pygame installed and initialized successfully.")
-    except Exception as e:
-        AUDIO_AVAILABLE = False
-        logger.warning(f"Failed to install/initialize pygame: {e}")
-except Exception as e:
-    AUDIO_AVAILABLE = False
-    logger.error(f"Failed to initialize audio: {e}")
+pygame = None
 
 class AudioManager:
     _instance = None
@@ -45,8 +26,40 @@ class AudioManager:
         if self.initialized:
             return
         
+        if getattr(shared_vars, 'disable_audio', False):
+            logger.info("Audio is disabled by user setting.")
+            self.initialized = False
+            return
+
+        global AUDIO_AVAILABLE, pygame
+        if not AUDIO_AVAILABLE:
+            try:
+                os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+                import pygame as pg
+                pygame = pg
+                pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=2048)
+                pygame.init()
+                AUDIO_AVAILABLE = True
+            except ImportError:
+                try:
+                    logger.info("Pygame not found. Attempting to install...")
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "pygame"])
+                    import pygame as pg
+                    pygame = pg
+                    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=2048)
+                    pygame.init()
+                    AUDIO_AVAILABLE = True
+                    logger.info("Pygame installed and initialized successfully.")
+                except Exception as e:
+                    AUDIO_AVAILABLE = False
+                    logger.warning(f"Failed to install/initialize pygame: {e}")
+            except Exception as e:
+                AUDIO_AVAILABLE = False
+                logger.error(f"Failed to initialize audio: {e}")
+
         if not AUDIO_AVAILABLE:
             logger.warning("Audio system not available")
+            self.initialized = False
             return
         
         self.base_path = base_path
@@ -77,7 +90,10 @@ class AudioManager:
             logger.error(f"Error loading sound {path}: {e}")
 
     def play_sound(self, name, volume, force=False):
-        if not AUDIO_AVAILABLE or not self.initialized:
+        if getattr(shared_vars, 'disable_audio', False):
+            return
+
+        if not AUDIO_AVAILABLE or not self.initialized or not pygame:
             return
 
         if pygame.mixer.get_init() is None:
