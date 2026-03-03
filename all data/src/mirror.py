@@ -619,7 +619,6 @@ class Mirror:
                 common.sleep(0.15)
                 drag_offset = round(350 * common.EXPECTED_HEIGHT / common.REFERENCE_HEIGHT_1080P)
                 dest_x, dest_y = common.get_MonCords(x, y + drag_offset)
-                dest_x, dest_y = common.get_MonCords(x, y + 350)
                 pyautogui.moveTo(dest_x, dest_y, duration=0.3)
                 common.sleep(0.15)
                 pyautogui.mouseUp()
@@ -654,14 +653,13 @@ class Mirror:
                 
                 self.logger.info(f"Selected Pack: {pack_name} | Location: {detected_floor}")
 
-                if not self.run_stats["packs"] or self.run_stats["packs"][-1] != pack_name:
-                    self.run_stats["packs"].append(pack_name)
+                self.run_stats["packs"].append(pack_name)
                 
                 x, y = coords
                 robust_drag_pack(x, y)
 
                 wait_start = time.time()
-                while time.time() - wait_start < 2:
+                while time.time() - wait_start < 5:
                     if not self.is_pack_screen():
                         break
                     common.sleep(0.2)
@@ -1552,17 +1550,20 @@ class Mirror:
             common.wait_skip("pictures/events/proceed.png")
             skill_check()
 
-        elif common.click_matching("pictures/events/select_gain.png", recursive=False): 
+        elif common.click_matching("pictures/events/select_gain.png", recursive=False):
             self.logger.info("Event: Select Gain")
             common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
             while(True):
                 common.mouse_click()
+                if common.element_exist("pictures/events/select_gain.png") or common.element_exist("pictures/events/select_right.png"):
+                    self.logger.info("Event: Second choice screen detected, selecting again")
+                    common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
                 if common.click_matching("pictures/events/proceed.png", recursive=False):
                     break
                 if common.click_matching("pictures/events/continue.png", recursive=False):
                     break
             common.sleep(1)
-            if common.element_exist("pictures/mirror/general/ego_gift_get.png"): 
+            if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
                 common.key_press("enter")
 
         elif common.click_matching("pictures/events/gain_check.png", recursive=False): 
@@ -1582,7 +1583,7 @@ class Mirror:
                 common.click_skip(15)
                 self.event_choice()
 
-        elif common.element_exist("pictures/events/select_right.png"): 
+        elif common.element_exist("pictures/events/select_right.png"):
             self.logger.info("Event: Select Right")
             if common.click_matching("pictures/events/helterfly.png", recursive=False):
                 pass
@@ -1591,12 +1592,15 @@ class Mirror:
             common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
             while(True):
                 common.mouse_click()
+                if common.element_exist("pictures/events/select_gain.png") or common.element_exist("pictures/events/select_right.png"):
+                    self.logger.info("Event: Second choice screen detected, selecting again")
+                    common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
                 if common.click_matching("pictures/events/proceed.png", recursive=False):
                     break
                 if common.click_matching("pictures/events/continue.png", recursive=False):
                     break
             common.sleep(1)
-            if common.element_exist("pictures/mirror/general/ego_gift_get.png"): 
+            if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
                 common.key_press("enter")
 
         elif common.click_matching("pictures/events/win_battle.png", recursive=False): 
