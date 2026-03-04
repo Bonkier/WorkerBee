@@ -380,13 +380,14 @@ def skill_check():
     common.sleep(3)
     common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
     while(True):
-        common.mouse_click()
         if common.click_matching("pictures/events/proceed.png", recursive=False):
             break
         if common.click_matching("pictures/events/continue.png", recursive=False):
             break
         if common.click_matching("pictures/events/commence_battle.png", recursive=False):
             break
+        common.mouse_click()
+        common.sleep(0.3)
 
     if common.element_exist("pictures/events/skip.png"):
         if common.element_exist("pictures/events/skill_check.png"):
