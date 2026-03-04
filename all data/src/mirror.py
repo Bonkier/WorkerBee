@@ -495,9 +495,6 @@ class Mirror:
         min_x_scaled = common.scale_x_1080p(150)
         max_x_scaled = common.scale_x_1080p(1730)
 
-        # When floor_id() couldn't detect the floor visually, scan pack images from all floor
-        # directories to determine which floor is actually on screen. This catches cases where
-        # the calculated floor is wrong (e.g. pack_count=1 but game is on floor 4).
         if not visual_floor:
             self.logger.info("Visual floor detection failed. Scanning pack images to determine actual floor.")
             scan_ss = common.capture_screen()
