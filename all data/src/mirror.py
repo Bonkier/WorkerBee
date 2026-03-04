@@ -1505,12 +1505,14 @@ class Mirror:
             common.mouse_move_click(x, y)
             for _ in range(2): 
                 common.click_matching("pictures/mirror/restshop/enhance/power_up.png")
-                if common.element_exist("pictures/mirror/restshop/enhance/more.png"): 
+                if common.element_exist("pictures/mirror/restshop/enhance/more.png"):
                     common.click_matching("pictures/mirror/restshop/enhance/cancel.png")
-                    return False  
-                common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False)
+                    return False
                 common.sleep(0.5)
+                common.click_matching("pictures/mirror/restshop/enhance/confirm.png")
+                common.sleep(1.0)
                 common.click_matching("pictures/general/confirm_b.png", recursive=False)
+                common.sleep(0.5)
         return True
 
     def enhance_gifts(self,status):
@@ -1603,14 +1605,12 @@ class Mirror:
             if common.element_exist("pictures/mirror/general/ego_gift_get.png"):
                 common.key_press("enter")
 
-        elif common.click_matching("pictures/events/gain_check.png", recursive=False): 
+        elif common.click_matching("pictures/events/gain_check.png", recursive=False):
             self.logger.info("Event: Gain Check")
-            common.wait_skip("pictures/events/proceed.png")
             skill_check()
 
-        elif common.click_matching("pictures/events/gain_check_o.png", recursive=False): 
+        elif common.click_matching("pictures/events/gain_check_o.png", recursive=False):
             self.logger.info("Event: Gain Check (Alt)")
-            common.wait_skip("pictures/events/proceed.png")
             skill_check()
 
         elif common.click_matching("pictures/events/gain_gift.png", recursive=False): 
