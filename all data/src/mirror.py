@@ -1510,20 +1510,16 @@ class Mirror:
                     common.click_matching("pictures/mirror/restshop/enhance/cancel.png")
                     return False
                 common.sleep(0.5)
-                confirm_found = False
+                confirm_done = False
                 wait_start = time.time()
-                while time.time() - wait_start < 2:
-                    if common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False):
-                        confirm_found = True
-                        break
-                    common.sleep(0.1)
-                if not confirm_found:
-                    break
-                wait_start = time.time()
-                while time.time() - wait_start < 5:
+                while time.time() - wait_start < 10:
                     if common.click_matching("pictures/general/confirm_b.png", recursive=False):
+                        confirm_done = True
                         break
-                    common.sleep(0.1)
+                    common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False)
+                    common.sleep(0.2)
+                if not confirm_done:
+                    break
                 common.sleep(0.5)
         return True
 
