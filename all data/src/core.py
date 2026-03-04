@@ -371,7 +371,14 @@ def skill_check():
         "pictures/CustomAdded1080p/general/very_low.png"
         ]
     
-    common.wait_skip("pictures/events/skill_check.png")
+    common.mouse_move_click(*common.scale_coordinates_1080p(895, 465))
+    while True:
+        if common.element_exist("pictures/events/skill_check.png"):
+            break
+        if common.click_matching("pictures/events/proceed.png", recursive=False):
+            return
+        common.mouse_click()
+        common.sleep(0.1)
     common.sleep(1)
     for i in check_images:
         if common.click_matching(i, threshold=0.9, recursive=False):
@@ -379,6 +386,7 @@ def skill_check():
     common.click_matching("pictures/CustomAdded1080p/general/commence.png")
     common.sleep(3)
     common.mouse_move_click(*common.scale_coordinates_1440p(1193, 623))
+    common.mouse_move(*common.scale_coordinates_1080p(200, 200))
     while(True):
         if common.click_matching("pictures/events/proceed.png", recursive=False):
             break
