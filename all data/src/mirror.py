@@ -1503,15 +1503,27 @@ class Mirror:
         for x,y in gifts:
             common.sleep(0.5)
             common.mouse_move_click(x, y)
-            for _ in range(2): 
+            for _ in range(2):
+                common.sleep(0.5)
                 common.click_matching("pictures/mirror/restshop/enhance/power_up.png")
                 if common.element_exist("pictures/mirror/restshop/enhance/more.png"):
                     common.click_matching("pictures/mirror/restshop/enhance/cancel.png")
                     return False
                 common.sleep(0.5)
-                common.click_matching("pictures/mirror/restshop/enhance/confirm.png")
-                common.sleep(1.0)
-                common.click_matching("pictures/general/confirm_b.png", recursive=False)
+                confirm_found = False
+                wait_start = time.time()
+                while time.time() - wait_start < 2:
+                    if common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False):
+                        confirm_found = True
+                        break
+                    common.sleep(0.1)
+                if not confirm_found:
+                    break
+                wait_start = time.time()
+                while time.time() - wait_start < 5:
+                    if common.click_matching("pictures/general/confirm_b.png", recursive=False):
+                        break
+                    common.sleep(0.1)
                 common.sleep(0.5)
         return True
 
