@@ -1427,8 +1427,6 @@ class Mirror:
 
                 common.click_matching("pictures/mirror/restshop/heal_all.png")
                 common.sleep(1)
-                common.click_matching("pictures/mirror/restshop/return.png")
-                common.sleep(0.5)
                 common.click_matching("pictures/mirror/restshop/leave.png")
 
             if not shared_vars.skip_ego_enhancing:
