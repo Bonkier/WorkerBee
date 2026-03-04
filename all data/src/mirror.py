@@ -1426,8 +1426,13 @@ class Mirror:
                         return
 
                 common.click_matching("pictures/mirror/restshop/heal_all.png")
-                common.sleep(1)
-                common.click_matching("pictures/mirror/restshop/leave.png")
+                wait_start = time.time()
+                while time.time() - wait_start < 3:
+                    if common.click_matching("pictures/mirror/restshop/leave.png", recursive=False):
+                        break
+                    common.sleep(0.1)
+                else:
+                    common.click_matching("pictures/mirror/restshop/return.png")
 
             if not shared_vars.skip_ego_enhancing:
                 self.logger.info("Attempting enhancing")
