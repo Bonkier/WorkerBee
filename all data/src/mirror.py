@@ -450,7 +450,10 @@ class Mirror:
              try:
                  visual_floor_num = int(visual_floor.replace("floor", ""))
                  if visual_floor_num < floor_num:
-                     self.logger.warning(f"Visual floor detection ({visual_floor}) is lower than calculated ({floor}). Ignoring visual detection (False Positive).")
+                     self.logger.warning(f"Visual floor detection ({visual_floor}) is behind calculated ({floor}). A previous pack selection likely failed to register. Correcting pack count and retrying.")
+                     del self.run_stats["packs"][visual_floor_num - 1:]
+                     floor_num = visual_floor_num
+                     floor = visual_floor
                  else:
                      self.logger.warning(f"Visual floor detection ({visual_floor}) mismatch with calculated ({floor}). Updating to visual floor.")
                      floor = visual_floor
@@ -492,7 +495,37 @@ class Mirror:
         min_x_scaled = common.scale_x_1080p(150)
         max_x_scaled = common.scale_x_1080p(1730)
 
-        known_pack_names = {} 
+        # When floor_id() couldn't detect the floor visually, scan pack images from all floor
+        # directories to determine which floor is actually on screen. This catches cases where
+        # the calculated floor is wrong (e.g. pack_count=1 but game is on floor 4).
+        if not visual_floor:
+            self.logger.info("Visual floor detection failed. Scanning pack images to determine actual floor.")
+            scan_ss = common.capture_screen()
+            for scan_num in range(1, 6):
+                if scan_num == floor_num:
+                    continue
+                scan_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{scan_num}")
+                if not os.path.exists(scan_dir):
+                    continue
+                scan_files = [f for f in os.listdir(scan_dir) if f.endswith(".png")]
+                found_scan_match = False
+                for scan_file in scan_files[:3]:
+                    scan_image = f"pictures/mirror/packs/f{scan_num}/{scan_file}"
+                    if common.match_image(scan_image, 0.65, grayscale=True, screenshot=scan_ss,
+                                         enable_scaling=True, x1=min_x_scaled, y1=min_y_scaled,
+                                         x2=max_x_scaled, y2=max_y_scaled):
+                        found_scan_match = True
+                        break
+                if found_scan_match:
+                    self.logger.warning(f"Pack image scan identified floor{scan_num} (calculated was floor{floor_num}). Correcting floor and pack count.")
+                    del self.run_stats["packs"][scan_num - 1:]
+                    while len(self.run_stats["packs"]) < scan_num - 1:
+                        self.run_stats["packs"].append("untracked")
+                    floor_num = scan_num
+                    floor = f"floor{scan_num}"
+                    break
+
+        known_pack_names = {}
         refresh_count = 0
         MAX_REFRESHES = getattr(shared_vars, 'pack_refreshes', 7)
 
@@ -653,16 +686,21 @@ class Mirror:
                 
                 self.logger.info(f"Selected Pack: {pack_name} | Location: {detected_floor}")
 
-                self.run_stats["packs"].append(pack_name)
-                
                 x, y = coords
                 robust_drag_pack(x, y)
 
                 wait_start = time.time()
+                selection_confirmed = False
                 while time.time() - wait_start < 5:
                     if not self.is_pack_screen():
+                        selection_confirmed = True
                         break
                     common.sleep(0.2)
+
+                if selection_confirmed:
+                    self.run_stats["packs"].append(pack_name)
+                else:
+                    self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered — NOT counting pack, will retry.")
 
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
@@ -1392,6 +1430,8 @@ class Mirror:
 
                 common.click_matching("pictures/mirror/restshop/heal_all.png")
                 common.sleep(1)
+                common.click_matching("pictures/mirror/restshop/return.png")
+                common.sleep(0.5)
                 common.click_matching("pictures/mirror/restshop/leave.png")
 
             if not shared_vars.skip_ego_enhancing:
@@ -1474,7 +1514,9 @@ class Mirror:
                     common.click_matching("pictures/mirror/restshop/enhance/cancel.png")
                     return False  
                 common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False)
-        return True  
+                common.sleep(0.5)
+                common.click_matching("pictures/general/confirm_b.png", recursive=False)
+        return True
 
     def enhance_gifts(self,status):
         """Enhancement gift process"""

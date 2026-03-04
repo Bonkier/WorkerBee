@@ -169,7 +169,7 @@ def update_stats(win, run_data=None):
         if "threads" not in data: data["threads"] = {"runs": 0}
         
         packs = run_data.get("packs", []) if run_data else []
-        is_dnf = len(packs) < 5
+        is_dnf = not win and len(packs) < 5
 
         data["mirror"]["runs"] += 1
         
