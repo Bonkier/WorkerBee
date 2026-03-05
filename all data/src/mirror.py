@@ -784,6 +784,27 @@ class Mirror:
 
         if retry_attempt == 0:
             logger.error("Something went wrong, not fixable after 10 retries.")
+            screenshot = common.capture_screen()
+            floor_char = floor[-1] if floor else "1"
+            floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
+            final_exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
+            if os.path.exists(floor_dir):
+                all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
+                for pack_file in all_packs:
+                    pack_name = pack_file.replace(".png", "")
+                    if pack_name in final_exception_packs:
+                        continue
+                    matches = common.match_image(f"pictures/mirror/packs/f{floor_char}/{pack_file}", 0.55, grayscale=True, screenshot=screenshot, enable_scaling=True)
+                    if matches:
+                        logger.info(f"Final scan found non-excepted pack: {pack_name}")
+                        select_pack(matches[0], pack_name)
+                        return
+                for pack_file in all_packs:
+                    matches = common.match_image(f"pictures/mirror/packs/f{floor_char}/{pack_file}", 0.55, grayscale=True, screenshot=screenshot, enable_scaling=True)
+                    if matches:
+                        logger.warning(f"All packs excepted, forced fallback to: {pack_file.replace('.png', '')}")
+                        select_pack(matches[0], pack_file.replace(".png", ""))
+                        return
 
     def squad_select(self):
         """selects sinners in squad order"""
