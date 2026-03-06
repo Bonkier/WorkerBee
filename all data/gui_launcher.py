@@ -81,8 +81,8 @@ try:
     from src.gui.logs_page import load_logs_tab as load_logs_page
     from src.gui.help_page import load_help_tab as load_help_page
     from src.gui.mirror_page import load_mirror_tab as load_mirror_page
-    from src.gui.exp_page import load_exp_tab as load_exp_page
-    from src.gui.threads_page import load_threads_tab as load_threads_page
+    # from src.gui.exp_page import load_exp_tab as load_exp_page
+    # from src.gui.threads_page import load_threads_tab as load_threads_page
     from src.gui.dashboard_page import load_dashboard_tab as load_dashboard_page
     import src.gui.process_handler as process_handler
     import src.gui.chain_automation as chain_automation
@@ -210,7 +210,6 @@ logger = logging.getLogger("gui_launcher")
 log_debug("Initializing SharedVars and Config...")
 shared_vars = SharedVars()
 
-# Ensure critical shared variables exist (patch for missing fields in SharedVars class)
 try:
     defaults = {
         'audio_volume': ('d', 0.5),
@@ -556,16 +555,10 @@ def load_mirror_tab():
         logger.error(f"Failed to load mirror tab: {e}")
 
 def load_exp_tab():
-    try:
-        load_exp_page(tab_exp, config, shared_vars, callbacks, ui_context, BASE_PATH, save_settings)
-    except Exception as e:
-        logger.error(f"Failed to load exp tab: {e}")
+    pass
 
 def load_threads_tab():
-    try:
-        load_threads_page(tab_threads, config, shared_vars, callbacks, ui_context, BASE_PATH, save_settings)
-    except Exception as e:
-        logger.error(f"Failed to load threads tab: {e}")
+    pass
 
 def load_schedule_tab():
     try:
@@ -716,8 +709,8 @@ if __name__ == "__main__":
 
         tab_dashboard = sidebar.add_page("Dashboard")
         tab_md = sidebar.add_page("Mirror Dungeon")
-        tab_exp = sidebar.add_page("Exp")
-        tab_threads = sidebar.add_page("Threads")
+        # tab_exp = sidebar.add_page("Exp")
+        # tab_threads = sidebar.add_page("Threads")
         tab_schedule = sidebar.add_page("Schedule")
         tab_others = sidebar.add_page("Others")
         tab_statistics = sidebar.add_page("Statistics")
