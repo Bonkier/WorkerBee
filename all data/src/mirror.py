@@ -288,6 +288,7 @@ class Mirror:
         self.logger.info(f"Selecting Grace of Stars blessings...")
         for x, y in self._grace_coords_cache:
             common.mouse_move_click(x, y)
+            common.sleep(0.1)
         
         common.click_matching("pictures/CustomAdded1080p/mirror/general/Enter.png")
         common.sleep(1)
@@ -441,25 +442,23 @@ class Mirror:
         status = mirror_utils.pack_choice(self.status) or "pictures/mirror/packs/status/poise_pack.png"
 
         pack_count = len(self.run_stats["packs"])
-        floor_num = min(pack_count + 1, 5)
-        floor = f"floor{floor_num}"
-        self.logger.info(f"Calculated Floor: {floor_num} (based on {pack_count} previous packs)")
+        calc_floor_num = min(pack_count + 1, 5)
+        calc_floor = f"floor{calc_floor_num}"
+        self.logger.info(f"Calculated Floor: {calc_floor_num} (based on {pack_count} previous packs)")
 
         visual_floor = self.floor_id()
-        if visual_floor and visual_floor != floor:
-             try:
-                 visual_floor_num = int(visual_floor.replace("floor", ""))
-                 if visual_floor_num < floor_num:
-                     self.logger.warning(f"Visual floor detection ({visual_floor}) is behind calculated ({floor}). A previous pack selection likely failed to register. Correcting pack count and retrying.")
-                     del self.run_stats["packs"][visual_floor_num - 1:]
-                     floor_num = visual_floor_num
-                     floor = visual_floor
-                 else:
-                     self.logger.warning(f"Visual floor detection ({visual_floor}) mismatch with calculated ({floor}). Updating to visual floor.")
-                     floor = visual_floor
-             except Exception as e:
-                 self.logger.warning(f"Error parsing visual floor '{visual_floor}': {e}. Updating to visual floor.")
-                 floor = visual_floor
+        if visual_floor:
+            self.logger.info(f"Visual floor detection succeeded: {visual_floor}")
+            floor = visual_floor
+            floor_num = int(visual_floor.replace("floor", ""))
+            if visual_floor != calc_floor:
+                self.logger.warning(f"Visual floor ({visual_floor}) differs from calculated ({calc_floor}). Using visual.")
+                if floor_num < calc_floor_num:
+                    del self.run_stats["packs"][floor_num - 1:]
+        else:
+            self.logger.warning(f"Visual floor detection failed, falling back to calculated floor: {calc_floor}")
+            floor = calc_floor
+            floor_num = calc_floor_num
 
         if floor != self.current_floor_tracker:
             self.current_floor_tracker = floor
@@ -495,32 +494,6 @@ class Mirror:
         min_x_scaled = common.scale_x_1080p(150)
         max_x_scaled = common.scale_x_1080p(1730)
 
-        if not visual_floor:
-            self.logger.info("Visual floor detection failed. Scanning pack images to determine actual floor.")
-            scan_ss = common.capture_screen()
-            for scan_num in range(1, 6):
-                if scan_num == floor_num:
-                    continue
-                scan_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{scan_num}")
-                if not os.path.exists(scan_dir):
-                    continue
-                scan_files = [f for f in os.listdir(scan_dir) if f.endswith(".png")]
-                found_scan_match = False
-                for scan_file in scan_files[:3]:
-                    scan_image = f"pictures/mirror/packs/f{scan_num}/{scan_file}"
-                    if common.match_image(scan_image, 0.65, grayscale=True, screenshot=scan_ss,
-                                         enable_scaling=True, x1=min_x_scaled, y1=min_y_scaled,
-                                         x2=max_x_scaled, y2=max_y_scaled):
-                        found_scan_match = True
-                        break
-                if found_scan_match:
-                    self.logger.warning(f"Pack image scan identified floor{scan_num} (calculated was floor{floor_num}). Correcting floor and pack count.")
-                    del self.run_stats["packs"][scan_num - 1:]
-                    while len(self.run_stats["packs"]) < scan_num - 1:
-                        self.run_stats["packs"].append("untracked")
-                    floor_num = scan_num
-                    floor = f"floor{scan_num}"
-                    break
 
         known_pack_names = {}
         refresh_count = 0
@@ -583,9 +556,10 @@ class Mirror:
                             )
 
                         for m in matches:
-                            selectable_packs_pos.append(m)
-                            pack_identities[m] = pack_name
-                            known_pack_names[m] = pack_name
+                            if m not in known_pack_names:
+                                selectable_packs_pos.append(m)
+                                pack_identities[m] = pack_name
+                                known_pack_names[m] = pack_name
 
                             if pack_name in floor_priorities:
                                 rank = floor_priorities[pack_name]
@@ -1538,7 +1512,7 @@ class Mirror:
                 common.sleep(0.5)
                 confirm_done = False
                 wait_start = time.time()
-                while time.time() - wait_start < 10:
+                while time.time() - wait_start < 5:
                     if common.click_matching("pictures/general/confirm_b.png", recursive=False):
                         confirm_done = True
                         break
