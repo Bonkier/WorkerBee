@@ -10,10 +10,6 @@ def gift_choice(status):
     """Get starting gift image path for status"""
     return f"pictures/1366/mirror/gifts/{status}.png"
 
-def pack_choice(status):
-    """Get pack image path for status"""
-    return f"pictures/1366/mirror/packs/status/{status}_pack.png"
-
 def reward_choice(status):
     """Get reward image path for status"""
     return f"pictures/1366/mirror/rewards/{status}_reward.png"

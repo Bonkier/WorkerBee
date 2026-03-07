@@ -188,7 +188,6 @@ def _get_gui_values():
         'skip_sinner_healing': False,
         'skip_ego_enhancing': False,
         'skip_ego_buying': False,
-        'prioritize_list_over_status': False,
         'debug_image_matches': False,
         'hard_mode': False,
         'convert_images_to_grayscale': True,

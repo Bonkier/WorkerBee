@@ -12,7 +12,6 @@ class SharedVars:
         self.skip_sinner_healing = Value('b', False)
         self.skip_ego_enhancing = Value('b', False)
         self.skip_ego_buying = Value('b', False)
-        self.prioritize_list_over_status = Value('b', False)
         self.debug_image_matches = Value('b', False)
         self.hard_mode = Value('b', False)
         self.convert_images_to_grayscale = Value('b', True)
