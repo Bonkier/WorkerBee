@@ -77,18 +77,20 @@ def battle():
             logger.warning("Battle timed out (15 minutes). Forcing restart.")
             return
 
-        if common.element_exist("pictures/general/server_error.png"):
+        screenshot = common.capture_screen()
+
+        if common.element_exist("pictures/general/server_error.png", screenshot=screenshot):
             logger.warning("Server error detected during battle")
             common.mouse_up()
             reconnect()
 
-        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or 
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True)):
+        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True, screenshot=screenshot)):
             logger.info("Defeat detected during battle")
-            return 
+            return
 
-        if common.element_exist("pictures/general/loading.png") and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png"):
+        if common.element_exist("pictures/general/loading.png", screenshot=screenshot) and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", screenshot=screenshot):
             common.mouse_up()
             if common.element_exist("pictures/battle/winrate.png"):
                 logger.info("false read loading")
@@ -98,13 +100,13 @@ def battle():
             battle_finished = 1
             logger.info(f"Battle finished!")
             return
-            
+
         common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-        if common.element_exist("pictures/events/skip.png"): 
+        if common.element_exist("pictures/events/skip.png", screenshot=screenshot):
             logger.info("Skip button found, handling skill check")
             common.mouse_up()
             while(True):
-                common.click_skip(1) 
+                common.click_skip(1)
                 if common.element_exist("pictures/mirror/general/event.png", 0.7):
                     logger.info("Battle check event detected")
                     battle_check()
@@ -115,15 +117,15 @@ def battle():
                     break
 
                 common.click_matching("pictures/events/continue.png", recursive=False)
-                    
-        if common.element_exist("pictures/battle/winrate.png"):
+
+        if common.element_exist("pictures/battle/winrate.png", screenshot=screenshot):
             logger.debug("Winrate screen detected")
             winrate_invisible_start = None
             current_time = time.time()
             if winrate_visible_start is None:
                 winrate_visible_start = current_time
-            
-            elif current_time - winrate_visible_start > winrate_timeout:
+
+            if current_time - winrate_visible_start > winrate_timeout:
                 winrate_visible_start = None
                 logger.warning(f"Winrate screen stuck for {winrate_timeout} seconds")
                 common.mouse_up()
@@ -144,16 +146,16 @@ def battle():
                     common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
         else:
-            if common.element_exist("pictures/mirror/general/encounter_reward.png"):
+            if common.element_exist("pictures/mirror/general/encounter_reward.png", screenshot=screenshot):
                 battle_finished = 1
                 logger.info(f"battle ended, in mirror")
                 return
-            
+
             winrate_visible_start = None
             current_time = time.time()
             if winrate_invisible_start is None:
                 winrate_invisible_start = current_time
-            
+
             elif current_time - winrate_invisible_start > winrate_invisible_timeout:
                 winrate_invisible_start = None
                 logger.debug(f"No winrate for {winrate_invisible_timeout} seconds")
