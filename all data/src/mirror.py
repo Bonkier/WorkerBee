@@ -437,14 +437,128 @@ class Mirror:
         while(not common.element_exist("pictures/CustomAdded1080p/mirror/general/grace_menu.png")):
             common.click_matching("pictures/CustomAdded1080p/general/confirm.png", recursive=False, mousegoto200=True)
 
-    def pack_selection(self) -> None:
-        """Prioritises the status gifts for packs if not follows a list"""
-        status = mirror_utils.pack_choice(self.status) or "pictures/mirror/packs/status/poise_pack.png"
+    def _fast_scan_packs(self, floor_char, screenshot, exception_packs, floor_priorities,
+                          min_x_scaled, min_y_scaled, max_x_scaled, max_y_scaled):
+        """Single-pass pack detection: one matchTemplate call per template, thresholds checked from same result."""
+        import cv2
+        import numpy as np
 
-        pack_count = len(self.run_stats["packs"])
-        calc_floor_num = min(pack_count + 1, 5)
+        floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
+        if not os.path.exists(floor_dir):
+            return [], {}, {}, [], 0
+
+        crop = screenshot[min_y_scaled:max_y_scaled, min_x_scaled:max_x_scaled]
+        gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop.copy()
+        color_crop = crop
+        scale_factor = min(common.EXPECTED_WIDTH / 2560.0, common.EXPECTED_HEIGHT / 1440.0)
+
+        best_per_coord = {}
+        excepted_visible_count = 0
+
+        all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
+
+        for pack_file in all_packs:
+            pack_name = pack_file.replace(".png", "")
+            pack_rel_path = f"pictures/mirror/packs/f{floor_char}/{pack_file}"
+            pack_abs_path = common.resource_path(pack_rel_path)
+            is_excepted = pack_name in exception_packs
+
+            threshold_adj = common.get_total_threshold_adjustment(pack_rel_path)
+
+            # --- Gray template ---
+            gray_key = (pack_abs_path, cv2.IMREAD_GRAYSCALE)
+            tmpl_orig = common._template_cache.get(gray_key)
+            if tmpl_orig is None:
+                tmpl_orig = cv2.imread(pack_abs_path, cv2.IMREAD_GRAYSCALE)
+                if tmpl_orig is None:
+                    continue
+                common._template_cache[gray_key] = tmpl_orig
+
+            if scale_factor != 1.0:
+                tmpl = cv2.resize(tmpl_orig, None, fx=scale_factor, fy=scale_factor,
+                                  interpolation=cv2.INTER_LINEAR)
+            else:
+                tmpl = tmpl_orig
+
+            if tmpl.shape[0] > gray_crop.shape[0] or tmpl.shape[1] > gray_crop.shape[1]:
+                continue
+
+            result = cv2.matchTemplate(gray_crop, tmpl, cv2.TM_CCOEFF_NORMED)
+            th, tw = tmpl.shape[:2]
+
+            def _extract_matches_scored(res, thresh, box_w, box_h):
+                locs = np.where(res >= thresh)
+                if not locs[0].size:
+                    return []
+                boxes = np.array([
+                    [int(x), int(y), int(x + box_w), int(y + box_h)]
+                    for x, y in zip(locs[1], locs[0])
+                ])
+                kept = common.non_max_suppression_fast(boxes)
+                out = []
+                for b in kept:
+                    cx = int((b[0] + b[2]) / 2) + min_x_scaled
+                    cy = int((b[1] + b[3]) / 2) + min_y_scaled
+                    score = float(np.max(res[b[1]:b[3], b[0]:b[2]]))
+                    out.append(((cx, cy), score))
+                return out
+
+            if is_excepted:
+                scored = _extract_matches_scored(result, 0.55 + threshold_adj, tw, th)
+                if scored:
+                    excepted_visible_count += 1
+                    self.logger.debug(f"Excepted pack visible on screen, skipping: {pack_name}")
+                continue
+
+            coord_scores = (_extract_matches_scored(result, 0.65 + threshold_adj, tw, th) or
+                            _extract_matches_scored(result, 0.55 + threshold_adj, tw, th) or
+                            _extract_matches_scored(result, 0.50 + threshold_adj, tw, th))
+
+            if not coord_scores:
+                color_key = (pack_abs_path, cv2.IMREAD_COLOR)
+                tmpl_color_orig = common._template_cache.get(color_key)
+                if tmpl_color_orig is None:
+                    tmpl_color_orig = cv2.imread(pack_abs_path, cv2.IMREAD_COLOR)
+                    if tmpl_color_orig is not None:
+                        common._template_cache[color_key] = tmpl_color_orig
+                if tmpl_color_orig is not None:
+                    tmpl_color = (cv2.resize(tmpl_color_orig, None, fx=scale_factor, fy=scale_factor,
+                                             interpolation=cv2.INTER_LINEAR)
+                                  if scale_factor != 1.0 else tmpl_color_orig)
+                    if (tmpl_color.shape[0] <= color_crop.shape[0] and
+                            tmpl_color.shape[1] <= color_crop.shape[1]):
+                        color_result = cv2.matchTemplate(color_crop, tmpl_color, cv2.TM_CCOEFF_NORMED)
+                        th_c, tw_c = tmpl_color.shape[:2]
+                        coord_scores = _extract_matches_scored(color_result, 0.50 + threshold_adj, tw_c, th_c)
+
+            for coord, score in coord_scores:
+                existing = best_per_coord.get(coord)
+                if existing is None or score > existing[0]:
+                    best_per_coord[coord] = (score, pack_name)
+
+        selectable_packs_pos = []
+        pack_identities = {}
+        known_pack_names = {}
+        found_priority_packs = []
+        for coord, (score, pack_name) in best_per_coord.items():
+            selectable_packs_pos.append(coord)
+            pack_identities[coord] = pack_name
+            known_pack_names[coord] = pack_name
+            if pack_name in floor_priorities:
+                found_priority_packs.append((floor_priorities[pack_name], coord, pack_name))
+
+        return selectable_packs_pos, pack_identities, known_pack_names, found_priority_packs, excepted_visible_count
+
+    def pack_selection(self) -> None:
+        """Selects packs based on priority list"""
+        if self.current_floor_tracker:
+            last_floor_num = int(self.current_floor_tracker.replace("floor", ""))
+            calc_floor_num = min(last_floor_num + 1, 5)
+            self.logger.info(f"Calculated Floor: {calc_floor_num} (based on last tracked floor: {self.current_floor_tracker})")
+        else:
+            calc_floor_num = 1
+            self.logger.info("Calculated Floor: 1 (no previous floor tracked)")
         calc_floor = f"floor{calc_floor_num}"
-        self.logger.info(f"Calculated Floor: {calc_floor_num} (based on {pack_count} previous packs)")
 
         visual_floor = self.floor_id()
         if visual_floor:
@@ -522,99 +636,26 @@ class Mirror:
             pack_identities = {}
             found_priority_packs = []
 
+            excepted_visible_count = 0
+
             if floor:
                 floor_char = floor[-1]
-                floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
-
-                if os.path.exists(floor_dir):
-                    all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
-
-                    for pack_file in all_packs:
-                        pack_name = pack_file.replace(".png", "")
-
-                        if pack_name in exception_packs:
-                            continue
-
-                        pack_image = f"pictures/mirror/packs/f{floor_char}/{pack_file}"
-
-                        matches = common.match_image(
-                            pack_image, 0.65, grayscale=True,
-                            screenshot=screenshot, enable_scaling=True,
-                            x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                        )
-                        if not matches:
-                            matches = common.match_image(
-                                pack_image, 0.55, grayscale=True,
-                                screenshot=screenshot, enable_scaling=True,
-                                x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                            )
-                        if not matches:
-                            matches = common.match_image(
-                                pack_image, 0.50, no_grayscale=True,
-                                screenshot=screenshot, enable_scaling=True,
-                                x1=min_x_scaled, y1=min_y_scaled, x2=max_x_scaled, y2=max_y_scaled
-                            )
-
-                        for m in matches:
-                            if m not in known_pack_names:
-                                selectable_packs_pos.append(m)
-                                pack_identities[m] = pack_name
-                                known_pack_names[m] = pack_name
-
-                            if pack_name in floor_priorities:
-                                rank = floor_priorities[pack_name]
-                                found_priority_packs.append((rank, m, pack_name))
+                (selectable_packs_pos, pack_identities, known_pack_names,
+                 found_priority_packs, excepted_visible_count) = self._fast_scan_packs(
+                    floor_char, screenshot, exception_packs, floor_priorities,
+                    min_x_scaled, min_y_scaled, max_x_scaled, max_y_scaled
+                )
 
             if len(selectable_packs_pos) == 0:
+                if excepted_visible_count > 0:
+                    self.logger.error(f"All {excepted_visible_count} visible pack(s) on {floor} are in the exception list. Stopping macro.")
+                    raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
                 if retry_attempt > 0:
                     logger.debug("No packs detected, retrying...")
                     common.sleep(0.5)
                     continue
             
             self.logger.debug(f"Found {len(selectable_packs_pos)} selectable packs")
-
-            status_gift_pos = common.match_image(
-                status, 
-                screenshot=screenshot,
-                enable_scaling=True,
-                x1=min_x_scaled,
-                y1=min_y_scaled,
-                x2=max_x_scaled,
-                y2=max_y_scaled
-            )
-            self.logger.debug(f"Found {len(status_gift_pos)} status packs")
-            
-            if status == "pictures/mirror/packs/status/pierce_pack.png":
-                status_gift_pos = [x for x in status_gift_pos if x[1] > common.scale_y(1092)]  
-
-            owned_gift_pos = common.match_image(
-                "pictures/mirror/packs/status/owned.png", 
-                0.8, 
-                screenshot=screenshot,
-                enable_scaling=True,
-                x1=min_x_scaled,
-                y1=min_y_scaled,
-                x2=max_x_scaled,
-                y2=max_y_scaled
-            )
-            if owned_gift_pos:
-                
-                owned_gift_pos = common.proximity_check(status_gift_pos, owned_gift_pos, common.scale_x_1080p(50))
-                if owned_gift_pos:
-                    for i in owned_gift_pos:
-                        if i in status_gift_pos:
-                            status_gift_pos.remove(i)
-
-            status_selectable_packs_pos = common.proximity_check(selectable_packs_pos, status_gift_pos, common.scale_x_1080p(432))
-            status_selectable_packs_pos = [pos for pos in status_selectable_packs_pos if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled]
-
-            if not status_selectable_packs_pos and status_gift_pos:
-                status_selectable_packs_pos = [
-                    pos for pos in status_gift_pos
-                    if min_y_scaled <= pos[1] <= max_y_scaled and min_x_scaled <= pos[0] <= max_x_scaled
-                ]
-                if status_selectable_packs_pos:
-                    self.logger.info("Using status icon positions directly (artwork detection fallback)")
 
             def robust_drag_pack(x, y):
                 common.mouse_move(x, y)
@@ -627,14 +668,11 @@ class Mirror:
                 common.sleep(0.15)
                 pyautogui.mouseUp()
 
-            def select_pack(coords, name="unknown_pack", source="unknown"):
+            def select_pack(coords, name="unknown_pack"):
                 pack_name = name
-                raw_name = name 
-                
-                if source == "status":
-                    raw_name = os.path.basename(status).replace("_pack.png", "")
-                    pack_name = raw_name.capitalize()
-                elif coords in known_pack_names:
+                raw_name = name
+
+                if coords in known_pack_names:
                     raw_name = known_pack_names[coords]
                     pack_name = raw_name
 
@@ -676,18 +714,13 @@ class Mirror:
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
 
-            if not shared_vars.prioritize_list_over_status and status_selectable_packs_pos and floor != "floor5":
-                logger.info("Selecting status pack (Status > List)")
-                select_pack(status_selectable_packs_pos[0], source="status")
-                return
-
             if found_priority_packs:
                 best_pack = found_priority_packs[0]
                 logger.info(f"Selecting priority pack: {best_pack[2]}")
                 select_pack(best_pack[1], best_pack[2])
                 return
 
-            if floor_priorities and refresh_count < MAX_REFRESHES and shared_vars.prioritize_list_over_status:
+            if floor_priorities and refresh_count < MAX_REFRESHES:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
                 
                 
@@ -735,15 +768,11 @@ class Mirror:
                     retry_attempt = 10
                     continue
 
-            if status_selectable_packs_pos and floor != "floor5":
-                logger.info("Selecting status pack")
-                select_pack(status_selectable_packs_pos[0], source="status")
-                return
-
             if selectable_packs_pos:
+                import random
                 logger.info("Fallback: Selecting random available pack")
-                
-                for target_coords in selectable_packs_pos:
+
+                for target_coords in random.sample(selectable_packs_pos, len(selectable_packs_pos)):
                     pack_name = pack_identities.get(target_coords, "unknown_pack")
                     
                     if pack_name in exception_packs:
@@ -773,12 +802,8 @@ class Mirror:
                         logger.info(f"Final scan found non-excepted pack: {pack_name}")
                         select_pack(matches[0], pack_name)
                         return
-                for pack_file in all_packs:
-                    matches = common.match_image(f"pictures/mirror/packs/f{floor_char}/{pack_file}", 0.55, grayscale=True, screenshot=screenshot, enable_scaling=True)
-                    if matches:
-                        logger.warning(f"All packs excepted, forced fallback to: {pack_file.replace('.png', '')}")
-                        select_pack(matches[0], pack_file.replace(".png", ""))
-                        return
+                self.logger.error(f"All packs on {floor} are in the exception list. Stopping macro.")
+                raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
 
     def squad_select(self):
         """selects sinners in squad order"""

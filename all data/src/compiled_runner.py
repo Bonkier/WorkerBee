@@ -134,7 +134,6 @@ def sync_shared_vars(shared_vars_instance):
             sv_module.skip_sinner_healing = shared_vars_instance.skip_sinner_healing.value
             sv_module.skip_ego_enhancing = shared_vars_instance.skip_ego_enhancing.value
             sv_module.skip_ego_buying = shared_vars_instance.skip_ego_buying.value
-            sv_module.prioritize_list_over_status = shared_vars_instance.prioritize_list_over_status.value
             sv_module.hard_mode = shared_vars_instance.hard_mode.value
             sv_module.retry_count = shared_vars_instance.retry_count.value
             sv_module.claim_on_defeat = shared_vars_instance.claim_on_defeat.value

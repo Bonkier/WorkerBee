@@ -25,7 +25,6 @@ def load_preferences(config, shared_vars):
     if "skip_sinner_healing" in settings: shared_vars.skip_sinner_healing.value = bool(settings["skip_sinner_healing"])
     if "skip_ego_enhancing" in settings: shared_vars.skip_ego_enhancing.value = bool(settings["skip_ego_enhancing"])
     if "skip_ego_buying" in settings: shared_vars.skip_ego_buying.value = bool(settings["skip_ego_buying"])
-    if "prioritize_list_over_status" in settings: shared_vars.prioritize_list_over_status.value = bool(settings["prioritize_list_over_status"])
     if "claim_on_defeat" in settings: shared_vars.claim_on_defeat.value = bool(settings["claim_on_defeat"])
 
     if "debug_image_matches" in settings: shared_vars.debug_image_matches.value = bool(settings["debug_image_matches"])

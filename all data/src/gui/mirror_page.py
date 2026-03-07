@@ -153,8 +153,6 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     add_setting_checkbox("Skip Sinner Healing", "skip_sinner_healing", False)
     add_setting_checkbox("Skip EGO Enhancing", "skip_ego_enhancing", False)
     add_setting_checkbox("Skip EGO Buying", "skip_ego_buying", False)
-    add_setting_checkbox("Prioritize List over Status", "prioritize_list_over_status", False)
-    
     add_setting_checkbox("Convert Enkephalin to Modules", "convert_enkephalin_to_modules", True)
     add_setting_checkbox("Claim Rewards on Defeat", "claim_on_defeat", False)
 
