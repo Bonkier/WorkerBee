@@ -486,7 +486,8 @@ class Mirror:
         crop = screenshot[min_y_scaled:max_y_scaled, min_x_scaled:max_x_scaled]
         gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop.copy()
         color_crop = crop
-        scale_factor = min(common.EXPECTED_WIDTH / 2560.0, common.EXPECTED_HEIGHT / 1440.0)
+        base_scale = min(common.EXPECTED_WIDTH / 2560.0, common.EXPECTED_HEIGHT / 1440.0)
+        scale_candidates = [base_scale * adj for adj in (1.00, 1.33, 0.87)]
 
         best_per_coord = {}
         excepted_visible_count = 0
@@ -513,18 +514,6 @@ class Mirror:
                     continue
                 common._template_cache[gray_key] = tmpl_orig
 
-            if scale_factor != 1.0:
-                tmpl = cv2.resize(tmpl_orig, None, fx=scale_factor, fy=scale_factor,
-                                  interpolation=cv2.INTER_LINEAR)
-            else:
-                tmpl = tmpl_orig
-
-            if tmpl.shape[0] > gray_crop.shape[0] or tmpl.shape[1] > gray_crop.shape[1]:
-                continue
-
-            result = cv2.matchTemplate(gray_crop, tmpl, cv2.TM_CCOEFF_NORMED)
-            th, tw = tmpl.shape[:2]
-
             def _extract_matches_scored(res, thresh, box_w, box_h):
                 locs = np.where(res >= thresh)
                 if not locs[0].size:
@@ -542,16 +531,36 @@ class Mirror:
                     out.append(((cx, cy), score))
                 return out
 
+            # Multi-scale gray matching — try each candidate scale, keep best result
+            best_result = None
+            best_gray_score = 0.0
+            best_th, best_tw = 0, 0
+            for sf in scale_candidates:
+                if sf != 1.0:
+                    tmpl = cv2.resize(tmpl_orig, None, fx=sf, fy=sf, interpolation=cv2.INTER_LINEAR)
+                else:
+                    tmpl = tmpl_orig
+                if tmpl.shape[0] > gray_crop.shape[0] or tmpl.shape[1] > gray_crop.shape[1]:
+                    continue
+                res = cv2.matchTemplate(gray_crop, tmpl, cv2.TM_CCOEFF_NORMED)
+                score = float(res.max()) if res.size > 0 else 0.0
+                if score > best_gray_score:
+                    best_gray_score = score
+                    best_result = res
+                    best_th, best_tw = tmpl.shape[:2]
+
+            if best_result is None:
+                continue
+
             if is_excepted:
-                scored = _extract_matches_scored(result, 0.55 + threshold_adj, tw, th)
+                scored = _extract_matches_scored(best_result, 0.55 + threshold_adj, best_tw, best_th)
                 if scored:
                     excepted_visible_count += 1
                     self.logger.debug(f"Excepted pack visible on screen, skipping: {pack_name}")
                 continue
 
-            best_gray_score = float(result.max()) if result.size > 0 else 0.0
-            coord_scores = (_extract_matches_scored(result, 0.65 + threshold_adj, tw, th) or
-                            _extract_matches_scored(result, 0.55 + threshold_adj, tw, th))
+            coord_scores = (_extract_matches_scored(best_result, 0.65 + threshold_adj, best_tw, best_th) or
+                            _extract_matches_scored(best_result, 0.55 + threshold_adj, best_tw, best_th))
 
             if not coord_scores:
                 color_key = (pack_abs_path, cv2.IMREAD_COLOR)
@@ -564,14 +573,16 @@ class Mirror:
                     if tmpl_color_orig is not None:
                         common._template_cache[color_key] = tmpl_color_orig
                 if tmpl_color_orig is not None:
-                    tmpl_color = (cv2.resize(tmpl_color_orig, None, fx=scale_factor, fy=scale_factor,
-                                             interpolation=cv2.INTER_LINEAR)
-                                  if scale_factor != 1.0 else tmpl_color_orig)
-                    if (tmpl_color.shape[0] <= color_crop.shape[0] and
-                            tmpl_color.shape[1] <= color_crop.shape[1]):
+                    for sf in scale_candidates:
+                        tmpl_color = cv2.resize(tmpl_color_orig, None, fx=sf, fy=sf, interpolation=cv2.INTER_LINEAR) if sf != 1.0 else tmpl_color_orig
+                        if tmpl_color.shape[0] > color_crop.shape[0] or tmpl_color.shape[1] > color_crop.shape[1]:
+                            continue
                         color_result = cv2.matchTemplate(color_crop, tmpl_color, cv2.TM_CCOEFF_NORMED)
                         th_c, tw_c = tmpl_color.shape[:2]
-                        coord_scores = _extract_matches_scored(color_result, 0.55 + threshold_adj, tw_c, th_c)
+                        color_scores = _extract_matches_scored(color_result, 0.55 + threshold_adj, tw_c, th_c)
+                        if color_scores:
+                            coord_scores = color_scores
+                            break
 
             if not coord_scores:
                 self.logger.debug(f"Pack not detected: {pack_name} | best gray score: {best_gray_score:.4f}")
