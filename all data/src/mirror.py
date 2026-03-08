@@ -49,28 +49,59 @@ class Mirror:
 
     @staticmethod
     def floor_id():
-        """Detect current floor number from pack selection screen"""
+        """Detect current floor number from pack selection screen using highest-confidence match"""
+        import cv2
         screenshot = common.capture_screen()
-        detected_floors = []
 
         if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True, screenshot=screenshot):
             return ""
-        
-        threshold = 0.7
+
+        threshold = 0.73
+        best_floor = None
+        best_score = 0.0
+
+        screen = screenshot
+        if len(screen.shape) == 2:
+            screen = cv2.cvtColor(screen, cv2.COLOR_GRAY2BGR)
 
         for i in range(1, 6):
             floor_name = f"floor{i}"
-            if common.element_exist(f'pictures/mirror/packs/{floor_name}.png', threshold, no_grayscale=True, screenshot=screenshot):
-                detected_floors.append(floor_name)
+            template_path = f"pictures/mirror/packs/{floor_name}.png"
+            full_path = common.resource_path(template_path)
 
-        if len(detected_floors) == 1:
-            logger.info(f"Current floor detected: {detected_floors[0]}")
-            return detected_floors[0]
-        elif len(detected_floors) > 1:
-            logger.warning(f"Multiple floors detected visually: {detected_floors}. Defaulting to {detected_floors[-1]}")
-            return detected_floors[-1]
+            cache_key = (full_path, cv2.IMREAD_COLOR)
+            if cache_key in common._template_cache:
+                template = common._template_cache[cache_key]
+            else:
+                template = cv2.imread(full_path, cv2.IMREAD_COLOR)
+                if template is None:
+                    continue
+                common._template_cache[cache_key] = template
+
+            base_w, base_h = common.get_template_reference_resolution(full_path)
+            scale = min(common.EXPECTED_WIDTH / base_w, common.EXPECTED_HEIGHT / base_h)
+            if scale != 1.0:
+                scaled = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+            else:
+                scaled = template
+
+            if scaled.shape[0] > screen.shape[0] or scaled.shape[1] > screen.shape[1]:
+                continue
+
+            res = cv2.matchTemplate(screen, scaled, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, _ = cv2.minMaxLoc(res)
+
+            logger.debug(f"Floor {i} confidence: {max_val:.4f}")
+
+            if max_val >= threshold and max_val > best_score:
+                best_score = max_val
+                best_floor = floor_name
+
+        if best_floor:
+            logger.info(f"Visual floor detected: {best_floor} (confidence: {best_score:.4f})")
+            return best_floor
         else:
-            logger.warning("Could not detect current floor visually")
+            logger.warning(f"Could not detect current floor visually (best score below threshold {threshold})")
             return ""
 
     def is_pack_screen(self):
@@ -78,7 +109,7 @@ class Mirror:
         if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True):
             return False
 
-        threshold = 0.7
+        threshold = 0.73
 
         if self.current_floor_tracker:
              if common.element_exist(f'pictures/mirror/packs/{self.current_floor_tracker}.png', threshold, no_grayscale=True, quiet_failure=True):
@@ -573,20 +604,18 @@ class Mirror:
 
         visual_floor = self.floor_id()
         if visual_floor:
-            self.logger.info(f"Visual floor detection succeeded: {visual_floor}")
             floor = visual_floor
             floor_num = int(visual_floor.replace("floor", ""))
             if visual_floor != calc_floor:
-                self.logger.warning(f"Visual floor ({visual_floor}) differs from calculated ({calc_floor}). Using visual.")
-                if floor_num < calc_floor_num:
-                    del self.run_stats["packs"][floor_num - 1:]
+                self.logger.warning(f"Visual floor ({visual_floor}) differs from calculated ({calc_floor}). Using visual (highest-confidence match).")
+            else:
+                self.logger.info(f"Visual floor confirmed: {visual_floor}")
         else:
-            self.logger.warning(f"Visual floor detection failed, falling back to calculated floor: {calc_floor}")
+            self.logger.warning(f"Visual floor detection failed — falling back to calculated floor: {calc_floor}")
             floor = calc_floor
             floor_num = calc_floor_num
 
         if floor != self.current_floor_tracker:
-            self.current_floor_tracker = floor
             self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
             
         if floor == "floor1":
@@ -719,6 +748,7 @@ class Mirror:
 
                 if selection_confirmed:
                     self.run_stats["packs"].append(pack_name)
+                    self.current_floor_tracker = floor
                 else:
                     self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered — NOT counting pack, will retry.")
 
