@@ -505,7 +505,10 @@ class Mirror:
             gray_key = (pack_abs_path, cv2.IMREAD_GRAYSCALE)
             tmpl_orig = common._template_cache.get(gray_key)
             if tmpl_orig is None:
-                tmpl_orig = cv2.imread(pack_abs_path, cv2.IMREAD_GRAYSCALE)
+                try:
+                    tmpl_orig = cv2.imdecode(np.fromfile(pack_abs_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+                except Exception:
+                    tmpl_orig = None
                 if tmpl_orig is None:
                     continue
                 common._template_cache[gray_key] = tmpl_orig
@@ -554,7 +557,10 @@ class Mirror:
                 color_key = (pack_abs_path, cv2.IMREAD_COLOR)
                 tmpl_color_orig = common._template_cache.get(color_key)
                 if tmpl_color_orig is None:
-                    tmpl_color_orig = cv2.imread(pack_abs_path, cv2.IMREAD_COLOR)
+                    try:
+                        tmpl_color_orig = cv2.imdecode(np.fromfile(pack_abs_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    except Exception:
+                        tmpl_color_orig = None
                     if tmpl_color_orig is not None:
                         common._template_cache[color_key] = tmpl_color_orig
                 if tmpl_color_orig is not None:
