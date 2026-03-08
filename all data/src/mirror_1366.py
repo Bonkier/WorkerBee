@@ -73,7 +73,12 @@ class Mirror:
             if cache_key in common._template_cache:
                 template = common._template_cache[cache_key]
             else:
-                template = cv2.imread(full_path, cv2.IMREAD_COLOR)
+                try:
+                    import numpy as np
+                    raw = np.fromfile(full_path, dtype=np.uint8)
+                    template = cv2.imdecode(raw, cv2.IMREAD_COLOR)
+                except Exception:
+                    template = None
                 if template is None:
                     continue
                 common._template_cache[cache_key] = template
