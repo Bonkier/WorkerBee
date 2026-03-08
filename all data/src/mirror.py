@@ -549,7 +549,7 @@ class Mirror:
                     self.logger.debug(f"Excepted pack visible on screen, skipping: {pack_name}")
                 continue
 
-            # 0.50 level removed: too many false positives at that threshold
+            best_gray_score = float(result.max()) if result.size > 0 else 0.0
             coord_scores = (_extract_matches_scored(result, 0.65 + threshold_adj, tw, th) or
                             _extract_matches_scored(result, 0.55 + threshold_adj, tw, th))
 
@@ -573,6 +573,8 @@ class Mirror:
                         th_c, tw_c = tmpl_color.shape[:2]
                         coord_scores = _extract_matches_scored(color_result, 0.55 + threshold_adj, tw_c, th_c)
 
+            if not coord_scores:
+                self.logger.debug(f"Pack not detected: {pack_name} | best gray score: {best_gray_score:.4f}")
             for coord, score in coord_scores:
                 existing = best_per_coord.get(coord)
                 if existing is None or score > existing[0]:
