@@ -420,7 +420,11 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     if cache_key in _template_cache:
         original_template = _template_cache[cache_key]
     else:
-        original_template = cv2.imread(full_template_path, color_flag)
+        try:
+            raw = np.fromfile(full_template_path, dtype=np.uint8)
+            original_template = cv2.imdecode(raw, color_flag)
+        except Exception:
+            original_template = None
         if original_template is None:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"Image file missing: {template_path} | File Exists: False", dirty=True)
