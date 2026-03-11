@@ -294,7 +294,7 @@ class Mirror:
 
         elif common.element_exist("pictures/mirror/general/event_effect.png"):
             self.logger.info("Event effect selection detected")
-            found = common.match_image("pictures/mirror/general/event_select.png")
+            found = common.match_image("pictures/mirror/general/event_select.png", no_grayscale=True)
             x,y = common.random_choice(found)
             common.mouse_move_click(x, y)
             common.sleep(1)
@@ -325,7 +325,8 @@ class Mirror:
         for x, y in self._grace_coords_cache:
             common.mouse_move_click(x, y)
             common.sleep(0.1)
-        
+
+        common.sleep(0.5)
         common.click_matching("pictures/CustomAdded1080p/mirror/general/Enter.png")
         common.sleep(1)
         common.click_matching("pictures/CustomAdded1080p/mirror/general/Confirm.png")
@@ -483,11 +484,31 @@ class Mirror:
         if not os.path.exists(floor_dir):
             return [], {}, {}, [], 0
 
+        actual_h, actual_w = screenshot.shape[:2]
+
+        # Recompute crop bounds from actual screenshot dimensions in case of DPI mismatch
+        # (EXPECTED_WIDTH/HEIGHT may differ from actual screenshot size on systems with display scaling)
+        if actual_w != common.EXPECTED_WIDTH or actual_h != common.EXPECTED_HEIGHT:
+            self.logger.warning(f"Screenshot size {actual_w}x{actual_h} differs from EXPECTED {common.EXPECTED_WIDTH}x{common.EXPECTED_HEIGHT} — recomputing crop bounds")
+            min_y_scaled = round(100 * actual_h / 1080)
+            max_y_scaled = round(980 * actual_h / 1080)
+            min_x_scaled = round(50 * actual_w / 1920)
+            max_x_scaled = round(1870 * actual_w / 1920)
+
+        self.logger.debug(f"Screenshot: {actual_w}x{actual_h} | crop: x={min_x_scaled}-{max_x_scaled}, y={min_y_scaled}-{max_y_scaled}")
+
+        base_scale = min(actual_w / 2560.0, actual_h / 1440.0)
+        scale_candidates = [base_scale * adj for adj in (1.00, 1.33, 0.87)]
+
         crop = screenshot[min_y_scaled:max_y_scaled, min_x_scaled:max_x_scaled]
         gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop.copy()
-        color_crop = crop
-        base_scale = min(common.EXPECTED_WIDTH / 2560.0, common.EXPECTED_HEIGHT / 1440.0)
-        scale_candidates = [base_scale * adj for adj in (1.00, 1.33, 0.87)]
+
+        if shared_vars.debug_image_matches:
+            debug_path = os.path.join(BASE_PATH, f"logs/pack_scan_debug_f{floor_char}.png")
+            cv2.imwrite(debug_path, screenshot)
+            crop_debug_path = os.path.join(BASE_PATH, f"logs/pack_scan_crop_f{floor_char}.png")
+            cv2.imwrite(crop_debug_path, crop)
+            self.logger.info(f"Debug screenshot saved: {debug_path} | crop saved: {crop_debug_path} | crop shape: {crop.shape}")
 
         best_per_coord = {}
         excepted_visible_count = 0
@@ -502,17 +523,22 @@ class Mirror:
 
             threshold_adj = common.get_total_threshold_adjustment(pack_rel_path)
 
-            # --- Gray template ---
             gray_key = (pack_abs_path, cv2.IMREAD_GRAYSCALE)
-            tmpl_orig = common._template_cache.get(gray_key)
-            if tmpl_orig is None:
+            tmpl_gray_orig = common._template_cache.get(gray_key)
+            if tmpl_gray_orig is None:
                 try:
-                    tmpl_orig = cv2.imdecode(np.fromfile(pack_abs_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
-                except Exception:
-                    tmpl_orig = None
-                if tmpl_orig is None:
-                    continue
-                common._template_cache[gray_key] = tmpl_orig
+                    with open(pack_abs_path, 'rb') as _f:
+                        raw = np.frombuffer(_f.read(), dtype=np.uint8)
+                    tmpl_gray_orig = cv2.imdecode(raw, cv2.IMREAD_GRAYSCALE)
+                except Exception as e:
+                    self.logger.warning(f"Failed to load template for pack '{pack_name}': {e}")
+                    tmpl_gray_orig = None
+                if tmpl_gray_orig is not None:
+                    common._template_cache[gray_key] = tmpl_gray_orig
+
+            if tmpl_gray_orig is None:
+                self.logger.warning(f"Template returned None for pack '{pack_name}', skipping")
+                continue
 
             def _extract_matches_scored(res, thresh, box_w, box_h):
                 locs = np.where(res >= thresh)
@@ -531,61 +557,36 @@ class Mirror:
                     out.append(((cx, cy), score))
                 return out
 
-            # Multi-scale gray matching — try each candidate scale, keep best result
-            best_result = None
-            best_gray_score = 0.0
-            best_th, best_tw = 0, 0
-            for sf in scale_candidates:
-                if sf != 1.0:
-                    tmpl = cv2.resize(tmpl_orig, None, fx=sf, fy=sf, interpolation=cv2.INTER_LINEAR)
-                else:
-                    tmpl = tmpl_orig
-                if tmpl.shape[0] > gray_crop.shape[0] or tmpl.shape[1] > gray_crop.shape[1]:
+            def _multiscale_match(tmpl_orig, search_img):
+                best_res, best_score, best_th, best_tw = None, 0.0, 0, 0
+                for sf in scale_candidates:
+                    t = cv2.resize(tmpl_orig, None, fx=sf, fy=sf, interpolation=cv2.INTER_LINEAR) if sf != 1.0 else tmpl_orig
+                    if t.shape[0] > search_img.shape[0] or t.shape[1] > search_img.shape[1]:
+                        continue
+                    res = cv2.matchTemplate(search_img, t, cv2.TM_CCOEFF_NORMED)
+                    s = float(res.max()) if res.size > 0 else 0.0
+                    if s > best_score:
+                        best_score, best_res, best_th, best_tw = s, res, t.shape[0], t.shape[1]
+                return best_res, best_score, best_th, best_tw
+
+            g_res, best_score, g_th, g_tw = _multiscale_match(tmpl_gray_orig, gray_crop)
+            coord_scores = []
+            if g_res is not None:
+                if is_excepted:
+                    if _extract_matches_scored(g_res, 0.55 + threshold_adj, g_tw, g_th):
+                        excepted_visible_count += 1
+                        self.logger.debug(f"Excepted pack visible (score>{0.55+threshold_adj:.2f}), skipping: {pack_name}")
+                    else:
+                        self.logger.debug(f"Excepted pack not visible (score={best_score:.4f}), skipping: {pack_name}")
                     continue
-                res = cv2.matchTemplate(gray_crop, tmpl, cv2.TM_CCOEFF_NORMED)
-                score = float(res.max()) if res.size > 0 else 0.0
-                if score > best_gray_score:
-                    best_gray_score = score
-                    best_result = res
-                    best_th, best_tw = tmpl.shape[:2]
-
-            if best_result is None:
+                coord_scores = (_extract_matches_scored(g_res, 0.65 + threshold_adj, g_tw, g_th) or
+                                _extract_matches_scored(g_res, 0.55 + threshold_adj, g_tw, g_th))
+            elif is_excepted:
+                self.logger.debug(f"Excepted pack skipped (template too large for crop): {pack_name}")
                 continue
 
-            if is_excepted:
-                scored = _extract_matches_scored(best_result, 0.55 + threshold_adj, best_tw, best_th)
-                if scored:
-                    excepted_visible_count += 1
-                    self.logger.debug(f"Excepted pack visible on screen, skipping: {pack_name}")
-                continue
-
-            coord_scores = (_extract_matches_scored(best_result, 0.65 + threshold_adj, best_tw, best_th) or
-                            _extract_matches_scored(best_result, 0.55 + threshold_adj, best_tw, best_th))
-
             if not coord_scores:
-                color_key = (pack_abs_path, cv2.IMREAD_COLOR)
-                tmpl_color_orig = common._template_cache.get(color_key)
-                if tmpl_color_orig is None:
-                    try:
-                        tmpl_color_orig = cv2.imdecode(np.fromfile(pack_abs_path, dtype=np.uint8), cv2.IMREAD_COLOR)
-                    except Exception:
-                        tmpl_color_orig = None
-                    if tmpl_color_orig is not None:
-                        common._template_cache[color_key] = tmpl_color_orig
-                if tmpl_color_orig is not None:
-                    for sf in scale_candidates:
-                        tmpl_color = cv2.resize(tmpl_color_orig, None, fx=sf, fy=sf, interpolation=cv2.INTER_LINEAR) if sf != 1.0 else tmpl_color_orig
-                        if tmpl_color.shape[0] > color_crop.shape[0] or tmpl_color.shape[1] > color_crop.shape[1]:
-                            continue
-                        color_result = cv2.matchTemplate(color_crop, tmpl_color, cv2.TM_CCOEFF_NORMED)
-                        th_c, tw_c = tmpl_color.shape[:2]
-                        color_scores = _extract_matches_scored(color_result, 0.55 + threshold_adj, tw_c, th_c)
-                        if color_scores:
-                            coord_scores = color_scores
-                            break
-
-            if not coord_scores:
-                self.logger.debug(f"Pack not detected: {pack_name} | best gray score: {best_gray_score:.4f}")
+                self.logger.debug(f"Pack not detected: {pack_name} | score: {best_score:.4f}")
             for coord, score in coord_scores:
                 existing = best_per_coord.get(coord)
                 if existing is None or score > existing[0]:
@@ -667,10 +668,10 @@ class Mirror:
                         if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True):
                             common.click_matching("pictures/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True)
 
-        min_y_scaled = common.scale_y_1080p(260)
-        max_y_scaled = common.scale_y_1080p(800)
-        min_x_scaled = common.scale_x_1080p(150)
-        max_x_scaled = common.scale_x_1080p(1730)
+        min_y_scaled = common.scale_y_1080p(100)
+        max_y_scaled = common.scale_y_1080p(980)
+        min_x_scaled = common.scale_x_1080p(50)
+        max_x_scaled = common.scale_x_1080p(1870)
 
 
         known_pack_names = {}
@@ -690,7 +691,7 @@ class Mirror:
             exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
 
             sorted_priorities_log = sorted(floor_priorities.items(), key=lambda x: x[1])
-            self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log}")
+            self.logger.info(f"Pack Selection - Floor: {floor} | Priorities: {sorted_priorities_log} | Exceptions: {exception_packs}")
             
             common.mouse_move(*common.scale_coordinates_1080p(200,200))
             common.sleep(0.2)
@@ -867,7 +868,24 @@ class Mirror:
                         logger.info(f"Final scan found non-excepted pack: {pack_name}")
                         select_pack(matches[0], pack_name)
                         return
-                self.logger.error(f"All packs on {floor} are in the exception list. Stopping macro.")
+                # Last resort: use inpack.png to blindly find any pack slot on screen
+                self.logger.warning("Final template scan found nothing. Attempting inpack.png blind fallback.")
+                inpack_matches = common.match_image(
+                    "pictures/CustomAdded1080p/mirror/packs/inpack.png",
+                    threshold=0.7, quiet_failure=True, screenshot=screenshot
+                )
+                if inpack_matches:
+                    iy1 = common.scale_y_1080p(260)
+                    iy2 = common.scale_y_1080p(800)
+                    ix1 = common.scale_x_1080p(315)
+                    ix2 = common.scale_x_1080p(1570)
+                    filtered = [(x, y) for x, y in inpack_matches if iy1 <= y <= iy2 and ix1 <= x <= ix2]
+                    if filtered:
+                        bx, by = filtered[0]
+                        self.logger.info(f"inpack fallback: dragging pack at ({bx}, {by})")
+                        robust_drag_pack(bx, by)
+                        return
+                self.logger.error(f"inpack fallback also found nothing on {floor}. Stopping macro.")
                 raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
 
     def squad_select(self):
@@ -1100,7 +1118,11 @@ class Mirror:
                 if not nav_found:
                     self.navigation(drag_danteh=False, _depth=_depth + 1)
                     return
-            common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1)
+            common.sleep(0.4)
+            for _ in range(3):
+                if common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
+                    break
+                common.sleep(0.3)
 
     def sell_gifts(self):
         """Handles Selling gifts"""
@@ -1528,7 +1550,11 @@ class Mirror:
                     for i in range(5):
                         common.mouse_scroll(1000)
                 self.enhance_gifts(status)
+                _close_end = time.time() + 15
                 while not common.click_matching("pictures/mirror/restshop/close.png", recursive=False):
+                    if time.time() > _close_end:
+                        self.logger.warning("Timed out waiting for enhance close button")
+                        break
                     common.mouse_move(*common.scale_coordinates_1080p(50, 50))
                     time.sleep(0.5)
 
@@ -1582,7 +1608,7 @@ class Mirror:
                         break
                     common.mouse_move_click(*common.scale_coordinates_1080p(50, 50))
                     common.sleep(0.3)
-                    common.click_matching("pictures/mirror/restshop/market/refresh.png")
+                    common.click_matching("pictures/mirror/restshop/market/refresh.png", recursive=False, quiet_failure=True)
                     common.sleep(0.8)
 
         leave_restshop()
@@ -1773,14 +1799,21 @@ class Mirror:
         common.click_matching("pictures/general/claim_rewards.png")
         common.sleep(1)
         common.click_matching("pictures/general/md_claim.png")
+        common.sleep(1)
+        common.click_matching("pictures/general/confirm_b.png", recursive=False, quiet_failure=True)
         common.sleep(0.5)
         if common.click_matching("pictures/general/confirm_w.png", recursive=False):
-            while(True):
-                if common.element_exist("pictures/mirror/general/weekly_reward.png"): 
+            _wait_end = time.time() + 30
+            while True:
+                if time.time() > _wait_end:
+                    self.logger.warning("Timed out waiting for pass_level screen after victory")
+                    break
+                if common.element_exist("pictures/mirror/general/weekly_reward.png"):
                     common.key_press("enter")
-                if common.element_exist("pictures/mirror/general/pass_level.png"): 
+                if common.element_exist("pictures/mirror/general/pass_level.png"):
                     common.key_press("enter")
                     break
+                common.sleep(0.3)
             if "floor5" not in self.run_stats["floor_times"]:
                 self.run_stats["floor_times"]["floor5"] = time.time() - self.run_stats["start_time"]  
             post_run_load()

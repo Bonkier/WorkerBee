@@ -174,6 +174,22 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
     ctk.CTkSwitch(button_frame, text="Auto-reload", variable=auto_reload_var, font=UIStyle.BODY_FONT).pack(side="right", padx=5, pady=5)
 
     last_file_position = 0
+    _size_warning_shown = [False]
+    _TWO_GB = 2 * 1024 * 1024 * 1024
+
+    def check_log_size_and_warn():
+        if _size_warning_shown[0]:
+            return
+        try:
+            if os.path.exists(log_filename) and os.path.getsize(log_filename) >= _TWO_GB:
+                _size_warning_shown[0] = True
+                if messagebox.askyesno(
+                    "Log File Too Large",
+                    "The log file has exceeded 2 GB.\n\nWould you like to clear it now?"
+                ):
+                    clear_log_file()
+        except Exception:
+            pass
 
     def should_display_line(line):
         for module, pattern in log_modules.items():
@@ -225,5 +241,6 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
                 pass
         root.after(200, check_log_file_changes)
 
+    check_log_size_and_warn()
     load_log_file(reload_all=True)
     check_log_file_changes()
