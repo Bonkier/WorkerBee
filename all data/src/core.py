@@ -448,6 +448,8 @@ def navigate_to_md():
         if attempts >= max_attempts:
             logger.error(f"navigate_to_md: Failed to reach MD after {max_attempts} attempts — is the game at the main menu?")
             return False
+        common.click_matching("pictures/general/confirm_b.png", recursive=False, quiet_failure=True)
+        common.click_matching("pictures/general/confirm_w.png", recursive=False, quiet_failure=True)
         while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
             pass
         common.click_matching("pictures/general/window.png")
