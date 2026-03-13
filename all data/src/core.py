@@ -1,4 +1,5 @@
 import time
+import threading
 import logging
 import sys
 import pyautogui
@@ -70,98 +71,120 @@ def battle():
     winrate_invisible_start = None
     winrate_invisible_timeout = 10
     battle_start_time = time.time()
-    
-    while(battle_finished != 1):
-        # Hard timeout for battle (15 minutes) to prevent infinite stuck loops
-        if time.time() - battle_start_time > 900:
-            logger.warning("Battle timed out (15 minutes). Forcing restart.")
-            return
 
-        screenshot = common.capture_screen()
+    main_thread_id = threading.current_thread().ident
+    last_capture_ok = [time.time()]
+    watchdog_active = [True]
+    CAPTURE_HANG_THRESHOLD = 30
 
-        if common.element_exist("pictures/general/server_error.png", screenshot=screenshot):
-            logger.warning("Server error detected during battle")
-            common.mouse_up()
-            reconnect()
+    def _capture_watchdog():
+        while watchdog_active[0]:
+            time.sleep(5)
+            if not watchdog_active[0]:
+                break
+            elapsed = time.time() - last_capture_ok[0]
+            if elapsed > CAPTURE_HANG_THRESHOLD:
+                logger.warning(f"Screen capture hung for {elapsed:.0f}s, forcing sct reset")
+                common.reset_sct(main_thread_id)
 
-        if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
-            common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True, screenshot=screenshot)):
-            logger.info("Defeat detected during battle")
-            return
+    wt = threading.Thread(target=_capture_watchdog, daemon=True)
+    wt.start()
 
-        if common.element_exist("pictures/general/loading.png", screenshot=screenshot) and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", screenshot=screenshot):
-            common.mouse_up()
-            if common.element_exist("pictures/battle/winrate.png"):
-                logger.info("false read loading")
-                battle()
+    try:
+        while(battle_finished != 1):
+            if time.time() - battle_start_time > 900:
+                logger.warning("Battle timed out (15 minutes). Forcing restart.")
                 return
 
-            battle_finished = 1
-            logger.info(f"Battle finished!")
-            return
+            last_capture_ok[0] = time.time()
+            screenshot = common.capture_screen()
 
-        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-        if common.element_exist("pictures/events/skip.png", screenshot=screenshot):
-            logger.info("Skip button found, handling skill check")
-            common.mouse_up()
-            while(True):
-                common.click_skip(1)
-                if common.element_exist("pictures/mirror/general/event.png", 0.7):
-                    logger.info("Battle check event detected")
-                    battle_check()
-                    break
-                if common.element_exist("pictures/events/skill_check.png"):
-                    logger.info("Skill check event detected")
-                    skill_check()
-                    break
-
-                common.click_matching("pictures/events/continue.png", recursive=False)
-
-        if common.element_exist("pictures/battle/winrate.png", screenshot=screenshot):
-            logger.debug("Winrate screen detected")
-            winrate_invisible_start = None
-            current_time = time.time()
-            if winrate_visible_start is None:
-                winrate_visible_start = current_time
-
-            if current_time - winrate_visible_start > winrate_timeout:
-                winrate_visible_start = None
-                logger.warning(f"Winrate screen stuck for {winrate_timeout} seconds")
+            if common.element_exist("pictures/general/server_error.png", screenshot=screenshot):
+                logger.warning("Server error detected during battle")
                 common.mouse_up()
-                common.click_matching("pictures/battle/winrate.png", 0.9)
-                ego_check()
-                common.key_press("enter")
+                reconnect()
+
+            if (common.element_exist("pictures/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
+                common.element_exist("pictures/CustomAdded1080p/mirror/general/acceptdefeat.png", threshold=0.72, quiet_failure=True, screenshot=screenshot) or
+                common.element_exist("pictures/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True, screenshot=screenshot)):
+                logger.info("Defeat detected during battle")
+                return
+
+            if common.element_exist("pictures/general/loading.png", screenshot=screenshot) and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", screenshot=screenshot):
+                common.mouse_up()
+                if common.element_exist("pictures/battle/winrate.png"):
+                    logger.info("false read loading")
+                    battle()
+                    return
+
+                battle_finished = 1
+                logger.info(f"Battle finished!")
+                return
+
+            common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+            if common.element_exist("pictures/events/skip.png", screenshot=screenshot):
+                logger.info("Skip button found, handling skill check")
+                common.mouse_up()
+                while(True):
+                    common.click_skip(1)
+                    if common.element_exist("pictures/mirror/general/event.png", 0.7):
+                        logger.info("Battle check event detected")
+                        battle_check()
+                        break
+                    if common.element_exist("pictures/events/skill_check.png"):
+                        logger.info("Skill check event detected")
+                        skill_check()
+                        break
+
+                    common.click_matching("pictures/events/continue.png", recursive=False)
+
+            if common.element_exist("pictures/battle/winrate.png", screenshot=screenshot):
+                logger.debug("Winrate screen detected")
+                winrate_invisible_start = None
+                current_time = time.time()
+                if winrate_visible_start is None:
+                    winrate_visible_start = current_time
+
+                if current_time - winrate_visible_start > winrate_timeout:
+                    winrate_visible_start = None
+                    logger.warning(f"Winrate screen stuck for {winrate_timeout} seconds")
+                    common.mouse_up()
+                    common.click_matching("pictures/battle/winrate.png", 0.9)
+                    ego_check()
+                    common.key_press("enter")
+                else:
+                    logger.info("Clicking Winrate (P)")
+                    common.mouse_up()
+                    common.key_press("p")
+                    if not shared_vars.good_pc_mode:
+                        common.sleep(0.5)
+                    ego_check()
+                    common.key_press("enter")
+                    common.mouse_down()
+                    time.sleep(1)
+                    if not common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png"):
+                        common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
+
             else:
-                logger.info("Clicking Winrate (P)")
-                common.mouse_up()
-                common.key_press("p")
-                if not shared_vars.good_pc_mode:
-                    common.sleep(0.5)
-                ego_check()
-                common.key_press("enter")
-                common.mouse_down()
-                time.sleep(1)
-                if not common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png"):
+                if common.element_exist("pictures/mirror/general/encounter_reward.png", screenshot=screenshot):
+                    battle_finished = 1
+                    logger.info(f"battle ended, in mirror")
+                    return
+
+                winrate_visible_start = None
+                current_time = time.time()
+                if winrate_invisible_start is None:
+                    winrate_invisible_start = current_time
+
+                elif current_time - winrate_invisible_start > winrate_invisible_timeout:
+                    winrate_invisible_start = None
+                    logger.debug(f"No winrate for {winrate_invisible_timeout} seconds")
+                    common.reset_sct()
+                    common.mouse_up()
                     common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
-        else:
-            if common.element_exist("pictures/mirror/general/encounter_reward.png", screenshot=screenshot):
-                battle_finished = 1
-                logger.info(f"battle ended, in mirror")
-                return
-
-            winrate_visible_start = None
-            current_time = time.time()
-            if winrate_invisible_start is None:
-                winrate_invisible_start = current_time
-
-            elif current_time - winrate_invisible_start > winrate_invisible_timeout:
-                winrate_invisible_start = None
-                logger.debug(f"No winrate for {winrate_invisible_timeout} seconds")
-                common.reset_sct()
-                common.mouse_up()
-                common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
+    finally:
+        watchdog_active[0] = False
 
 def ego_check():
     """Check for bad clashes and use EGO skills to counter them"""

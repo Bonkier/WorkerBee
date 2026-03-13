@@ -27,6 +27,8 @@ os.chdir(BASE_PATH)
 
 logger = logging.getLogger(__name__)
 
+_orb_descriptor_cache = {}
+
 class Mirror:
     def __init__(self, status):
         """Initialize Mirror instance with status and setup squad order"""
@@ -42,7 +44,8 @@ class Mirror:
         self.run_stats = {
             "start_time": time.time(),
             "floor_times": {},
-            "packs": []
+            "packs": [],
+            "packs_by_floor": {}
         }
         self.current_floor_tracker = None
         self.retries_used = 0
@@ -486,10 +489,8 @@ class Mirror:
 
         actual_h, actual_w = screenshot.shape[:2]
 
-        # Recompute crop bounds from actual screenshot dimensions in case of DPI mismatch
-        # (EXPECTED_WIDTH/HEIGHT may differ from actual screenshot size on systems with display scaling)
         if actual_w != common.EXPECTED_WIDTH or actual_h != common.EXPECTED_HEIGHT:
-            self.logger.warning(f"Screenshot size {actual_w}x{actual_h} differs from EXPECTED {common.EXPECTED_WIDTH}x{common.EXPECTED_HEIGHT} — recomputing crop bounds")
+            self.logger.warning(f"Screenshot size {actual_w}x{actual_h} differs from EXPECTED {common.EXPECTED_WIDTH}x{common.EXPECTED_HEIGHT}. recomputing crop bounds")
             min_y_scaled = round(100 * actual_h / 1080)
             max_y_scaled = round(980 * actual_h / 1080)
             min_x_scaled = round(50 * actual_w / 1920)
@@ -592,9 +593,6 @@ class Mirror:
                 if existing is None or score > existing[0]:
                     best_per_coord[coord] = (score, pack_name)
 
-        # Cross-template spatial NMS: if two detections land within 60px of each other,
-        # keep only the higher-confidence one. Prevents different-sized templates from
-        # claiming nearby coords for the same physical pack on screen.
         coords_by_score = sorted(best_per_coord.keys(), key=lambda c: -best_per_coord[c][0])
         kept = {}
         for coord in coords_by_score:
@@ -602,6 +600,78 @@ class Mirror:
             if not any(abs(cx - kx) < 60 and abs(cy - ky) < 60 for kx, ky in kept):
                 kept[coord] = best_per_coord[coord]
         best_per_coord = kept
+
+
+        already_found_names = {v[1] for v in best_per_coord.values()}
+        if len(best_per_coord) < 5:
+            self.logger.debug(f"CCOEFF found {len(best_per_coord)} packs. Running ORB secondary scan")
+            try:
+                orb = cv2.ORB_create(nfeatures=500)
+                bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+                kp_crop, des_crop = orb.detectAndCompute(gray_crop, None)
+                if des_crop is not None:
+                    orb_candidates = {}
+                    crop_h, crop_w = gray_crop.shape[:2]
+                    for pack_file in all_packs:
+                        pack_name = pack_file.replace(".png", "")
+                        if pack_name in exception_packs or pack_name in already_found_names:
+                            continue
+                        pack_abs_path = common.resource_path(f"pictures/mirror/packs/f{floor_char}/{pack_file}")
+                        cached = _orb_descriptor_cache.get(pack_abs_path)
+                        if cached is None:
+                            gray_key = (pack_abs_path, cv2.IMREAD_GRAYSCALE)
+                            tmpl_orb = common._template_cache.get(gray_key)
+                            if tmpl_orb is None:
+                                try:
+                                    with open(pack_abs_path, 'rb') as _f:
+                                        raw = np.frombuffer(_f.read(), dtype=np.uint8)
+                                    tmpl_orb = cv2.imdecode(raw, cv2.IMREAD_GRAYSCALE)
+                                except Exception:
+                                    continue
+                                if tmpl_orb is None:
+                                    continue
+                                common._template_cache[gray_key] = tmpl_orb
+                            kp_tmpl, des_tmpl = orb.detectAndCompute(tmpl_orb, None)
+                            if des_tmpl is None:
+                                continue
+                            tmpl_h, tmpl_w = tmpl_orb.shape[:2]
+                            _orb_descriptor_cache[pack_abs_path] = (kp_tmpl, des_tmpl, tmpl_h, tmpl_w)
+                            cached = (kp_tmpl, des_tmpl, tmpl_h, tmpl_w)
+                        kp_tmpl, des_tmpl, tmpl_h, tmpl_w = cached
+                        matches = bf.match(des_tmpl, des_crop)
+                        good = [m for m in matches if m.distance < 50]
+                        if len(good) < 4:
+                            continue
+                        pts1 = np.float32([kp_tmpl[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+                        pts2 = np.float32([kp_crop[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+                        H, mask = cv2.findHomography(pts1, pts2, cv2.RANSAC, 5.0)
+                        if H is None or mask is None:
+                            continue
+                        inliers = int(mask.sum())
+                        if inliers < 15:
+                            continue
+                        proj = cv2.perspectiveTransform(np.float32([[tmpl_w / 2, tmpl_h / 2]]).reshape(-1, 1, 2), H)
+                        crop_px = int(proj[0][0][0])
+                        crop_py = int(proj[0][0][1])
+                        if not (0 <= crop_px <= crop_w and crop_h * 0.30 <= crop_py <= crop_h * 0.85):
+                            continue
+                        px = crop_px + min_x_scaled
+                        py = crop_py + min_y_scaled
+                        coord = (px, py)
+                        existing = orb_candidates.get(coord)
+                        if existing is None or inliers > existing[0]:
+                            orb_candidates[coord] = (inliers, pack_name)
+
+                    for coord, (inliers, pack_name) in sorted(orb_candidates.items(), key=lambda x: -x[1][0]):
+                        cx, cy = coord
+                        if any(abs(cx - kx) < 80 and abs(cy - ky) < 80 for kx, ky in best_per_coord):
+                            continue
+                        if not any(abs(cx - ox) < 80 and abs(cy - oy) < 80
+                                   for ox, oy in [c for c in best_per_coord if c != coord]):
+                            self.logger.debug(f"ORB detected: {pack_name} at {coord} ({inliers} inliers)")
+                            best_per_coord[coord] = (inliers / 200.0, pack_name)
+            except Exception as e:
+                self.logger.warning(f"ORB secondary scan failed: {e}")
 
         selectable_packs_pos = []
         pack_identities = {}
@@ -636,7 +706,7 @@ class Mirror:
             else:
                 self.logger.info(f"Visual floor confirmed: {visual_floor}")
         else:
-            self.logger.warning(f"Visual floor detection failed — falling back to calculated floor: {calc_floor}")
+            self.logger.warning(f"Visual floor detection failed falling back to calculated floor: {calc_floor}")
             floor = calc_floor
             floor_num = calc_floor_num
 
@@ -744,24 +814,13 @@ class Mirror:
                 if pack_name.lower().endswith('.png'):
                     pack_name = pack_name[:-4]
 
-                detected_floor = "unknown_floor"
-                if raw_name != "unknown_pack":
-                    for i in range(1, 6):
-                        
-                        found = False
-                        for ext in [".png"]:
-                            check_path = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{i}/{raw_name}{ext}")
-                            if os.path.exists(check_path):
-                                detected_floor = f"Floor {i}"
-                                found = True
-                                break
-                        if found:
-                            break
+                detected_floor = f"Floor {floor_char}" if floor_char else "unknown_floor"
                 
                 self.logger.info(f"Selected Pack: {pack_name} | Location: {detected_floor}")
 
                 x, y = coords
                 robust_drag_pack(x, y)
+                self.run_stats["packs_by_floor"][floor] = pack_name
 
                 wait_start = time.time()
                 selection_confirmed = False
@@ -775,7 +834,7 @@ class Mirror:
                     self.run_stats["packs"].append(pack_name)
                     self.current_floor_tracker = floor
                 else:
-                    self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered — NOT counting pack, will retry.")
+                    self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered. NOT counting pack, will retry.")
 
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
@@ -868,7 +927,6 @@ class Mirror:
                         logger.info(f"Final scan found non-excepted pack: {pack_name}")
                         select_pack(matches[0], pack_name)
                         return
-                # Last resort: use inpack.png to blindly find any pack slot on screen
                 self.logger.warning("Final template scan found nothing. Attempting inpack.png blind fallback.")
                 inpack_matches = common.match_image(
                     "pictures/CustomAdded1080p/mirror/packs/inpack.png",
@@ -974,6 +1032,9 @@ class Mirror:
         common.key_press("enter")
         common.sleep(1)
         common.key_press("enter")
+        common.sleep(0.5)
+        common.click_matching("pictures/general/confirm_b.png", recursive=False, quiet_failure=True)
+        common.click_matching("pictures/general/confirm_w.png", recursive=False, quiet_failure=True)
 
     def encounter_reward_select(self):
         """Select Encounter Rewards prioritising starlight first"""
