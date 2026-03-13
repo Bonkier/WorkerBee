@@ -1,13 +1,49 @@
 import sys
+import ctypes
 import logging
 import os
 import threading
 import json
 import time
 import subprocess
+from PIL import ImageGrab
 import mirror
 import mirror_1366
 import common
+
+_CAPTURE_HANG_LIMIT = 30
+_RUN_TIME_LIMIT = 5400
+
+def _run_watchdog(main_thread_id, run_start, stop_event):
+    screenshot_path = os.path.join(get_base_path(), "config", "macro_state.png")
+    last_screenshot = 0
+    SCREENSHOT_INTERVAL = 300
+
+    while not stop_event.wait(5):
+        now = time.time()
+
+        last_capture = common._capture_heartbeat.get(main_thread_id, run_start)
+        capture_elapsed = now - last_capture
+        if capture_elapsed > _CAPTURE_HANG_LIMIT:
+            logger.warning(f"Run watchdog: capture_screen hung for {capture_elapsed:.0f}s, resetting sct")
+            common.reset_sct(main_thread_id)
+
+        run_elapsed = now - run_start
+        if run_elapsed > _RUN_TIME_LIMIT:
+            logger.warning(f"Run watchdog: run exceeded {_RUN_TIME_LIMIT//60} minutes, injecting TimeoutError to skip run")
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_long(main_thread_id),
+                ctypes.py_object(TimeoutError)
+            )
+            break
+
+        if now - last_screenshot >= SCREENSHOT_INTERVAL:
+            try:
+                img = ImageGrab.grab()
+                img.save(screenshot_path)
+                last_screenshot = now
+            except Exception:
+                pass
 
 logger = None
 
@@ -193,7 +229,8 @@ def update_stats(win, run_data=None):
                 "result": result_str,
                 "duration": run_data.get("duration", 0),
                 "floor_times": run_data.get("floor_times", {}),
-                "packs": packs
+                "packs": packs,
+                "packs_by_floor": run_data.get("packs_by_floor", {})
             }
             
             data["mirror"]["history"].insert(0, history_entry)
@@ -242,26 +279,30 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
             logger.info(f"Run {i + 1}")
 
             try:
-                common._template_cache.clear()
-                if hasattr(common._thread_local, "sct"):
-                    common._thread_local.sct.close()
-                    del common._thread_local.sct
+                common.reset_sct()
             except Exception as e:
-                logger.warning(f"Failed to clear caches: {e}")
+                logger.warning(f"Failed to reset sct between runs: {e}")
             
+            _stop_watchdog = threading.Event()
+            _wt = threading.Thread(
+                target=_run_watchdog,
+                args=(threading.current_thread().ident, time.time(), _stop_watchdog),
+                daemon=True
+            )
+            _wt.start()
             try:
                 run_complete = 0
                 win_flag = 0
                 MD = MirrorClass(status_list[i])
                 logger.info(f"Current Team: " + status_list[i])
                 MD.setup_mirror()
-                
+
                 while run_complete != 1:
                     if connection_manager.connection_event.is_set():
                         win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
                         connection_manager.connection_event.wait()
-                    
+
                     if element_exist("pictures/general/server_error.png"):
                         connection_manager.handle_reconnection()
 
@@ -274,11 +315,13 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                     logger.info(f"Run {i + 1} completed with a loss")
                     update_stats(False, run_stats)
                 i += 1
-                
+
             except Exception as e:
                 logger.exception(f"Error in run {i + 1}: {e}")
                 error_screenshot()
                 i += 1
+            finally:
+                _stop_watchdog.set()
         
         logger.info(f'Completed all runs. Won: {win_count}, Lost: {lose_count}')
         

@@ -38,20 +38,29 @@ EXPECTED_HEIGHT: int | None = None
 IS_NON_STANDARD_RATIO: bool | None = None 
 
 _thread_local = threading.local()
+_sct_instances = {}
+_sct_lock = threading.Lock()
+_capture_heartbeat = {}
 
 
 def get_sct():
     """Get thread-local MSS instance"""
-    if not hasattr(_thread_local, "sct"):
-        _thread_local.sct = mss()
-    return _thread_local.sct
+    tid = threading.current_thread().ident
+    with _sct_lock:
+        if tid not in _sct_instances:
+            _sct_instances[tid] = mss()
+        return _sct_instances[tid]
 
-def reset_sct():
-    """Reset the MSS screen capture instance and clear caches"""
+def reset_sct(target_thread_id=None):
+    tid = target_thread_id if target_thread_id is not None else threading.current_thread().ident
     try:
-        if hasattr(_thread_local, "sct"):
-            _thread_local.sct.close()
-            del _thread_local.sct
+        with _sct_lock:
+            sct = _sct_instances.pop(tid, None)
+        if sct is not None:
+            try:
+                sct.close()
+            except Exception:
+                pass
         _template_cache.clear()
         logger.info("Screen capture and template cache reset")
     except Exception as e:
@@ -278,14 +287,15 @@ def capture_screen(monitor_index=None):
     """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
-        
+
     monitor = get_sct().monitors[mon_idx]
 
     screenshot = get_sct().grab(monitor)
     img = np.array(screenshot)
 
     img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-    
+
+    _capture_heartbeat[threading.current_thread().ident] = time.time()
     return img
 
 def save_match_screenshot(screenshot, top_left, bottom_right, template_path, match_index):

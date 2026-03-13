@@ -131,19 +131,23 @@ def update_statistics_ui(ui_cache, data):
             
             floor_times = entry.get("floor_times", {})
             packs = entry.get("packs", [])
+            packs_by_floor = entry.get("packs_by_floor", {})
 
             sorted_floors = sorted(floor_times.keys(), key=lambda x: int(x.replace("floor", "")) if x.replace("floor", "").isdigit() else 99)
-            
+
             pack_details = []
             for idx, floor_key in enumerate(sorted_floors):
                 start_t = floor_times[floor_key]
                 end_t = floor_times[sorted_floors[idx+1]] if idx + 1 < len(sorted_floors) else duration
-                
+
                 floor_dur = max(0, end_t - start_t)
                 f_mins, f_secs = divmod(int(floor_dur), 60)
                 time_str = f"{f_mins}:{f_secs:02d}"
-                
-                pack_name = packs[idx] if idx < len(packs) else "Unknown"
+
+                if floor_key in packs_by_floor:
+                    pack_name = packs_by_floor[floor_key]
+                else:
+                    pack_name = packs[idx] if idx < len(packs) else "Unknown"
                 pack_details.append(f"{pack_name} - {time_str}")
             
             packs_str = " | ".join(pack_details) if pack_details else "No pack data"
