@@ -6,7 +6,8 @@ import threading
 import json
 import time
 import subprocess
-from PIL import ImageGrab
+import numpy as np
+from PIL import ImageGrab, Image
 import mirror
 import mirror_1366
 import common
@@ -15,9 +16,15 @@ _CAPTURE_HANG_LIMIT = 30
 _RUN_TIME_LIMIT = 5400
 
 def _run_watchdog(main_thread_id, run_start, stop_event):
-    screenshot_path = os.path.join(get_base_path(), "config", "macro_state.png")
+    config_dir = os.path.join(get_base_path(), "config")
+    screenshot_paths = [
+        os.path.join(config_dir, "macro_state_0.png"),
+        os.path.join(config_dir, "macro_state_1.png"),
+    ]
+    SCREENSHOT_INTERVAL = 60
+    STUCK_THRESHOLD = 5.0
     last_screenshot = 0
-    SCREENSHOT_INTERVAL = 300
+    screenshot_index = 0
 
     while not stop_event.wait(5):
         now = time.time()
@@ -39,8 +46,24 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
 
         if now - last_screenshot >= SCREENSHOT_INTERVAL:
             try:
+                current_path = screenshot_paths[screenshot_index % 2]
+                prev_path = screenshot_paths[(screenshot_index - 1) % 2]
                 img = ImageGrab.grab()
-                img.save(screenshot_path)
+                img.save(current_path)
+                if screenshot_index > 0 and os.path.exists(prev_path):
+                    prev_img = Image.open(prev_path)
+                    curr_arr = np.array(img)
+                    prev_arr = np.array(prev_img)
+                    if curr_arr.shape == prev_arr.shape:
+                        diff = np.mean(np.abs(curr_arr.astype(np.int32) - prev_arr.astype(np.int32)))
+                        if diff < STUCK_THRESHOLD:
+                            logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f}), injecting TimeoutError")
+                            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                                ctypes.c_long(main_thread_id),
+                                ctypes.py_object(TimeoutError)
+                            )
+                            break
+                screenshot_index += 1
                 last_screenshot = now
             except Exception:
                 pass
