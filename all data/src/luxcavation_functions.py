@@ -10,7 +10,6 @@ import threading
 import signal
 import mirror
 import mirror_utils
-import pyautogui
 import shared_vars
 
 def get_base_path():
