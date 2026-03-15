@@ -2,7 +2,6 @@ import time
 import threading
 import logging
 import sys
-import pyautogui
 import common
 import shared_vars
 

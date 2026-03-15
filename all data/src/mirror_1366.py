@@ -7,7 +7,6 @@ import common
 import copy
 import shared_vars
 import mirror_utils_1366 as mirror_utils
-import pyautogui
 from core import (skill_check, battle_check, battle, check_loading,
                   transition_loading, post_run_load, refill_enkephalin,
                   navigate_to_md)
@@ -784,14 +783,14 @@ class Mirror:
             def robust_drag_pack(x, y):
                 common.mouse_move(x, y)
                 common.sleep(0.15)
-                pyautogui.mouseDown()
+                common.mouse_down()
                 common.sleep(0.15)
                 drag_offset = round(350 * common.EXPECTED_HEIGHT / common.REFERENCE_HEIGHT_1080P)
                 dest_x, dest_y = common.get_MonCords(x, y + drag_offset)
                 dest_x, dest_y = common.get_MonCords(x, y + 350)
-                pyautogui.moveTo(dest_x, dest_y, duration=0.3)
+                common._bezier_move(dest_x, dest_y, duration=0.3)
                 common.sleep(0.15)
-                pyautogui.mouseUp()
+                common.mouse_up()
 
             def select_pack(coords, name="unknown_pack"):
                 pack_name = name

@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import math
 import time
 import ctypes
 import logging
@@ -13,15 +14,68 @@ from functools import partial
 from ctypes import wintypes
 import cv2
 import numpy as np
-import pyautogui
+import random
+import interception
 from mss import mss
 from mss.tools import to_png
 from PIL import ImageGrab
 import shared_vars
 
-pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.05
 
+def _cursor_pos():
+    class _POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+    pt = _POINT()
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+    return pt.x, pt.y
+
+def _wind_mouse(tx, ty, G=9.0, W=3.0, M=15.0, D=12.0):
+    sx, sy = _cursor_pos()
+    dist = math.hypot(tx - sx, ty - sy)
+    if dist < 2:
+        return []
+    cx, cy = float(sx), float(sy)
+    vx = vy = wx = wy = 0.0
+    pts = []
+    while True:
+        remaining = math.hypot(tx - cx, ty - cy)
+        if remaining < 1:
+            break
+        w_mag = min(W, remaining)
+        if remaining >= D:
+            wx = wx / math.sqrt(3) + (random.random() * 2 - 1) * w_mag / math.sqrt(5)
+            wy = wy / math.sqrt(3) + (random.random() * 2 - 1) * w_mag / math.sqrt(5)
+        else:
+            wx /= math.sqrt(3)
+            wy /= math.sqrt(3)
+        vx = (vx + G * (tx - cx) / remaining + wx) / math.sqrt(2)
+        vy = (vy + G * (ty - cy) / remaining + wy) / math.sqrt(2)
+        speed = math.hypot(vx, vy)
+        if speed > M:
+            cap = M / 2 + random.random() * M / 2
+            vx = vx / speed * cap
+            vy = vy / speed * cap
+        cx += vx
+        cy += vy
+        pts.append((int(cx), int(cy)))
+    pts.append((tx, ty))
+    return pts
+
+def _bezier_move(tx, ty, duration=None):
+    sx, sy = _cursor_pos()
+    dist = math.hypot(tx - sx, ty - sy)
+    if dist < 2:
+        return
+    if duration is None:
+        duration = max(0.15, min(1.4, dist / 1200))
+    duration *= random.uniform(0.82, 1.18)
+    pts = _wind_mouse(tx, ty)
+    if not pts:
+        return
+    delay = duration / len(pts)
+    for px, py in pts:
+        interception.move_to(px, py)
+        time.sleep(delay * random.uniform(0.6, 1.4))
 
 REFERENCE_WIDTH_1440P = 2560
 REFERENCE_HEIGHT_1440P = 1440
@@ -216,7 +270,7 @@ def sleep(x):
 
 def mouse_scroll(amount):
     """Scroll mouse wheel"""
-    pyautogui.scroll(amount)
+    interception.scroll(amount)
 
 def _validate_monitor_index(monitor_index, fallback=1):
     """Validate and return a safe monitor index"""
@@ -239,29 +293,29 @@ def get_MonCords(x, y):
 def mouse_move(x, y):
     """Moves the mouse to the X,Y coordinate specified on the game monitor"""
     real_x, real_y = get_MonCords(x, y)
-    pyautogui.moveTo(real_x, real_y)
+    _bezier_move(real_x, real_y)
 
 def mouse_click():
     """Performs a left click on the current position"""
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
-        current_pos = pyautogui.position()
-        logger.debug(f"Mouse click at ({current_pos.x}, {current_pos.y}) - {caller_info}", dirty=True)
-    pyautogui.click()
+        cx, cy = _cursor_pos()
+        logger.debug(f"Mouse click at ({cx}, {cy}) - {caller_info}", dirty=True)
+    interception.click()
 
 def mouse_hold():
     """Hold down mouse button for 2 seconds"""
-    pyautogui.mouseDown()
+    interception.mouse_down()
     sleep(2)
-    pyautogui.mouseUp()
+    interception.mouse_up()
 
 def mouse_down():
     """Press down mouse button"""
-    pyautogui.mouseDown()
+    interception.mouse_down()
 
 def mouse_up():
     """Release mouse button"""
-    pyautogui.mouseUp()
+    interception.mouse_up()
 
 def mouse_move_click(x, y, log_click=True):
     """Moves the mouse to the X,Y coordinate specified and performs a left click"""
@@ -269,7 +323,16 @@ def mouse_move_click(x, y, log_click=True):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse move and click to ({x}, {y}) - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
-    pyautogui.click(real_x, real_y)
+    real_x += random.randint(-3, 3)
+    real_y += random.randint(-3, 3)
+    if random.random() < 0.15:
+        ox = real_x + random.randint(6, 14) * random.choice([-1, 1])
+        oy = real_y + random.randint(6, 14) * random.choice([-1, 1])
+        _bezier_move(ox, oy)
+        time.sleep(random.lognormvariate(-3.2, 0.4))
+    _bezier_move(real_x, real_y)
+    time.sleep(random.lognormvariate(-2.8, 0.35))
+    interception.click()
 
 def mouse_drag(x, y, seconds=1):
     """Drag from current position to the specified coords on the game monitor"""
@@ -277,11 +340,16 @@ def mouse_drag(x, y, seconds=1):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
-    pyautogui.dragTo(real_x, real_y, seconds, button='left')
+    interception.mouse_down()
+    time.sleep(random.uniform(0.03, 0.08))
+    _bezier_move(real_x, real_y, duration=seconds * random.uniform(0.9, 1.1))
+    time.sleep(random.uniform(0.03, 0.08))
+    interception.mouse_up()
 
 def key_press(Key, presses=1):
     """Presses the specified key X amount of times"""
-    pyautogui.press(Key, presses)
+    for _ in range(presses):
+        interception.key_press(Key)
 
 def capture_screen(monitor_index=None):
     """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""
