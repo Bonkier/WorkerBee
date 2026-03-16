@@ -1,7 +1,6 @@
 from multiprocessing import Value
 
 class SharedVars:
-    """Shared variables for multiprocessing communication"""
     def __init__(self):
         self.x_offset = Value('i', 0)
         self.y_offset = Value('i', 0)

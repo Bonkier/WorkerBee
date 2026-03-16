@@ -60,7 +60,6 @@ def ensure_schedule_file(base_path):
 def format_log_line_with_time_ago(line):
     """Format log line with time ago context"""
     try:
-        # Expected format: "25/01/2026 22:22:04 | ..."
         parts = line.split(' | ', 1)
         if len(parts) > 1:
             timestamp_str = parts[0]

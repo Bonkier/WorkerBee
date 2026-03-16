@@ -8,7 +8,6 @@ import shared_vars
 logger = logging.getLogger(__name__)
 
 def check_loading():
-    """Check for loading screens and wait until they disappear"""
     loading_images = [
         "pictures/general/loading.png",
         "pictures/general/connecting.png",
@@ -35,16 +34,13 @@ def check_loading():
         time.sleep(0.5)
 
 def transition_loading():
-    """Wait for transitions between screens"""
     common.sleep(5)
 
 def post_run_load():
-    """Wait for return to main menu after run completion"""
     while(not common.element_exist("pictures/general/module.png")):
         common.sleep(1)
 
 def reconnect():
-    """Handle server disconnections and retry connection"""
     while(common.element_exist("pictures/general/server_error.png")):
         if shared_vars.reconnect_when_internet_reachable:
             if common.check_internet_connection():
@@ -61,8 +57,83 @@ def reconnect():
         logger.critical("COULD NOT RECONNECT TO THE SERVER. SHUTTING DOWN!")
         sys.exit(0)
 
+_SIN_BGRS = [
+    (  0,   0, 254),
+    (239, 197,  26),
+    ( 49, 205, 251),
+    (  0, 108, 254),
+    (213,  75,   1),
+    (  1, 228, 146),
+    (222,   1, 150),
+]
+
+def _is_ego_animation(screenshot=None):
+    import cv2
+    import numpy as np
+    if screenshot is None:
+        screenshot = common.capture_screen()
+    h, w = screenshot.shape[:2]
+    region = screenshot[0:h // 2, :]
+    for bgr in _SIN_BGRS:
+        lo = np.clip(np.array(bgr, dtype=np.int32) - 40, 0, 255).astype(np.uint8)
+        hi = np.clip(np.array(bgr, dtype=np.int32) + 40, 0, 255).astype(np.uint8)
+        if cv2.countNonZero(cv2.inRange(region, lo, hi)) > h * w * 0.04:
+            return True
+    return False
+
+def _skill_chain(bar_y):
+    import cv2
+    import numpy as np
+    import interception as _icp
+
+    shot = common.capture_screen()
+    h, w = shot.shape[:2]
+
+    gx  = common.scale_x_1080p(60)
+    g2x = common.scale_x_1080p(1490)
+    length = g2x - gx
+    logger.debug(f"Skill chain: bar gx={gx} bar_y={bar_y} g2x={g2x} length={length}")
+
+    scan_x1 = max(0, gx + common.scale_x_1080p(100))
+    scan_x2 = min(w, g2x - common.scale_x_1080p(100))
+    scan_y  = max(0, bar_y - common.scale_y_1080p(43))
+    scan_y2 = min(h, scan_y + common.scale_y_1080p(10))
+    if scan_x2 <= scan_x1 or scan_y2 <= scan_y:
+        logger.debug("Skill chain: invalid strip dimensions, aborting")
+        return
+    strip = shot[scan_y:scan_y2, scan_x1:scan_x2]
+
+    skill_num = max(1, int(round((length - common.scale_x_1080p(140)) / common.scale_x_1080p(115))))
+    slot_w    = max(1, (scan_x2 - scan_x1) / skill_num)
+    moves     = [False] * skill_num
+    for bgr in _SIN_BGRS:
+        lo = np.clip(np.array(bgr, dtype=np.int32) - 40, 0, 255).astype(np.uint8)
+        hi = np.clip(np.array(bgr, dtype=np.int32) + 40, 0, 255).astype(np.uint8)
+        for col in np.where(cv2.inRange(strip, lo, hi).any(axis=0))[0]:
+            moves[min(int(col / slot_w), skill_num - 1)] = True
+
+    logger.debug(f"Skill chain: {skill_num} slots, s3 detected={moves}")
+    if not any(moves):
+        logger.debug("Skill chain: no skill-3 coins detected, skipping drag")
+        return
+
+    base_y = bar_y - common.scale_y_1080p(46)
+    hi_y   = base_y + common.scale_y_1080p(200)
+    lo_y   = base_y + common.scale_y_1080p(70)
+    sx     = gx + common.scale_x_1080p(75)
+    step   = common.scale_x_1080p(115)
+
+    _icp.move_to(int(gx), int(bar_y))
+    _icp.mouse_down("left")
+    for i, is3 in enumerate(moves):
+        _icp.move_to(int(sx + step * i + common.scale_x_1080p(68)), int(hi_y if is3 else lo_y))
+        time.sleep(0.01)
+    _icp.move_to(int(sx + step * skill_num + common.scale_x_1080p(68)), int(base_y + common.scale_y_1080p(120)))
+    _icp.mouse_up("left")
+    time.sleep(0.2)
+    logger.info(f"Skill chain: {sum(moves)}/{skill_num} skill-3 slots chained")
+
 def battle():
-    """Main battle loop handling winrate, ego checks, and skill events"""
     logger.info("Starting battle loop")
     battle_finished = 0
     winrate_visible_start = None
@@ -70,6 +141,7 @@ def battle():
     winrate_invisible_start = None
     winrate_invisible_timeout = 10
     battle_start_time = time.time()
+    last_action_time = time.time()
 
     main_thread_id = threading.current_thread().ident
     last_capture_ok = [time.time()]
@@ -109,6 +181,19 @@ def battle():
                 logger.info("Defeat detected during battle")
                 return
 
+            if _is_ego_animation(screenshot=screenshot):
+                logger.debug("EGO animation detected - holding mouse to skip")
+                import interception as _icp
+                _icp.mouse_down("left")
+                _ego_t = time.time()
+                while time.time() - _ego_t < 3.5:
+                    if not _is_ego_animation():
+                        break
+                    time.sleep(0.1)
+                _icp.mouse_up("left")
+                last_action_time = time.time()
+                continue
+
             if common.element_exist("pictures/general/loading.png", screenshot=screenshot) and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", screenshot=screenshot):
                 common.mouse_up()
                 if common.element_exist("pictures/battle/winrate.png"):
@@ -137,7 +222,8 @@ def battle():
 
                     common.click_matching("pictures/events/continue.png", recursive=False)
 
-            if common.element_exist("pictures/battle/winrate.png", screenshot=screenshot):
+            _winrate_match = common.match_image("pictures/battle/winrate.png", screenshot=screenshot, quiet_failure=True)
+            if _winrate_match:
                 logger.debug("Winrate screen detected")
                 winrate_invisible_start = None
                 current_time = time.time()
@@ -155,20 +241,38 @@ def battle():
                     logger.info("Clicking Winrate (P)")
                     common.mouse_up()
                     common.key_press("p")
+                    time.sleep(0.35)
                     if not shared_vars.good_pc_mode:
                         common.sleep(0.5)
+                    _skill_chain(_winrate_match[0][1])
                     ego_check()
                     common.key_press("enter")
                     common.mouse_down()
                     time.sleep(1)
+                    last_action_time = time.time()
                     if not common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png"):
                         common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
             else:
                 if common.element_exist("pictures/mirror/general/encounter_reward.png", screenshot=screenshot):
                     battle_finished = 1
-                    logger.info(f"battle ended, in mirror")
+                    logger.info("battle ended, in mirror")
                     return
+
+                if common.element_exist("pictures/general/victory.png", screenshot=screenshot):
+                    battle_finished = 1
+                    logger.info("battle ended, victory screen")
+                    return
+
+                if common.element_exist("pictures/mirror/general/danteh.png", screenshot=screenshot):
+                    battle_finished = 1
+                    logger.info("battle ended, back on map")
+                    return
+
+                for _end_img in ("pictures/battle/end_0.png", "pictures/battle/end_1.png", "pictures/battle/end_2.png"):
+                    if common.element_exist(_end_img, screenshot=screenshot, quiet_failure=True):
+                        common.key_press("space")
+                        break
 
                 winrate_visible_start = None
                 current_time = time.time()
@@ -182,11 +286,17 @@ def battle():
                     common.mouse_up()
                     common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
 
+                if current_time - last_action_time > 50:
+                    logger.warning("Battle: no action for 50s - forcing recovery")
+                    common.reset_sct()
+                    common.mouse_up()
+                    common.mouse_move_click(*common.scale_coordinates_1080p(200, 200))
+                    last_action_time = current_time
+
     finally:
         watchdog_active[0] = False
 
 def ego_check():
-    """Check for bad clashes and use EGO skills to counter them"""
     logger.info("Starting ego check")
     if shared_vars.skip_ego_check:
         logger.info("Skipping ego check due to settings")
@@ -222,7 +332,14 @@ def ego_check():
 
             usable_ego = []
             common.mouse_move(slot_x, slot_y)
-            common.mouse_hold()
+            import interception as _icp
+            _icp.mouse_down("left")
+            _hold_start = time.time()
+            while time.time() - _hold_start < 2.5:
+                if common.element_exist("pictures/battle/ego/sanity.png", quiet_failure=True):
+                    break
+                time.sleep(0.1)
+            _icp.mouse_up("left")
             egos = common.match_image("pictures/battle/ego/sanity.png")
             for i in egos:
                 x,y = i
@@ -257,7 +374,6 @@ def ego_check():
     return
 
 def battle_check():
-    """Handle special battle events and skill checks"""
     if common.click_matching("pictures/battle/investigate.png", recursive=False):
         logger.info("Investigate button clicked")
         common.wait_skip("pictures/events/continue.png")
@@ -385,7 +501,6 @@ def battle_check():
     return 1
 
 def skill_check():
-    """Handle skill check events by selecting appropriate difficulty level"""
     logger.info("Handling Skill Check")
     check_images = [
         "pictures/CustomAdded1080p/general/very_high.png",
@@ -434,7 +549,6 @@ def skill_check():
             common.click_matching("pictures/general/confirm_b.png")
 
 def refill_enkephalin():
-    """Try to refill enkephalin using modules"""
     if not getattr(shared_vars, 'convert_enkephalin_to_modules', True):
         logger.info("Enkephalin conversion disabled by settings.")
         return False
@@ -473,27 +587,12 @@ def refill_enkephalin():
     return False
 
 def navigate_to_md():
-    """Navigate to mirror dungeon interface"""
-    attempts = 0
-    max_attempts = 30  
-
-    while not common.element_exist("pictures/general/MD.png"):
-        if attempts >= max_attempts:
-            logger.error(f"navigate_to_md: Failed to reach MD after {max_attempts} attempts — is the game at the main menu?")
-            return False
-        common.click_matching("pictures/general/confirm_b.png", recursive=False, quiet_failure=True)
-        common.click_matching("pictures/general/confirm_w.png", recursive=False, quiet_failure=True)
-        while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
-            pass
-        common.click_matching("pictures/general/window.png")
-        common.sleep(0.5)
-        common.click_matching("pictures/general/drive.png")
-        attempts += 1
-
-    timeout = time.time() + 10
-    while common.element_exist("pictures/general/MD.png"):
-        common.click_matching("pictures/general/MD.png")
-        common.sleep(0.5)
-        if time.time() > timeout:
-            logger.warning("navigate_to_md: Timed out waiting for MD click to register")
-            break
+    common.click_matching("pictures/general/confirm_b.png", recursive=False, quiet_failure=True)
+    common.click_matching("pictures/general/confirm_w.png", recursive=False, quiet_failure=True)
+    while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
+        pass
+    common.click_matching("pictures/general/window.png")
+    common.sleep(0.5)
+    common.click_matching("pictures/general/drive.png")
+    common.sleep(0.5)
+    common.click_matching("pictures/general/MD.png", recursive=False, quiet_failure=True)

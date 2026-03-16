@@ -17,9 +17,6 @@ sys.path.append(os.path.join(BASE_PATH, 'src'))
 logger = logging.getLogger(__name__)
 
 def signal_handler(sig, frame):
-    """
-    Handle termination signals
-    """
     logger.warning(f"Termination signal received, shutting down...")
     sys.exit(0)
 

@@ -19,7 +19,6 @@ import common
 logger = logging.getLogger("battler")
 
 def main():
-    """Run the battle function and exit immediately"""
     try:
         try:
             import core

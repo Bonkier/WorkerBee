@@ -4,7 +4,6 @@ import logging
 from threading import Lock
 
 def get_base_path():
-    """Get the base directory path"""
     import sys
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
@@ -26,7 +25,6 @@ class ConfigCache:
     
     @staticmethod
     def get_config(config_name):
-        """Get config data from cache, loading if needed"""
         with _cache_lock:
             if config_name not in _config_cache:
                 ConfigCache._load_config(config_name)
@@ -34,7 +32,6 @@ class ConfigCache:
     
     @staticmethod
     def _load_config(config_name):
-        """Load config file into cache"""
         try:
             config_path = os.path.join(BASE_PATH, "config", f"{config_name}.json")
             if os.path.exists(config_path):
@@ -50,7 +47,6 @@ class ConfigCache:
     
     @staticmethod
     def reload_config(config_name):
-        """Reload specific config from file"""
         with _cache_lock:
             if config_name in _config_cache:
                 del _config_cache[config_name]
@@ -58,7 +54,6 @@ class ConfigCache:
     
     @staticmethod
     def reload_all():
-        """Reload all cached configs"""
         with _cache_lock:
             config_names = list(_config_cache.keys())
             _config_cache.clear()
@@ -67,7 +62,6 @@ class ConfigCache:
     
     @staticmethod
     def preload_all_configs():
-        """Preload common config files into cache for performance"""
         config_files = [
             "squad_order", "delayed_squad_order", "status_selection", 
             "exp_team_selection", "threads_team_selection",
@@ -87,32 +81,27 @@ class ScaledCoordinates:
     
     @staticmethod
     def get_scaled_coords(coord_set_name):
-        """Get scaled coordinate set, calculating if needed"""
         if coord_set_name not in _scaled_coords_cache:
             ScaledCoordinates._calculate_coords(coord_set_name)
         return _scaled_coords_cache.get(coord_set_name, {})
     
     @staticmethod
     def _calculate_coords(coord_set_name):
-        """Calculate and cache scaled coordinates for different screen resolutions"""
         import common
         
         if coord_set_name == "grace_of_stars":
-            base_coords = {
-                "star of the beniggening": (300, 350),
-                "cumulating starcloud": (600, 350),
-                "interstellar travel": (900, 350),
-                "star shower": (1200, 350),
-                "binary star shop": (1500, 350),
-                "moon star shop": (300, 650),
-                "favor of the nebula": (600, 650),
-                "starlight guidance": (900, 650),
-                "chance comet": (1200, 650),
-                "perfected possibility": (1500, 650)
-            }
+            GRACE_NAMES_ORDERED = [
+                "star of the beniggening", "cumulating starcloud", "interstellar travel", "star shower", "binary star shop",
+                "moon star shop", "favor of the nebula", "starlight guidance", "chance comet", "perfected possibility"
+            ]
             scaled_coords = {}
-            for name, (x, y) in base_coords.items():
-                scaled_coords[name] = common.scale_coordinates_1080p(x, y)
+            for i, name in enumerate(GRACE_NAMES_ORDERED):
+                col, row = i % 5, i // 5
+                gx = 335 + 297 * col
+                gy = 375 + 357 * row
+                scaled_coords[name] = common.scale_coordinates_1080p(gx, gy)
+                scaled_coords[f"{name}|left"]  = common.scale_coordinates_1080p(gx - 60, gy + 155)
+                scaled_coords[f"{name}|right"] = common.scale_coordinates_1080p(gx + 60, gy + 155)
             _scaled_coords_cache[coord_set_name] = scaled_coords
             logger.debug(f"Calculated scaled coordinates for {coord_set_name}")
         
@@ -170,14 +159,12 @@ class ScaledCoordinates:
     
     @staticmethod
     def preload_all_coordinates():
-        """Preload all coordinate sets for performance"""
         coord_sets = ["grace_of_stars", "character_positions", "battle_buttons", "luxcavation_coords"]
         for coord_set in coord_sets:
             ScaledCoordinates.get_scaled_coords(coord_set)
         logger.info(f"Preloaded {len(coord_sets)} coordinate sets")
 
 def _get_gui_values():
-    """Return default variable values directly to avoid circular imports"""
     return {
         'x_offset': 0,
         'y_offset': 0,
@@ -202,11 +189,11 @@ def _get_gui_values():
         'convert_enkephalin_to_modules': True,
         'enable_animations': True,
         'audio_volume': 0.5,
-        'disable_audio': False
+        'disable_audio': False,
+        'macro_profile': 'SAFE',
     }
 
 def _load_shared_vars():
-    """Load shared variables from config file and GUI defaults"""
     logger.info("Loading shared variables from configuration")
 
     gui_values = _get_gui_values()
@@ -242,13 +229,11 @@ def _load_shared_vars():
             globals()[var_name] = gui_value
 
 def _update_all_exports():
-    """Update module exports list"""
     global __all__
     config_vars = list(_get_gui_values().keys())
     __all__ = config_vars + ['reload_shared_vars']
 
 def reload_shared_vars():
-    """Reload shared variables from config"""
     _load_shared_vars()
 
 _load_shared_vars()

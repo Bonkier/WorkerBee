@@ -10,7 +10,6 @@ import signal
 import os
 
 def get_base_path():
-    """Get the base directory path"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -31,7 +30,6 @@ is_running = False
 running = True
 
 def signal_handler(sig, frame):
-    """Handle shutdown signals gracefully"""
     global running
     running = False
     sys.exit(0)
@@ -42,7 +40,6 @@ if hasattr(signal, 'SIGBREAK'):
     signal.signal(signal.SIGBREAK, signal_handler)
 
 def parse_function_call(function_string):
-    """Parse a function call string like 'module.func(arg1, arg2)' into module, function name, and args"""
     pattern = r"([^\(\)]+)(?:\((.*)\))?"
     match = re.match(pattern, function_string)
     
@@ -77,7 +74,6 @@ def parse_function_call(function_string):
     return module_name, function_name, args
 
 def call_function(function_string):
-    """Call a function by its module path, function name, and arguments"""
     global is_running
     
     with lock:
@@ -139,13 +135,11 @@ def call_function(function_string):
             is_running = False
 
 def run_function_in_thread(function_string):
-    """Run the function in a separate thread"""
     thread = threading.Thread(target=call_function, args=(function_string,), daemon=True)
     thread.start()
     return thread
 
 def main():
-    """Main function to handle function calls from command line"""
     global running
     
     if len(sys.argv) < 2:

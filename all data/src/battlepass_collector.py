@@ -18,9 +18,6 @@ sys.path.append(os.path.join(BASE_PATH, 'src'))
 logger = logging.getLogger(__name__)
 
 def signal_handler(sig, frame):
-    """
-    Handle termination signals
-    """
     logger.warning(f"Termination signal received, shutting down...")
     sys.exit(0)
 
@@ -58,7 +55,6 @@ def claim_missions():
         for x, y in matches:
             common.mouse_move_click(x, y)
             common.sleep(0.1)
-
 
 def claim_rewards():
     common.mouse_move_click(*common.scale_coordinates_1080p(1140, 890))

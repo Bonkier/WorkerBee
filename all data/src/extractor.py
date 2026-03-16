@@ -18,9 +18,6 @@ sys.path.append(os.path.join(BASE_PATH, 'src'))
 logger = logging.getLogger(__name__)
 
 def signal_handler(sig, frame):
-    """
-    Handle termination signals
-    """
     logger.warning(f"Termination signal received, shutting down...")
     sys.exit(0)
 
@@ -31,17 +28,16 @@ def main():
     while not common.element_exist("pictures/CustomAdded1080p/general/info.png"):
         common.mouse_move_click(*common.scale_coordinates_1080p(1600, 965))
         common.sleep(0.1)
-    extract() # 1st
+    extract()
     common.sleep(0.3)
     common.mouse_move_click(*common.scale_coordinates_1080p(300, 420))
     common.sleep(0.1)
-    extract() # 2nd
+    extract()
     common.sleep(0.3)
     common.mouse_move_click(*common.scale_coordinates_1080p(300, 570))
     common.sleep(0.1)
-    extract() # 3rd
+    extract()
     common.sleep(0.3)
-
 
 def extract():
     duration = 4

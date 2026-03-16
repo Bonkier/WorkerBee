@@ -25,7 +25,6 @@ from mss.tools import to_png
 from PIL import ImageGrab
 import shared_vars
 
-
 def _cursor_pos():
     class _POINT(ctypes.Structure):
         _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
@@ -33,7 +32,17 @@ def _cursor_pos():
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
-def _wind_mouse(tx, ty, G=9.0, W=3.0, M=15.0, D=12.0):
+try:
+    from pathgenerator import PDPathGenerator as _PDPathGenerator
+    _pdgen = _PDPathGenerator()
+    _PDPATH_AVAILABLE = True
+except Exception:
+    _pdgen = None
+    _PDPATH_AVAILABLE = False
+
+import profiles as _profiles
+
+def _wind_mouse_fallback(tx, ty, G=9.0, W=3.0, M=15.0, D=12.0):
     sx, sy = _cursor_pos()
     dist = math.hypot(tx - sx, ty - sy)
     if dist < 2:
@@ -66,15 +75,48 @@ def _wind_mouse(tx, ty, G=9.0, W=3.0, M=15.0, D=12.0):
     pts.append((tx, ty))
     return pts
 
+def _generate_path(tx, ty):
+    sx, sy = _cursor_pos()
+    if math.hypot(tx - sx, ty - sy) < 2:
+        return []
+
+    if not _PDPATH_AVAILABLE:
+        return _wind_mouse_fallback(tx, ty)
+
+    prof = _profiles.get_profile()
+    jitter = prof["endpoint_jitter_px"]
+    ex = tx + random.randint(-jitter, jitter)
+    ey = ty + random.randint(-jitter, jitter)
+    try:
+        path, _, _, _ = _pdgen.generate_path(
+            sx, sy, ex, ey,
+            canvas_width=EXPECTED_WIDTH or 1920,
+            canvas_height=EXPECTED_HEIGHT or 1080,
+            mouse_velocity=prof["mouse_velocity"],
+            noise=prof["noise"],
+            arc_strength=prof["arc_strength"],
+            overshoot_prob=prof["overshoot_prob"],
+            variance=prof["variance"],
+        )
+        pts = [(int(p[0]), int(p[1])) for p in path]
+        if not pts or pts[-1] != (tx, ty):
+            pts.append((tx, ty))
+        return pts
+    except Exception:
+        return _wind_mouse_fallback(tx, ty)
+
 def _bezier_move(tx, ty, duration=None):
     sx, sy = _cursor_pos()
     dist = math.hypot(tx - sx, ty - sy)
     if dist < 2:
         return
+    prof = _profiles.get_profile()
     if duration is None:
-        duration = random.uniform(0.1, 0.25)
-    duration *= random.uniform(0.85, 1.15)
-    pts = _wind_mouse(tx, ty)
+        dlo, dhi = prof.get("move_duration", (0.07, 0.16))
+        duration = random.uniform(dlo, dhi)
+    jlo, jhi = prof["step_delay_jitter"]
+    duration *= random.uniform(jlo, jhi)
+    pts = _generate_path(tx, ty)
     if not pts:
         interception.move_to(tx, ty)
         return
@@ -102,9 +144,7 @@ _sct_instances = {}
 _sct_lock = threading.Lock()
 _capture_heartbeat = {}
 
-
 def get_sct():
-    """Get thread-local MSS instance"""
     tid = threading.current_thread().ident
     with _sct_lock:
         if tid not in _sct_instances:
@@ -129,7 +169,6 @@ def reset_sct(target_thread_id=None):
 _template_cache = {}
 
 def get_base_path():
-    """Get the base directory path for resource access"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -141,7 +180,6 @@ def get_base_path():
 BASE_PATH = get_base_path()
 
 def resource_path(relative_path):
-    """Get absolute path for resource files"""
     base_path = BASE_PATH
     return os.path.join(base_path, relative_path)
 
@@ -214,7 +252,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def initialize_async_logging():
-    """Initialize async logging if available - call this after all imports are done"""
     if ASYNC_LOGGING_AVAILABLE:
         try:
             start_async_logging(LOG_FILENAME)
@@ -225,7 +262,6 @@ def initialize_async_logging():
     return False
 
 def detect_monitor_resolution():
-    """Detect the actual resolution of the game monitor"""
     global MONITOR_WIDTH, MONITOR_HEIGHT, IS_NON_STANDARD_RATIO, EXPECTED_WIDTH, EXPECTED_HEIGHT
 
     monitor_index = getattr(shared_vars, 'game_monitor', 1)
@@ -267,42 +303,34 @@ def detect_monitor_resolution():
 detect_monitor_resolution()
 
 def random_choice(list):
-    """Pick random item from list"""
     return secrets.choice(list)
 
 def sleep(x):
-    """Sleep for x seconds"""
     time.sleep(x)
 
 def mouse_scroll(amount):
-    """Scroll mouse wheel"""
     interception.scroll(amount)
 
 def _validate_monitor_index(monitor_index, fallback=1):
-    """Validate and return a safe monitor index"""
     if monitor_index >= len(get_sct().monitors):
         logger.warning(f"Monitor index {monitor_index} out of range")
         return fallback
     return monitor_index
 
 def get_monitor_info(monitor_index=None):
-    """Get information about the specified monitor or the game monitor"""
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
     return get_sct().monitors[mon_idx]
 
 def get_MonCords(x, y):
-    """Convert local coordinates to global monitor coordinates"""
     mon = get_monitor_info()
     return mon['left'] + x, mon['top'] + y
 
 def mouse_move(x, y):
-    """Moves the mouse to the X,Y coordinate specified on the game monitor"""
     real_x, real_y = get_MonCords(x, y)
     _bezier_move(real_x, real_y)
 
 def mouse_click():
-    """Performs a left click on the current position"""
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         cx, cy = _cursor_pos()
@@ -310,40 +338,51 @@ def mouse_click():
     interception.click()
 
 def mouse_hold():
-    """Hold down mouse button for 2 seconds"""
     interception.mouse_down("left")
     sleep(2)
     interception.mouse_up("left")
 
 def mouse_down():
-    """Press down mouse button"""
     interception.mouse_down("left")
 
 def mouse_up():
-    """Release mouse button"""
     interception.mouse_up("left")
 
 def mouse_move_click(x, y, log_click=True):
-    """Moves the mouse to the X,Y coordinate specified and performs a left click"""
     if log_click and logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse move and click to ({x}, {y}) - {caller_info}", dirty=True)
+    prof = _profiles.get_profile()
     real_x, real_y = get_MonCords(x, y)
     real_x += random.randint(-3, 3)
     real_y += random.randint(-3, 3)
-    if random.random() < 0.15:
+
+    pause, drift = _profiles.rhythm_tick()
+    if pause > 0:
+        if drift != (0, 0):
+            interception.move_to(
+                max(0, real_x + drift[0]),
+                max(0, real_y + drift[1]),
+            )
+        time.sleep(pause)
+
+    if random.random() < prof["overshoot_prob"]:
         ox = real_x + random.randint(6, 14) * random.choice([-1, 1])
         oy = real_y + random.randint(6, 14) * random.choice([-1, 1])
         _bezier_move(ox, oy)
-        time.sleep(random.lognormvariate(-3.5, 0.3))
+        time.sleep(random.lognormvariate(
+            prof["lognorm_pre_move_mu"], prof["lognorm_pre_move_sig"]
+        ))
+
     _bezier_move(real_x, real_y)
-    time.sleep(random.lognormvariate(-3.2, 0.3))
+    time.sleep(random.lognormvariate(
+        prof["lognorm_pre_click_mu"], prof["lognorm_pre_click_sig"]
+    ))
     interception.mouse_down("left")
     time.sleep(random.uniform(0.04, 0.09))
     interception.mouse_up("left")
 
 def mouse_drag(x, y, seconds=1):
-    """Drag from current position to the specified coords on the game monitor"""
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
@@ -355,12 +394,10 @@ def mouse_drag(x, y, seconds=1):
     interception.mouse_up("left")
 
 def key_press(Key, presses=1):
-    """Presses the specified key X amount of times"""
     for _ in range(presses):
         interception.press(Key)
 
 def capture_screen(monitor_index=None):
-    """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
     mon_idx = _validate_monitor_index(mon_idx)
 
@@ -375,7 +412,6 @@ def capture_screen(monitor_index=None):
     return img
 
 def save_match_screenshot(screenshot, top_left, bottom_right, template_path, match_index):
-    """Saves a screenshot of the matched region, preserving directory structure in 'higher_res'."""
     match_region = screenshot[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]]
 
     output_path = os.path.join(BASE_PATH, "higher_res", template_path)
@@ -389,15 +425,12 @@ def save_match_screenshot(screenshot, top_left, bottom_right, template_path, mat
     cv2.imwrite(output_path, match_region)
 
 def is_custom_1080p_image(template_path):
-    """Check if the image is from the CustomAdded1080p folder"""
     return "CustomAdded1080p" in template_path
 
 def is_custom_fuse_image(template_path):
-    """Check if the image is from the CustomFuse folder"""
     return "CustomFuse" in template_path
 
 def get_template_reference_resolution(template_path):
-    """Determine which reference resolution to use based on the template path"""
     if is_custom_1080p_image(template_path):
         return REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P
     elif "/1366/" in template_path or "\\1366\\" in template_path:
@@ -406,7 +439,6 @@ def get_template_reference_resolution(template_path):
         return REFERENCE_WIDTH_1440P, REFERENCE_HEIGHT_1440P
 
 def _extract_coordinates(filtered_boxes, area="center", crop_offset_x=0, crop_offset_y=0):
-    """Extract coordinates from filtered boxes based on area preference"""
     found_elements = []
     for (x1, y1, x2, y2) in filtered_boxes:
         x1 += crop_offset_x
@@ -451,7 +483,6 @@ def _extract_coordinates(filtered_boxes, area="center", crop_offset_x=0, crop_of
     return found_elements if found_elements else []
 
 def _get_caller_info():
-    """Get caller information (file and function name) for debugging"""
     try:
         stack = inspect.stack()
         for frame_info in stack:
@@ -466,7 +497,6 @@ def _get_caller_info():
     return "unknown"
 
 def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, enable_scaling=False):
-    """Internal function that handles all template matching logic"""
     
     full_template_path = resource_path(template_path)
         
@@ -603,7 +633,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     if (debug or shared_vars.debug_image_matches) and len(filtered_boxes) > 0:
         
         def draw_debug_rectangle(x, y, width, height, duration=1.0):
-            """Draw rectangle directly on desktop using orange color rgb(254, 176, 5)"""
             
             if platform.system() != 'Windows':
                 return
@@ -655,7 +684,6 @@ def _base_match_template(template_path, threshold=0.8, grayscale=False,no_graysc
     return _extract_coordinates(filtered_boxes, area, crop_offset_x, crop_offset_y)
 
 def get_total_threshold_adjustment(template_path):
-    """Get combined threshold adjustment based on global, folder, and path-specific settings"""
     config = shared_vars.image_threshold_config
 
     global_adj = config.get("global_adjustment", 0.0)
@@ -674,7 +702,6 @@ def get_total_threshold_adjustment(template_path):
         return global_adj 
 
 def get_folder_specific_adjustment(template_path):
-    """Get adjustment for folder containing the image"""
     config = shared_vars.image_threshold_config
     folder_adjustments = config.get("folder_adjustments", {})
 
@@ -682,33 +709,22 @@ def get_folder_specific_adjustment(template_path):
     return folder_adjustments.get(folder_path, 0.0)
 
 def get_path_specific_adjustment(template_path):
-    """Get adjustment for specific image path"""
     config = shared_vars.image_threshold_config
     image_adjustments = config.get("image_adjustments", {})
     return image_adjustments.get(template_path, 0.0)
 
 def match_image(template_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, enable_scaling=False):
-    """Finds the image specified and returns coordinates depending on area: center, bottom, left, right, top.
-    
-    Args:
-        x1, y1, x2, y2: Optional region coordinates to limit search area. If provided, only searches within this rectangle.
-    """
     if mousegoto200:
         mouse_move(*scale_coordinates_1080p(200, 200))
     return _base_match_template(template_path, threshold, grayscale, no_grayscale, debug, area, quiet_failure, x1, y1, x2, y2, screenshot, enable_scaling=enable_scaling)
 
 def greyscale_match_image(template_path, threshold=0.75, area="center", no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
-    """Finds the image specified and returns the center coordinates, regardless of screen resolution,
-    and saves screenshots of each match found."""
     return _base_match_template(template_path, threshold, grayscale=True, no_grayscale=no_grayscale, debug=debug, area=area, quiet_failure=quiet_failure, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
 
 def debug_match_image(template_path, threshold=0.8, area="center", grayscale=False, no_grayscale=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
-    """Finds the image specified and returns the center coordinates, regardless of screen resolution,
-       and draws rectangles on each match found."""
     return _base_match_template(template_path, threshold, grayscale=grayscale, no_grayscale=no_grayscale, debug=True, area=area, x1=x1, y1=y1, x2=x2, y2=y2, screenshot=screenshot)
 
 def proximity_check(list1, list2, threshold):
-    """Check which coordinates in list1 are close to any in list2"""
     close_pairs = set() 
     for coord1 in list1:
         for coord2 in list2:
@@ -718,7 +734,6 @@ def proximity_check(list1, list2, threshold):
     return close_pairs
 
 def proximity_check_fuse(list1, list2, x_threshold ,threshold):
-    """Check proximity with separate X and Y thresholds for fusion detection"""
     close_pairs = set()
     for coord1 in list1:
         for coord2 in list2:
@@ -733,30 +748,6 @@ def enhanced_proximity_check(container_input, content_input,
                            expand_left=0, expand_right=0, 
                            expand_above=0, expand_below=0, 
                            threshold=0.8, use_bounding_box=True, return_bool=False):
-    """
-    Unified proximity checking function that can handle both bounding box detection 
-    and area-based proximity with expandable regions.
-    
-    Args:
-        container_input: Can be:
-                        - List of bounding box data (from area="all" calls)
-                        - List of (x, y) coordinates
-                        - String path to image (will find coordinates/bounding boxes)
-        content_input: Can be:
-                      - List of (x, y) coordinates
-                      - String path to image (will find coordinates)
-        expand_left: Pixels to expand bounding box/area to the left
-        expand_right: Pixels to expand bounding box/area to the right  
-        expand_above: Pixels to expand bounding box/area above
-        expand_below: Pixels to expand bounding box/area below
-        threshold: Image matching threshold (default 0.8)
-        use_bounding_box: If True, use actual bounding boxes; if False, create fixed areas around points
-        return_bool: If True, return boolean; if False, return list of matching coordinates
-        
-    Returns:
-        If return_bool=True: Boolean indicating if any content is found in expanded areas
-        If return_bool=False: List of content coordinates that fall inside expanded areas
-    """
     if isinstance(container_input, str):
         if use_bounding_box:
             container_data = ifexist_match(container_input, threshold, area="all")
@@ -819,14 +810,11 @@ def enhanced_proximity_check(container_input, content_input,
                 
     return bool(matching_coords) if return_bool else matching_coords
 
-
 def get_resolution(monitor_index=None):
-    """Gets the resolution of the specified monitor or the game monitor"""
     mon = get_monitor_info(monitor_index)
     return mon['width'], mon['height']
 
 def non_max_suppression_fast(boxes, overlapThresh=0.5):
-    """Remove multiple detections on the same position"""
     if len(boxes) == 0:
         return []
 
@@ -863,7 +851,6 @@ def non_max_suppression_fast(boxes, overlapThresh=0.5):
     return boxes[pick].astype("int")
 
 def get_aspect_ratio(monitor_index=None):
-    """Get monitor aspect ratio (4:3, 16:9, 16:10, or None)"""
     width, height = get_resolution(monitor_index)
     if (width / 4) * 3 == height:
         return "4:3"
@@ -874,10 +861,7 @@ def get_aspect_ratio(monitor_index=None):
     else:
         return None
 
-# ==================== INTERNAL DRY SCALING FUNCTIONS ====================
-
 def _uniform_scale_coordinates(x, y, reference_width, reference_height, use_uniform=True):
-    """Internal function that does all coordinate scaling work"""
     scale_factor_x = MONITOR_WIDTH / reference_width
     scale_factor_y = MONITOR_HEIGHT / reference_height
 
@@ -895,16 +879,9 @@ def _uniform_scale_coordinates(x, y, reference_width, reference_height, use_unif
     return scaled_x, scaled_y
 
 def _scale_single_coordinate(coord, reference_dimension, actual_dimension, offset=0):
-    """Scale a single coordinate dimension"""
     return round(coord * actual_dimension / reference_dimension) + offset
 
-# ==================== PUBLIC SCALING FUNCTIONS (BACKWARD COMPATIBLE) ====================
-
 def padding_none_16_9_monitor(x: int, y: int) -> tuple[int, int]:
-    """Correct X, Y coordinate when monitor doesn't follow 16:9 standard.
-    
-    This require setting resultion to 1920x1080 in the game manually.
-    """
     if IS_NON_STANDARD_RATIO:
         x_offset = (MONITOR_WIDTH - EXPECTED_WIDTH)//2
         y_offset = (MONITOR_HEIGHT - EXPECTED_HEIGHT)//2
@@ -912,74 +889,59 @@ def padding_none_16_9_monitor(x: int, y: int) -> tuple[int, int]:
     return x, y
 
 def scale_x(x: int, *, padding: bool = True) -> int:
-    """Scale X coordinate based on 1440p reference to the actual monitor width."""
     _x = _scale_single_coordinate(x, REFERENCE_WIDTH_1440P, EXPECTED_WIDTH, shared_vars.x_offset)
     if padding:
         _x, _ = padding_none_16_9_monitor(_x, 0)
     return _x
 
 def scale_y(y: int, *, padding: bool = True) -> int:
-    """Scale Y coordinate based on 1440p reference to the actual monitor height."""
     _y = _scale_single_coordinate(y, REFERENCE_HEIGHT_1440P, EXPECTED_HEIGHT, shared_vars.y_offset)
     if padding:
         _, _y = padding_none_16_9_monitor(0, _y)
     return _y
 
 def scale_x_1080p(x: int, *, padding: bool = True) -> int:
-    """Scale X coordinate based on 1080p reference to the actual monitor width."""
     _x = _scale_single_coordinate(x, REFERENCE_WIDTH_1080P, EXPECTED_WIDTH, shared_vars.x_offset)
     if padding:
         _x, _ = padding_none_16_9_monitor(_x, 0)
     return _x
 
 def scale_y_1080p(y: int, *, padding: bool = True) -> int:
-    """Scale Y coordinate based on 1080p reference to the actual monitor height."""
     _y = _scale_single_coordinate(y, REFERENCE_HEIGHT_1080P, EXPECTED_HEIGHT, shared_vars.y_offset)
     if padding:
         _, _y = padding_none_16_9_monitor(0, _y)
     return _y
 
 def uniform_scale_single(coord):
-    """Scale a single coordinate using the minimum scale factor to maintain aspect ratio"""
     scale_factor_x = EXPECTED_WIDTH / REFERENCE_WIDTH_1440P
     scale_factor_y = EXPECTED_HEIGHT / REFERENCE_HEIGHT_1440P
     scale_factor = min(scale_factor_x, scale_factor_y)
     return round(scale_factor * coord)
 
 def uniform_scale_coordinates(x, y):
-    """Scale (x, y) coordinates from 1440p reference to the current screen resolution."""
     return scale_coordinates_1440p(x, y)
 
 def uniform_scale_coordinates_1080p(x, y):
-    """Scale (x, y) coordinates from 1080p reference to the current screen resolution."""
     return scale_coordinates_1080p(x, y)
 
 def scale_coordinates_1440p(x, y):
-    """Scale (x, y) coordinates from 1440p reference to actual screen resolution"""
     return scale_x(x), scale_y(y)
 
 def scale_coordinates_1080p(x, y):
-    """Scale (x, y) coordinates from 1080p reference to actual screen resolution"""
     return scale_x_1080p(x), scale_y_1080p(y)
 
 def scale_offset_1440p(x: int, y: int) -> tuple[int, int]:
-    """Scale (x, y) offset from 1440p reference to actual screen resolution. Will not perform non 16:9 screen padding."""
     return scale_x(x, padding=False), scale_y(y, padding=False)
 
 def scale_offset_1080p(x: int, y: int) -> tuple[int, int]:
-    """Scale (x, y) offset from 1080p reference to actual screen resolution. Will not perform non 16:9 screen padding."""
     return scale_x_1080p(x, padding=False), scale_y_1080p(y, padding=False)
 
-# ==================== GAME-SPECIFIC FUNCTIONS ====================
-
 def click_skip(times):
-    """Click Skip the amount of time specified"""
     mouse_move_click(*scale_coordinates_1080p(895, 465))
     for i in range(times):
         mouse_click()
 
 def wait_skip(img_path, threshold=0.8):
-    """Clicks on the skip button and waits for specified element to appear"""
     mouse_move_click(*scale_coordinates_1080p(895, 465))
 
     if element_exist(img_path, threshold):
@@ -993,7 +955,6 @@ def wait_skip(img_path, threshold=0.8):
     click_matching(img_path, threshold)
 
 def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, recursive=True, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False, enable_scaling=False):
-    """Find and click on image match. Returns True if clicked, False if not found."""
 
     if quiet_failure and recursive:
         full_path = resource_path(image_path)
@@ -1016,17 +977,14 @@ def click_matching(image_path, threshold=0.8, area="center", mousegoto200=False,
         time.sleep(0.05)
     
 def element_exist(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None):
-    """Checks if the element exists if not returns none"""
     result = match_image(img_path, threshold, area, mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot)
     return result
 
 def ifexist_match(img_path, threshold=0.8, area="center",mousegoto200=False, grayscale=False, no_grayscale=False, debug=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, quiet_failure=False, enable_scaling=False):
-    """checks if exists and returns the image location if found"""
     result = match_image(img_path, threshold, area,mousegoto200, grayscale, no_grayscale, debug, quiet_failure, x1, y1, x2, y2, screenshot, enable_scaling=enable_scaling)
     return result
 
 def squad_order(status):
-    """Returns a list of the image locations depending on the sinner order specified in the json file"""
     squads = shared_vars.ConfigCache.get_config("squad_order")
     squad = squads.get(status, {})
 
@@ -1058,7 +1016,6 @@ def squad_order(status):
     return sinner_order
 
 def luminence(x,y, screenshot=None):
-    """Get Luminence of the pixel and return overall coefficient"""
     if screenshot is None:
         screenshot = capture_screen()
     pixel_image = screenshot[y, x]
@@ -1066,7 +1023,6 @@ def luminence(x,y, screenshot=None):
     return coeff
 
 def error_screenshot():
-    """Take a screenshot for error debugging"""
     error_dir = os.path.join(BASE_PATH, "error")
     os.makedirs(error_dir, exist_ok=True)
     monitor = get_sct().monitors[shared_vars.game_monitor]  
@@ -1077,7 +1033,6 @@ def error_screenshot():
         f.write(png)
 
 def set_game_monitor(monitor_index):
-    """Set which monitor the game is running on"""
     if monitor_index < 1 or monitor_index >= len(get_sct().monitors):
         logger.warning(f"Invalid monitor index {monitor_index} (valid: 1-{len(get_sct().monitors)-1})")
         shared_vars.game_monitor = 1
@@ -1088,7 +1043,6 @@ def set_game_monitor(monitor_index):
     return shared_vars.game_monitor
 
 def list_available_monitors():
-    """List all available monitors and their properties"""
     monitors = []
     for i, monitor in enumerate(get_sct().monitors):
         if i == 0:  
@@ -1103,11 +1057,9 @@ def list_available_monitors():
     return monitors
 
 def get_monitor_resolution():
-    """Get the current monitor resolution"""
     return MONITOR_WIDTH, MONITOR_HEIGHT
 
 def check_internet_connection(timeout=5):
-    """Check if internet is reachable by attempting to connect to Google"""
     import urllib.request
     import urllib.error
     
@@ -1118,7 +1070,6 @@ def check_internet_connection(timeout=5):
         return False
 
 def draw_debug_rect(x, y, width, height, duration=2):
-    """Draw a rectangle on screen for debugging"""
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
     

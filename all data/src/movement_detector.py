@@ -20,10 +20,8 @@ _last_pos = [None]
 _move_end_time = [0.0]
 _recording = [False]
 
-
 def _dist(a, b):
     return math.hypot(b[0] - a[0], b[1] - a[1])
-
 
 def _velocity_profile(pts):
     speeds = []
@@ -34,7 +32,6 @@ def _velocity_profile(pts):
         if dt > 0:
             speeds.append(math.hypot(dx, dy) / dt)
     return speeds
-
 
 def _angular_variance(pts):
     angles = []
@@ -51,14 +48,12 @@ def _angular_variance(pts):
         angles.append(math.acos(cos_a))
     return statistics.variance(angles) if len(angles) > 2 else 0.0
 
-
 def _straightness(pts):
     if len(pts) < 2:
         return 1.0
     direct = _dist(pts[0], pts[-1])
     total = sum(_dist(pts[i], pts[i+1]) for i in range(len(pts) - 1))
     return direct / total if total > 0 else 1.0
-
 
 def _overshoot_ratio(pts, target):
     tx, ty = target
@@ -68,7 +63,6 @@ def _overshoot_ratio(pts, target):
     if direct < 5:
         return 0.0
     return (max_d - final_d) / direct
-
 
 def _log_normal_score(delays):
     if len(delays) < 5:
@@ -83,7 +77,6 @@ def _log_normal_score(delays):
     score = 1.0 - min(1.0, mean_dev / 1.5 + std_dev / 1.0)
     return score
 
-
 def _bell_curve_score(speeds):
     if len(speeds) < 5:
         return 0.0
@@ -92,7 +85,6 @@ def _bell_curve_score(speeds):
     peak_ratio = peak_i / n
     symmetry = 1.0 - abs(peak_ratio - 0.5) * 2
     return symmetry
-
 
 def score_trace(pts, click_delay, target):
     if len(pts) < MIN_POINTS:
@@ -129,10 +121,8 @@ def score_trace(pts, click_delay, target):
     report["verdict"] = "HUMAN" if human_score > 0.55 else ("AMBIGUOUS" if human_score > 0.35 else "BOT")
     return report
 
-
 _move_start_pos = [None]
 _click_target = [None]
-
 
 def _on_move(x, y):
     now = time.time()
@@ -141,7 +131,6 @@ def _on_move(x, y):
     _trace.append((x, y, now))
     _last_move_time[0] = now
     _last_pos[0] = (x, y)
-
 
 def _on_click(x, y, button, pressed):
     if button != mouse.Button.left:
@@ -162,7 +151,6 @@ def _on_click(x, y, button, pressed):
             if report:
                 _print_report(report)
 
-
 def _print_report(r):
     print("\n--- Movement Analysis ---")
     print(f"  Verdict         : {r['verdict']}")
@@ -174,7 +162,6 @@ def _print_report(r):
     print(f"  Overshoot       : {r['overshoot']:.4f}  (0 = no overshoot = suspicious)")
     print(f"  Click hold (ms) : {r['click_delay_ms']:.1f}")
     print("-------------------------")
-
 
 def run_session_analysis(n_movements=30):
     print(f"Recording {n_movements} movements. Click anywhere to analyze each one. Ctrl+C to stop.")
@@ -196,7 +183,6 @@ def run_session_analysis(n_movements=30):
     finally:
         listener.stop()
     print(f"\nSession complete. {count[0]} movements analyzed.")
-
 
 if __name__ == "__main__":
     run_session_analysis(n_movements=20)

@@ -56,7 +56,6 @@ class Updater:
     
     def __init__(self, repo_owner, repo_name, current_version_file="version.json", 
                  backup_folder="backups", temp_folder="temp", api_url=None, pre_exit_callback=None):
-        """Initialize updater with repository info and file paths"""
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.current_version_file = current_version_file
@@ -96,9 +95,6 @@ class Updater:
         os.makedirs(self.temp_path, exist_ok=True)
     
     def _retry_file_operation(self, operation, operation_desc, max_retries=5, delay=0.5):
-        """
-        Retry a file operation with exponential backoff to handle file locks and permission issues
-        """
         for attempt in range(max_retries):
             try:
                 operation()
@@ -193,7 +189,6 @@ class Updater:
             return None, None
     
     def parse_version(self, version_str):
-        """Parse version string into a comparable tuple"""
         clean_ver = version_str.lower().strip()
         if clean_ver.startswith('v'):
             clean_ver = clean_ver[1:]
@@ -602,13 +597,6 @@ class Updater:
                     logger.debug(f"Could not remove directory {rel_dir_path}: {e}")
     
     def handle_config_merging(self, repo_dir):
-        """
-        Handle smart config merging:
-        1. Backup user configs to temp
-        2. Allow new configs to be installed 
-        3. Merge user settings back into new configs
-        4. Auto-cleanup temp configs
-        """
         logger.info("Starting config merging process")
 
         temp_config_backup = os.path.join(self.temp_path, "config_backup")
@@ -635,9 +623,6 @@ class Updater:
             return None
     
     def merge_configs_from_temp(self, temp_config_backup):
-        """
-        Merge user settings from temp backup into newly installed configs
-        """
         logger.info("Merging user settings into new configs")
         
         try:
@@ -662,9 +647,6 @@ class Updater:
             logger.error(f"Error during config merging: {e}")
     
     def _merge_single_config(self, user_config_path, new_config_path):
-        """
-        Merge a single config file: user values take priority, new keys get added
-        """
         try:
             with open(user_config_path, 'r') as f:
                 user_config = json.load(f)
@@ -688,9 +670,6 @@ class Updater:
         logger.debug(f"Successfully merged: {os.path.basename(new_config_path)}")
     
     def _deep_merge_configs(self, default_config, user_config):
-        """
-        Deep merge configs - user values override defaults, new keys from default are added
-        """
         if isinstance(default_config, dict) and isinstance(user_config, dict):
             result = default_config.copy()
             for key, value in user_config.items():
@@ -790,7 +769,6 @@ except Exception as e:
             return False
     
     def cleanup_old_backups(self, keep_count=3):
-        """Remove old backup folders, keeping only the most recent ones"""
         try:
             if not os.path.exists(self.backup_path):
                 return
@@ -875,7 +853,6 @@ except Exception as e:
         return thread
 
     def _run_batch_update(self, repo_dir, auto_restart=True):
-        """Create and run a batch script to handle the update process safely"""
         try:
             batch_script_path = os.path.join(self.temp_path, "install_update.bat")
             vbs_script_path = os.path.join(self.temp_path, "silent_updater.vbs")
@@ -937,7 +914,6 @@ xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q > NUL
 
     def _is_staged_update(self):
         return False
-
 
 def check_for_updates(repo_owner, repo_name, callback=None):
     repo_owner = "Bonkier"

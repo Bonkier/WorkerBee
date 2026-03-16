@@ -13,7 +13,6 @@ import mirror_utils
 import shared_vars
 
 def get_base_path():
-    """Get the base directory path"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -27,7 +26,6 @@ BASE_PATH = get_base_path()
 logger = logging.getLogger(__name__)
 
 def get_mirror_instance(config_type="status_selection"):
-    """Get Mirror instance for specific config type"""
     status = "poise" 
     
     try:
@@ -57,7 +55,6 @@ def click_matching_EXP(image_path, threshold=0.8, area="center",
                       movewidth=0, moveheight=0, move2width=0, move2height=0,
                       dragwidth=0, dragheight=0, drag2width=0, drag2height=0,
                       dragspeed=1):
-    """Advanced image matching with drag capabilities for EXP stage selection"""
     
     def verify_element_visible(image_path, threshold):
         try:
@@ -118,7 +115,6 @@ def click_matching_EXP(image_path, threshold=0.8, area="center",
     return False
 
 def click_continue():
-    """Wait for and click confirmation dialogs after battle completion"""
     start_time = time.time()
 
     continue_clicked = False
@@ -145,7 +141,6 @@ def click_continue():
         return
 
 def squad_select_lux(mirror_instance, SelectTeam=False):
-    """Handle squad selection for luxcavation battles"""
     
     if SelectTeam:
         status = mirror_utils.squad_choice(mirror_instance.status)
@@ -191,40 +186,25 @@ def squad_select_lux(mirror_instance, SelectTeam=False):
     click_continue()
 
 def navigate_to_lux():
-    """Navigate to the luxcavation menu"""
-    
     if common.click_matching("pictures/CustomAdded1080p/luxcavation/luxcavation.png", recursive=False):
         return
-    
-    attempts = 0
-    max_attempts = 5
-    
-    while not common.element_exist("pictures/CustomAdded1080p/luxcavation/luxcavation.png"):
-        attempts += 1
-        if attempts > max_attempts:
-            logger.warning(f"Failed to find Luxcavation after {max_attempts} attempts")
-            break
-            
-        common.click_matching("pictures/general/window.png")
-        common.click_matching("pictures/general/drive.png")
-        time.sleep(0.5)
-        
-    common.click_matching("pictures/CustomAdded1080p/luxcavation/luxcavation.png")
+    common.click_matching("pictures/general/window.png")
+    common.sleep(0.5)
+    common.click_matching("pictures/general/drive.png")
+    common.sleep(0.5)
+    common.click_matching("pictures/CustomAdded1080p/luxcavation/luxcavation.png", recursive=False, quiet_failure=True)
 
 def pre_exp_setup(Stage, SelectTeam=False, config_type="exp_team_selection"):
-    """Setup for EXP farming run"""
     logger.info(f"Starting EXP farming setup for stage: {Stage} with config: {config_type}")
     core.refill_enkephalin()
     navigate_to_exp(Stage, SelectTeam, config_type)
 
 def pre_threads_setup(Difficulty, SelectTeam=False, config_type="threads_team_selection"):
-    """Setup for thread farming run"""
     logger.info(f"Starting Thread farming setup for difficulty: {Difficulty} with config: {config_type}")
     core.refill_enkephalin()
     navigate_to_threads(Difficulty, SelectTeam, config_type)
 
 def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
-    """Navigate to and start specific EXP stage"""
     logger.info(f"Navigating to EXP stage: {Stage} with config: {config_type}")
     
     already_on_lux_screen = common.element_exist("pictures/CustomAdded1080p/luxcavation/luxcavation_brown.png")
@@ -295,7 +275,6 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
     
 
 def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_selection"):
-    """Navigate to and start specific thread difficulty"""
     
     if Difficulty != "latest" and Difficulty not in [20, 30, 40, 50]:
         logger.error(f"Invalid thread difficulty: {Difficulty}")
