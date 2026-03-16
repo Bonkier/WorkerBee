@@ -16,6 +16,10 @@ import cv2
 import numpy as np
 import random
 import interception
+try:
+    interception.auto_capture_devices(keyboard=True, mouse=True)
+except AttributeError:
+    raise RuntimeError("Wrong interception package installed. Run: pip install interception-python")
 from mss import mss
 from mss.tools import to_png
 from PIL import ImageGrab
@@ -37,7 +41,8 @@ def _wind_mouse(tx, ty, G=9.0, W=3.0, M=15.0, D=12.0):
     cx, cy = float(sx), float(sy)
     vx = vy = wx = wy = 0.0
     pts = []
-    while True:
+    max_steps = max(100, int(dist / 3))
+    for _ in range(max_steps):
         remaining = math.hypot(tx - cx, ty - cy)
         if remaining < 1:
             break
@@ -67,12 +72,13 @@ def _bezier_move(tx, ty, duration=None):
     if dist < 2:
         return
     if duration is None:
-        duration = max(0.15, min(1.4, dist / 1200))
-    duration *= random.uniform(0.82, 1.18)
+        duration = random.uniform(0.1, 0.25)
+    duration *= random.uniform(0.85, 1.15)
     pts = _wind_mouse(tx, ty)
     if not pts:
+        interception.move_to(tx, ty)
         return
-    delay = duration / len(pts)
+    delay = min(duration / len(pts), 0.006)
     for px, py in pts:
         interception.move_to(px, py)
         time.sleep(delay * random.uniform(0.6, 1.4))
@@ -305,17 +311,17 @@ def mouse_click():
 
 def mouse_hold():
     """Hold down mouse button for 2 seconds"""
-    interception.mouse_down()
+    interception.mouse_down("left")
     sleep(2)
-    interception.mouse_up()
+    interception.mouse_up("left")
 
 def mouse_down():
     """Press down mouse button"""
-    interception.mouse_down()
+    interception.mouse_down("left")
 
 def mouse_up():
     """Release mouse button"""
-    interception.mouse_up()
+    interception.mouse_up("left")
 
 def mouse_move_click(x, y, log_click=True):
     """Moves the mouse to the X,Y coordinate specified and performs a left click"""
@@ -329,10 +335,12 @@ def mouse_move_click(x, y, log_click=True):
         ox = real_x + random.randint(6, 14) * random.choice([-1, 1])
         oy = real_y + random.randint(6, 14) * random.choice([-1, 1])
         _bezier_move(ox, oy)
-        time.sleep(random.lognormvariate(-3.2, 0.4))
+        time.sleep(random.lognormvariate(-3.5, 0.3))
     _bezier_move(real_x, real_y)
-    time.sleep(random.lognormvariate(-2.8, 0.35))
-    interception.click()
+    time.sleep(random.lognormvariate(-3.2, 0.3))
+    interception.mouse_down("left")
+    time.sleep(random.uniform(0.04, 0.09))
+    interception.mouse_up("left")
 
 def mouse_drag(x, y, seconds=1):
     """Drag from current position to the specified coords on the game monitor"""
@@ -340,16 +348,16 @@ def mouse_drag(x, y, seconds=1):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
-    interception.mouse_down()
+    interception.mouse_down("left")
     time.sleep(random.uniform(0.03, 0.08))
     _bezier_move(real_x, real_y, duration=seconds * random.uniform(0.9, 1.1))
     time.sleep(random.uniform(0.03, 0.08))
-    interception.mouse_up()
+    interception.mouse_up("left")
 
 def key_press(Key, presses=1):
     """Presses the specified key X amount of times"""
     for _ in range(presses):
-        interception.key_press(Key)
+        interception.press(Key)
 
 def capture_screen(monitor_index=None):
     """Captures the specified monitor screen using MSS and converts it to a numpy array for CV2."""

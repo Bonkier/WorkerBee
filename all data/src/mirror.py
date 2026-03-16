@@ -199,10 +199,14 @@ class Mirror:
             self.logger.info("Resuming existing run...")
             check_loading()
 
-        if common.click_matching("pictures/general/enter.png", recursive=False): 
+        if common.click_matching("pictures/general/enter.png", recursive=False):
             self.logger.info("Starting fresh run...")
-            while(not common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png")):
-                common.sleep(0.5) 
+            deadline = time.time() + 45
+            while not common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png"):
+                if time.time() > deadline:
+                    self.logger.warning("setup_mirror: squad_select not found after 45s, continuing anyway")
+                    break
+                common.sleep(0.5)
 
         if common.element_exist("pictures/CustomAdded1080p/general/squads/squad_select.png"): 
             self.logger.info("In squad selection screen")
