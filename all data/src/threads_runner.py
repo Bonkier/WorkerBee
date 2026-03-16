@@ -1,7 +1,3 @@
-"""
-Threads Runner Script - Runs Luxcavation Thread automation
-This script is called by the GUI and runs as a separate process
-"""
 import sys
 import os
 import time
@@ -10,7 +6,6 @@ import signal
 import threading
 
 def get_base_path():
-    """Get the base directory path"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -26,20 +21,16 @@ import common
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
-    """Manages connection checking and reconnection"""
     
     def __init__(self):
-        """Initialize connection manager"""
         self.connection_event = threading.Event()
         self.connection_event.set()  
     
     def start_connection_monitor(self):
-        """Start the connection monitoring thread"""
         connection_thread = threading.Thread(target=self._connection_check, daemon=True)
         connection_thread.start()
     
     def _connection_check(self):
-        """Monitor connection status"""
         from common import element_exist
         
         while True:
@@ -52,7 +43,6 @@ class ConnectionManager:
                 logger.error(f"Error in connection check: {e}")
     
     def handle_reconnection(self):
-        """Handle reconnection when needed"""
         try:
             from core import reconnect
             from common import element_exist
@@ -68,7 +58,6 @@ class ConnectionManager:
             logger.error(f"Error in reconnection: {e}")
 
 def sync_shared_vars(shared_vars_instance):
-    """Synchronize multiprocessing.Value objects with local shared_vars module"""
     import shared_vars as sv_module
     
     if shared_vars_instance is None:
@@ -94,12 +83,10 @@ def sync_shared_vars(shared_vars_instance):
         time.sleep(1)
 
 def signal_handler(sig, frame):
-    """Handle termination signals"""
     logger.warning(f"Termination signal received, shutting down...")
     sys.exit(0)
 
 def main(runs, difficulty, shared_vars=None):
-    """Main function for threads runner"""
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
    

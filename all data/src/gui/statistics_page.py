@@ -19,7 +19,6 @@ def load_statistics_tab(parent, base_path):
             update_statistics_ui(parent.ui_cache, data)
             return
         except Exception:
-            # If update fails (e.g. widgets destroyed), clear cache and rebuild
             del parent.ui_cache
     
     scroll_frame = ctk.CTkScrollableFrame(parent, corner_radius=0, fg_color="transparent")
@@ -66,7 +65,6 @@ def load_statistics_tab(parent, base_path):
     ui_cache['history_frame'] = history_frame
 
     def refresh():
-        # Force full reload if needed, though update_statistics_ui handles data updates
         if hasattr(parent, 'ui_cache'):
             del parent.ui_cache
         load_statistics_tab(parent, base_path)
@@ -102,8 +100,7 @@ def update_statistics_ui(ui_cache, data):
         for widget in history_frame.winfo_children():
             widget.destroy()
         
-        # Limit to 10 recent runs to prevent UI lag
-        for entry in md_stats["history"][:10]: 
+        for entry in md_stats["history"][:10]:
             result = entry.get("result", "Unknown")
             duration = entry.get("duration", 0)
             timestamp = entry.get("timestamp", 0)

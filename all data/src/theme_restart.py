@@ -4,7 +4,6 @@ import subprocess
 import time
 
 def restart_app_with_theme():
-    """Restart the main application with specified theme and tab"""
     BASE_PATH = os.path.dirname(os.path.abspath(__file__))
     main_script_path = os.path.join(BASE_PATH, "..", "gui_launcher.py")
 

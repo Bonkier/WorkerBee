@@ -12,33 +12,27 @@ _logging_enabled: bool = True
 _async_enabled: bool = True
 
 def set_logging_enabled(enabled: bool):
-    """Enable or disable all logging (Do Not Log toggle)"""
     global _logging_enabled
     _logging_enabled = enabled
 
 def is_logging_enabled() -> bool:
-    """Check if logging is enabled"""
     return _logging_enabled
 
 def set_async_enabled(enabled: bool):
-    """Enable or disable async logging (fallback to synchronous)"""
     global _async_enabled
     _async_enabled = enabled
 
 class NoMillisecondsFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
-        """Format time without milliseconds"""
         return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(record.created))
     
     def format(self, record):
-        """Format log record with dirty flag"""
         formatted = super().format(record)
         if hasattr(record, 'dirty') and record.dirty:
             formatted += " | DIRTY"
         return formatted
 
 def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
-    """Worker process that handles async log writing to file"""
     handler = logging.FileHandler(log_filename, encoding='utf-8')
     formatter = NoMillisecondsFormatter(
         fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
@@ -85,7 +79,6 @@ def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
         handler.close()
 
 def start_async_logging(log_filename: str):
-    """Start async logging worker process"""
     global _log_queue, _log_process
     
     if _log_process is not None:
@@ -103,7 +96,6 @@ def start_async_logging(log_filename: str):
     _log_process.start()
 
 def stop_async_logging():
-    """Stop async logging and cleanup worker process"""
     global _log_queue, _log_process
     
     if _log_process is not None:
@@ -117,7 +109,6 @@ def stop_async_logging():
     _log_queue = None
 
 def async_log(level: int, name: str, msg: str, funcName: str, lineno: int, dirty: bool = False):
-    """Queue log message for async processing. Returns True if queued, False if should use sync logging."""
     global _log_queue, _logging_enabled, _async_enabled
     
     
@@ -139,7 +130,6 @@ def async_log(level: int, name: str, msg: str, funcName: str, lineno: int, dirty
 class AsyncDirtyLogger(logging.Logger):
     
     def _log_async_or_sync(self, level, msg, args, dirty=False):
-        """Try async logging first, fallback to sync if queue full or disabled"""
         if not _logging_enabled:
             return
 
@@ -160,21 +150,16 @@ class AsyncDirtyLogger(logging.Logger):
             self.handle(record)
     
     def debug(self, msg, *args, dirty=False, **kwargs):
-        """Log debug message"""
         self._log_async_or_sync(logging.DEBUG, msg, args, dirty)
     
     def info(self, msg, *args, dirty=False, **kwargs):
-        """Log info message"""
         self._log_async_or_sync(logging.INFO, msg, args, dirty)
     
     def warning(self, msg, *args, dirty=False, **kwargs):
-        """Log warning message"""
         self._log_async_or_sync(logging.WARNING, msg, args, dirty)
     
     def error(self, msg, *args, dirty=False, **kwargs):
-        """Log error message"""
         self._log_async_or_sync(logging.ERROR, msg, args, dirty)
     
     def critical(self, msg, *args, dirty=False, **kwargs):
-        """Log critical message"""
         self._log_async_or_sync(logging.CRITICAL, msg, args, dirty)

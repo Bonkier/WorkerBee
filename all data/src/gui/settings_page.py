@@ -522,7 +522,6 @@ def _setup_image_thresholds(parent, base_path):
                 btn.configure(text=">")
                 is_expanded.set(False)
             else:
-                # children_frame.pack(fill="x")
                 btn.configure(text="v")
                 is_expanded.set(True)
                 if not children_frame.winfo_children():

@@ -71,7 +71,6 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
 logger = None
 
 def get_base_path():
-    """Get the correct base path for the application"""
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
         return base_path
@@ -80,7 +79,6 @@ def get_base_path():
         return base_path
 
 def setup_paths_and_imports():
-    """Set up paths and import required modules"""
     BASE_PATH = get_base_path()
 
     src_path = os.path.join(BASE_PATH, 'src')
@@ -128,19 +126,16 @@ def load_status_list(status_path):
         raise
 
 class ConnectionManager:
-    """Manages connection checking and reconnection"""
     
     def __init__(self):
         self.connection_event = threading.Event()
         self.connection_event.set() 
     
     def start_connection_monitor(self):
-        """Start the connection monitoring thread"""
         connection_thread = threading.Thread(target=self._connection_check, daemon=True)
         connection_thread.start()
     
     def _connection_check(self):
-        """Monitor connection status"""
         from common import element_exist
         
         while True:
@@ -153,7 +148,6 @@ class ConnectionManager:
                 logger.error(f"Error in connection check: {e}")
     
     def handle_reconnection(self):
-        """Handle reconnection when needed"""
         try:
             from core import reconnect
             from common import element_exist
@@ -170,7 +164,6 @@ class ConnectionManager:
             logger.error(f"Error in reconnection: {e}")
 
 def sync_shared_vars(shared_vars_instance):
-    """Synchronize multiprocessing.Value objects with local shared_vars module"""
     import shared_vars as sv_module
     import time
     import common
@@ -212,7 +205,6 @@ def sync_shared_vars(shared_vars_instance):
         time.sleep(1)
 
 def update_stats(win, run_data=None):
-    """Update statistics in stats.json"""
     try:
         base_path = get_base_path()
         stats_path = os.path.join(base_path, "config", "stats.json")
@@ -266,7 +258,6 @@ def update_stats(win, run_data=None):
         logger.error(f"Failed to update stats: {e}")
 
 def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_vars):
-    """Main mirror dungeon run logic"""
     try:
         import common
         from common import element_exist, error_screenshot
@@ -283,10 +274,8 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
         logger.info(f"Starting Run with statuses: {unique_statuses}")
 
         res_w, _ = common.get_resolution()
-        #uncomment the line below for testing ONLY
-        # MirrorClass = mirror_1366.Mirror if res_w == 1366 else mirror.Mirror
         MirrorClass = mirror.Mirror
-        logger.info(f"Resolution detected: {res_w}px — using mirror.Mirror (1366 disabled)")
+        logger.info(f"Resolution detected: {res_w}px - using mirror.Mirror (1366 disabled)")
 
         sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
         sync_thread.start()

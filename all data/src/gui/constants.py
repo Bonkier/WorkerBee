@@ -28,7 +28,13 @@ LOG_MODULES = {
     "Core": "core",
     "Mirror": "mirror",
     "Mirror Utils": "mirror_utils",
+    "Mirror 1366": "mirror_1366",
     "Theme": "theme_restart",
     "Luxcavation": "luxcavation_functions",
+    "Battler": "battler",
+    "Battlepass": "battlepass_collector",
+    "Headless": "headless_bridge",
+    "Updater": "updater",
+    "Extractor": "extractor",
     "Other": "other"
 }

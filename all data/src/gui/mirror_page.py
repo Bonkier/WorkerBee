@@ -14,6 +14,7 @@ pack_dropdown_vars = {}
 pack_expand_frames = {}
 pack_exception_expand_frames = {}
 grace_dropdown_vars = []
+grace_upgrade_vars = []
 grace_expand_frame = None
 grace_selection_data = {}
 
@@ -248,26 +249,31 @@ def save_team_selection(base_path):
     save_json_data(status_path, output)
 
 def load_grace_selection_ui(parent, base_path):
-    global grace_selection_data, grace_dropdown_vars, grace_expand_frame
-    
+    global grace_selection_data, grace_dropdown_vars, grace_upgrade_vars, grace_expand_frame
+
     grace_path = os.path.join(base_path, "config", "grace_selection.json")
     default_grace = {
         "order": {
             "Grace 1": 1, "Grace 2": 2, "Grace 3": 3, "Grace 4": 4, "Grace 5": 5
-        }
+        },
+        "upgrades": {}
     }
     grace_selection_data = load_json_data(grace_path)
     if not grace_selection_data:
         grace_selection_data = default_grace
         save_json_data(grace_path, grace_selection_data)
+    if "upgrades" not in grace_selection_data:
+        grace_selection_data["upgrades"] = {}
 
     GRACE_NAMES = ["star of the beniggening", "cumulating starcloud", "interstellar travel", "star shower", "binary star shop", "moon star shop", "favor of the nebula", "starlight guidance", "chance comet", "perfected possibility"]
-    
+    UPGRADE_OPTIONS = ["none", "left", "right"]
+    UPGRADE_LABELS  = {"none": "-", "left": "+", "right": "++"}
+
     wrapper = ctk.CTkFrame(parent, fg_color="transparent")
     wrapper.pack(fill="x", padx=10)
-    
+
     arrow_var = ctk.StringVar(value="+")
-    
+
     def toggle(btn=None):
         if grace_expand_frame.winfo_ismapped():
             animate_collapse(grace_expand_frame)
@@ -278,66 +284,95 @@ def load_grace_selection_ui(parent, base_path):
         if btn: btn.configure(text=f"{arrow_var.get()} Grace Selection")
 
     btn = ctk.CTkButton(wrapper, text="+ Grace Selection", command=lambda: toggle(btn), width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
-                        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
                         border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
                         corner_radius=UIStyle.CORNER_RADIUS)
     btn.pack(anchor="center")
-    
+
     grace_expand_frame = ctk.CTkFrame(wrapper, fg_color="transparent")
     grace_expand_frame.pack_forget()
-    
+
+    header_row = ctk.CTkFrame(grace_expand_frame, fg_color="transparent")
+    header_row.pack(pady=(6, 2), anchor="center")
+    ctk.CTkLabel(header_row, text="", width=30).pack(side="left", padx=(0, 10))
+    ctk.CTkLabel(header_row, text="Grace", width=200, font=UIStyle.SMALL_FONT,
+                 text_color="#666666", anchor="center").pack(side="left")
+    ctk.CTkLabel(header_row, text="Upgrade", width=90, font=UIStyle.SMALL_FONT,
+                 text_color="#666666", anchor="center").pack(side="left", padx=(8, 0))
+
     grace_dropdown_vars = []
-    current_order = grace_selection_data.get("order", {})
+    grace_upgrade_vars = []
+    current_order   = grace_selection_data.get("order", {})
+    current_upgrades = grace_selection_data.get("upgrades", {})
     sorted_graces = sorted(current_order.items(), key=lambda x: x[1])
-    
-    def add_grace_row(initial_val="None"):
+
+    def add_grace_row(initial_val="None", initial_upgrade="none"):
         idx = len(grace_dropdown_vars)
         row = ctk.CTkFrame(grace_expand_frame, fg_color="transparent")
         row.pack(pady=1, anchor="center")
-        
+
         ctk.CTkLabel(row, text=f"{idx+1}.", width=30, anchor="e", text_color="#b0b0b0").pack(side="left", padx=(0, 10))
-        
-        var = ctk.StringVar(value=initial_val)
-        grace_dropdown_vars.append(var)
-        
-        def on_change(choice, i=idx):
-            new_val = choice
-            if new_val != "None":
+
+        name_var = ctk.StringVar(value=initial_val)
+        grace_dropdown_vars.append(name_var)
+
+        upgrade_var = ctk.StringVar(value=UPGRADE_LABELS.get(initial_upgrade, "-"))
+        grace_upgrade_vars.append(upgrade_var)
+
+        def on_name_change(choice, i=idx):
+            if choice != "None":
                 for j, v in enumerate(grace_dropdown_vars):
-                    if j != i and v.get() == new_val:
+                    if j != i and v.get() == choice:
                         v.set("None")
                         break
             save_grace_selection(base_path)
-            
-        ctk.CTkOptionMenu(row, variable=var, values=GRACE_NAMES + ["None"], command=lambda c, i=idx: on_change(c, i), width=200,
+
+        ctk.CTkOptionMenu(row, variable=name_var, values=GRACE_NAMES + ["None"],
+                          command=lambda c, i=idx: on_name_change(c, i), width=200,
                           fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
                           button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
                           dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
                           dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
                           corner_radius=UIStyle.CORNER_RADIUS).pack(side="left")
 
+        ctk.CTkOptionMenu(row, variable=upgrade_var,
+                          values=[UPGRADE_LABELS[o] for o in UPGRADE_OPTIONS],
+                          command=lambda _: save_grace_selection(base_path), width=90,
+                          fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                          button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                          dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                          dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                          corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=(8, 0))
+
     for grace_name, _ in sorted_graces:
-        add_grace_row(grace_name)
+        saved_upgrade = current_upgrades.get(grace_name, "none")
+        add_grace_row(grace_name, saved_upgrade)
 
     def add_new_grace():
-        add_grace_row("None")
+        add_grace_row("None", "none")
         add_btn.pack_forget()
         add_btn.pack(pady=10, anchor="center")
 
-    add_btn = ctk.CTkButton(grace_expand_frame, text="+ Add Grace", command=add_new_grace, 
+    add_btn = ctk.CTkButton(grace_expand_frame, text="+ Add Grace", command=add_new_grace,
                             width=100, height=24, font=UIStyle.SMALL_FONT,
                             fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
                             border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR, corner_radius=UIStyle.CORNER_RADIUS)
     add_btn.pack(pady=10, anchor="center")
 
 def save_grace_selection(base_path):
+    LABEL_TO_KEY = {"-": "none", "+": "left", "++": "right"}
     updated_order = {}
-    for i, var in enumerate(grace_dropdown_vars):
-        val = var.get()
-        if val != "None":
-            updated_order[val] = i + 1
-            
+    updated_upgrades = {}
+    for i, (name_var, upg_var) in enumerate(zip(grace_dropdown_vars, grace_upgrade_vars)):
+        name = name_var.get()
+        if name != "None":
+            updated_order[name] = i + 1
+            upg = LABEL_TO_KEY.get(upg_var.get(), "none")
+            if upg != "none":
+                updated_upgrades[name] = upg
+
     grace_selection_data["order"] = updated_order
+    grace_selection_data["upgrades"] = updated_upgrades
     save_json_data(os.path.join(base_path, "config", "grace_selection.json"), grace_selection_data)
 
 def load_floor_packs(base_path):
@@ -547,7 +582,6 @@ def update_pack_exception(base_path, floor, pack, is_checked):
     save_json_data(path, data)
     save_json_data(os.path.join(base_path, "config", "delayed_pack_exceptions.json"), data)
 
-# --- Fuse Exceptions Logic ---
 def load_fuse_exceptions_ui(parent, base_path):
     for widget in parent.winfo_children():
         widget.destroy()

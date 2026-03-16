@@ -34,7 +34,6 @@ shared_vars = SharedVars()
 config = load_json_data(os.path.join(BASE_PATH, "config", "gui_config.json"))
 log_queue = queue.Queue()
 
-# --- Mock UI Context for Chain Automation compatibility ---
 class DummyEntry:
     def __init__(self, value):
         self.value = str(value)
@@ -68,7 +67,6 @@ ui_context = {
     'status_label': DummyWidget()
 }
 
-# --- Logging Setup ---
 class QueueHandler(logging.Handler):
     def emit(self, record):
         try:
@@ -108,7 +106,6 @@ def load_initial_settings():
     ui_context['collect_rewards_var'] = type('obj', (object,), {'get': lambda: collect_rewards})
 
 def handle_command(cmd_data):
-    """Process JSON commands from Java UI"""
     response = {"status": "ok"}
     command = cmd_data.get("command")
     

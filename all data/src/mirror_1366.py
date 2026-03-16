@@ -12,7 +12,6 @@ from core import (skill_check, battle_check, battle, check_loading,
                   navigate_to_md)
 
 def get_base_path():
-    """Determine if running as executable or script and return base path"""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -26,12 +25,10 @@ os.chdir(BASE_PATH)
 
 logger = logging.getLogger(__name__)
 
-# Cache for ORB keypoints/descriptors keyed by absolute template path.
 _orb_descriptor_cache = {}
 
 class Mirror:
     def __init__(self, status):
-        """Initialize Mirror instance with status and setup squad order"""
         self.status = status
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing Mirror (1366) with status: {status}")
@@ -52,7 +49,6 @@ class Mirror:
 
     @staticmethod
     def floor_id():
-        """Detect current floor number from pack selection screen using highest-confidence match"""
         import cv2
         screenshot = common.capture_screen()
 
@@ -113,7 +109,6 @@ class Mirror:
             return ""
 
     def is_pack_screen(self):
-        """Check if currently on pack selection screen by looking for floor indicators"""
         if common.element_exist("pictures/1366/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True):
             return False
 
@@ -132,14 +127,12 @@ class Mirror:
 
     @staticmethod
     def set_sinner_order(status):
-        """Get squad order for the given status, fallback to default"""
         if mirror_utils.squad_choice(status) is None:
             return common.squad_order("default")
         else:
             return common.squad_order(status)
 
     def setup_mirror(self):
-        """Complete mirror dungeon setup from entry to gift selection"""
 
         if (common.element_exist("pictures/1366/mirror/general/danteh.png", quiet_failure=True) or
             common.element_exist("pictures/1366/battle/winrate.png", quiet_failure=True) or
@@ -215,7 +208,6 @@ class Mirror:
             self.gift_selection()
 
     def check_run(self):
-        """Check if run ended and return win status and completion flag"""
         run_complete = 0
         win_flag = 0
         if (common.element_exist("pictures/1366/CustomAdded1080p/mirror/general/battle_defeat.png", threshold=0.72, quiet_failure=True) or
@@ -240,7 +232,6 @@ class Mirror:
         return win_flag, run_complete, self.run_stats
 
     def mirror_loop(self):
-        """Handles all the mirror dungeon logic in this"""
         if common.element_exist("pictures/1366/general/maint.png"):
             common.click_matching("pictures/1366/general/close.png", recursive=False)
             common.sleep(0.5)
@@ -307,14 +298,12 @@ class Mirror:
         return self.check_run()
 
     def grace_of_stars(self):
-        """Selects grace of stars blessings for the runs in the specified order"""
 
         if not hasattr(self, '_grace_coords_cache'):
 
             grace_config = shared_vars.ConfigCache.get_config("grace_selection")
             grace_order = grace_config.get('order', {})
             grace_coordinates = shared_vars.ScaledCoordinates.get_scaled_coords("grace_of_stars")
-
 
             self._grace_coords_cache = []
             if grace_order:
@@ -336,7 +325,6 @@ class Mirror:
             common.sleep(0.5)
 
     def gift_selection(self):
-        """selects the ego gift of the same status, fallsback on random if not unlocked"""
         self.logger.info("Starting EGO gift selection")
 
         if common.click_matching("pictures/1366/mirror/general/gift_search_enabled.png", 0.58, recursive=False, enable_scaling=True, no_grayscale=True):
@@ -345,7 +333,6 @@ class Mirror:
             pass
 
         gift = mirror_utils.gift_choice(self.status)
-
 
         clicked_gift = False
         _matches = common.match_image(gift, 0.8)
@@ -361,7 +348,6 @@ class Mirror:
                 offset_x, offset_y = common.scale_offset_1440p(-1365, 50)
                 common.mouse_move(x + offset_x, y + offset_y)
 
-
                 for i in range(7):
                     common.mouse_scroll(-1000)
                     common.sleep(0.5)
@@ -371,7 +357,6 @@ class Mirror:
                         common.mouse_move_click(best[0], best[1])
                         clicked_gift = True
                         break
-
 
                 if not clicked_gift:
                     self.logger.info("Gift not found after scrolling down, scrolling up...")
@@ -438,7 +423,6 @@ class Mirror:
         check_loading()
 
     def initial_squad_selection(self):
-        """Searches for the squad name with the status type, if not found then uses the current squad"""
         self.logger.info("Performing initial squad selection")
         status = mirror_utils.squad_choice(self.status)
         if status is None:
@@ -455,7 +439,6 @@ class Mirror:
         if not common.click_matching(status, recursive=False):
             for i in range(30):
                 common.mouse_scroll(1000)
-
 
             for _ in range(4):
                 if not common.element_exist(status):
@@ -474,7 +457,6 @@ class Mirror:
 
     def _fast_scan_packs(self, floor_char, screenshot, exception_packs, floor_priorities,
                           min_x_scaled, min_y_scaled, max_x_scaled, max_y_scaled):
-        """Single-pass pack detection: one matchTemplate call per template, thresholds checked from same result."""
         import cv2
         import numpy as np
 
@@ -487,7 +469,7 @@ class Mirror:
         actual_h, actual_w = screenshot.shape[:2]
 
         if actual_w != common.EXPECTED_WIDTH or actual_h != common.EXPECTED_HEIGHT:
-            self.logger.warning(f"Screenshot size {actual_w}x{actual_h} differs from EXPECTED {common.EXPECTED_WIDTH}x{common.EXPECTED_HEIGHT} — recomputing crop bounds")
+            self.logger.warning(f"Screenshot size {actual_w}x{actual_h} differs from EXPECTED {common.EXPECTED_WIDTH}x{common.EXPECTED_HEIGHT} - recomputing crop bounds")
             min_y_scaled = round(100 * actual_h / 1080)
             max_y_scaled = round(980 * actual_h / 1080)
             min_x_scaled = round(50 * actual_w / 1920)
@@ -584,9 +566,6 @@ class Mirror:
                 if existing is None or score > existing[0]:
                     best_per_coord[coord] = (score, pack_name)
 
-        # Cross-template spatial NMS: if two detections land within 60px of each other,
-        # keep only the higher-confidence one. Prevents different-sized templates from
-        # claiming nearby coords for the same physical pack on screen.
         coords_by_score = sorted(best_per_coord.keys(), key=lambda c: -best_per_coord[c][0])
         kept = {}
         for coord in coords_by_score:
@@ -595,11 +574,9 @@ class Mirror:
                 kept[coord] = best_per_coord[coord]
         best_per_coord = kept
 
-        # ORB secondary scan — runs when CCOEFF missed at least one pack.
-        # Handles edge/angled packs with perspective distortion.
         already_found_names = {v[1] for v in best_per_coord.values()}
         if len(best_per_coord) < 5:
-            self.logger.debug(f"CCOEFF found {len(best_per_coord)} packs — running ORB secondary scan")
+            self.logger.debug(f"CCOEFF found {len(best_per_coord)} packs - running ORB secondary scan")
             try:
                 orb = cv2.ORB_create(nfeatures=500)
                 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -682,7 +659,6 @@ class Mirror:
         return selectable_packs_pos, pack_identities, known_pack_names, found_priority_packs, excepted_visible_count
 
     def pack_selection(self) -> None:
-        """Selects packs based on priority list"""
         pack_count = len(self.run_stats["packs"])
         floor_num = min(pack_count + 1, 5)
         floor = f"floor{floor_num}"
@@ -697,7 +673,7 @@ class Mirror:
             floor = visual_floor
             floor_num = int(visual_floor.replace("floor", ""))
         else:
-            self.logger.warning(f"Visual floor detection failed — falling back to calculated floor: {floor}")
+            self.logger.warning(f"Visual floor detection failed - falling back to calculated floor: {floor}")
 
         if floor != self.current_floor_tracker:
             self.run_stats["floor_times"][floor] = time.time() - self.run_stats["start_time"]
@@ -809,7 +785,6 @@ class Mirror:
 
                 x, y = coords
                 robust_drag_pack(x, y)
-                # Record immediately — confirmation check below only affects current_floor_tracker
                 self.run_stats["packs_by_floor"][floor] = pack_name
 
                 wait_start = time.time()
@@ -825,7 +800,7 @@ class Mirror:
                         self.run_stats["packs"].append(pack_name)
                     self.current_floor_tracker = floor
                 else:
-                    self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered — NOT counting pack, will retry.")
+                    self.logger.warning(f"Pack screen still visible after 5s wait. Pack selection may not have registered - NOT counting pack, will retry.")
 
             if found_priority_packs:
                 found_priority_packs.sort(key=lambda x: x[0])
@@ -838,7 +813,6 @@ class Mirror:
 
             if floor_priorities and refresh_count < MAX_REFRESHES:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
-
 
                 refresh_x1, refresh_y1 = common.scale_coordinates_1080p(1400, 0)
                 refresh_x2, refresh_y2 = common.scale_coordinates_1080p(1920, 200)
@@ -918,7 +892,6 @@ class Mirror:
                         logger.info(f"Final scan found non-excepted pack: {pack_name}")
                         select_pack(matches[0], pack_name)
                         return
-                # Last resort: use inpack.png to blindly find any pack slot on screen
                 self.logger.warning("Final template scan found nothing. Attempting inpack.png blind fallback.")
                 inpack_matches = common.match_image(
                     "pictures/CustomAdded1080p/mirror/packs/inpack.png",
@@ -939,7 +912,6 @@ class Mirror:
                 raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
 
     def squad_select(self):
-        """selects sinners in squad order"""
         self.logger.info("Selecting squad members for battle")
         if not self.squad_set or not common.element_exist("pictures/1366/CustomAdded1080p/general/squads/full_squad.png"):
             common.click_matching("pictures/1366/CustomAdded1080p/general/squads/clear_selection.png")
@@ -963,13 +935,11 @@ class Mirror:
         check_loading()
 
     def reward_select(self):
-        """Selecting EGO Gift rewards, when randomly rewarded or rewarded at floor end."""
         self.logger.info("Selecting rewards")
         status_effect = mirror_utils.reward_choice(self.status)
         if status_effect is None:
             status_effect = "pictures/1366/mirror/rewards/poise_reward.png"
         ego_gift_matches = common.match_image("pictures/1366/CustomAdded1080p/mirror/general/acquire_ego_gift_identifier.png")
-
 
         owned_ego_gift_matches = common.match_image("pictures/1366/mirror/rewards/owned.png")
 
@@ -1029,7 +999,6 @@ class Mirror:
         common.click_matching("pictures/general/confirm_w.png", recursive=False, quiet_failure=True)
 
     def encounter_reward_select(self):
-        """Select Encounter Rewards prioritising starlight first"""
         self.logger.info("Selecting encounter rewards")
         encounter_reward = ["pictures/1366/mirror/encounter_reward/cost_gift.png",
                             "pictures/1366/mirror/encounter_reward/cost.png",
@@ -1065,7 +1034,6 @@ class Mirror:
         common.sleep(3)
 
     def check_nodes(self,nodes):
-        """Check which navigation nodes exist on the current floor"""
         screenshot = common.capture_screen()
         non_exist = [1,1,1]
         threshold = 0.75
@@ -1088,7 +1056,6 @@ class Mirror:
         return result
 
     def navigation(self, drag_danteh=True, _depth=0):
-        """Core navigation function to reach the end of floor"""
         if _depth >= 2:
             self.logger.warning("Navigation: recursion limit reached, giving up")
             return
@@ -1174,7 +1141,6 @@ class Mirror:
             common.click_matching("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1)
 
     def sell_gifts(self):
-        """Handles Selling gifts"""
         for _ in range(3):
             common.sleep(1)
             if common.click_matching("pictures/1366/mirror/restshop/market/vestige_2.png", recursive=False):
@@ -1186,7 +1152,6 @@ class Mirror:
                     common.mouse_scroll(-1000)
 
     def fuse(self):
-        """Execute fusion of selected gifts"""
 
         common.mouse_move(*common.scale_coordinates_1080p(50, 50))
         common.sleep(0.3)
@@ -1218,7 +1183,6 @@ class Mirror:
         return True
 
     def find_gifts(self, statuses, excluded_statuses=None):
-        """Find all gifts matching the given status list for fusion, with region optimization"""
         fusion_gifts = []
         gift_types = {}
 
@@ -1328,7 +1292,6 @@ class Mirror:
         return unique_gifts
 
     def filter_exception_gifts(self, fusion_gifts, screenshot=None, exception_gifts=None):
-        """Remove status detections that are inside exception gift areas"""
         if not fusion_gifts:
             return fusion_gifts
 
@@ -1374,7 +1337,6 @@ class Mirror:
         return filtered_gifts
 
     def load_fusion_exceptions(self):
-        """Load fusion exceptions from JSON config file"""
         exception_gifts = []
 
         try:
@@ -1408,7 +1370,6 @@ class Mirror:
         return exception_gifts
 
     def fuse_gifts(self):
-        """Main fusion process - find gifts and fuse them into target status"""
         self.logger.info("Starting gift fusion")
 
         def exit_fusion():
@@ -1541,10 +1502,8 @@ class Mirror:
         exit_fusion()
 
     def rest_shop(self):
-        """Handle rest shop activities: fusion, healing, enhancement, and buying"""
         self.logger.info("Entering rest shop logic")
         def leave_restshop():
-            """Leave the restshop with proper confirmation handling"""
             self.logger.info("Leaving rest shop")
             common.mouse_move_click(*common.scale_coordinates_1080p(50,50))
             while not common.click_matching("pictures/1366/mirror/restshop/leave.png", recursive=False):
@@ -1658,7 +1617,6 @@ class Mirror:
         leave_restshop()
 
     def upgrade(self,gifts,status,shift_x,shift_y):
-        """Upgrade gifts twice using power up button"""
         for x,y in gifts:
             common.sleep(0.3)
             common.mouse_move_click(x, y)
@@ -1671,7 +1629,6 @@ class Mirror:
         return True
 
     def enhance_gifts(self,status):
-        """Enhancement gift process"""
         self.logger.info("Starting gift enhancement")
 
         x1, y1 = common.scale_coordinates_1080p(900, 300)
@@ -1738,7 +1695,6 @@ class Mirror:
                 break
 
     def event_choice(self):
-        """Handle different event types and make appropriate choices"""
         self.logger.info("Handling event choice")
         if common.click_matching("pictures/1366/events/level_up.png", recursive=False):
             self.logger.info("Event: Level Up")
@@ -1821,7 +1777,6 @@ class Mirror:
             check_loading()
 
     def victory(self):
-        """Handle victory screen and claim rewards"""
         common.click_matching("pictures/1366/general/confirm_w.png", recursive=False)
         common.click_matching("pictures/1366/general/beeg_confirm.png")
         common.mouse_move(*common.scale_coordinates_1080p(200,200))
@@ -1854,7 +1809,6 @@ class Mirror:
             sys.exit(0)
 
     def defeat(self):
-        """Handle defeat screen and cleanup"""
         self.logger.info("Defeat detected. Checking for retry or forfeit options...")
         while True:
             retry_img = None
