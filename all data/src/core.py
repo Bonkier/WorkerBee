@@ -447,7 +447,18 @@ def refill_enkephalin():
             while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
                 pass
             return refill_enkephalin()
-        common.click_matching("pictures/general/confirm_w.png")
+        deadline = time.time() + 8
+        found = False
+        while time.time() < deadline:
+            if common.click_matching("pictures/general/confirm_w.png", recursive=False):
+                found = True
+                break
+            time.sleep(0.1)
+        if not found:
+            logger.warning("refill_enkephalin: confirm_w not found after 8s, navigating back")
+            while common.click_matching("pictures/CustomAdded1080p/general/goback.png", recursive=False):
+                pass
+            return False
         logger.info("Enkephalin refill completed")
         while common.element_exist("pictures/general/right_arrow.png"):
             common.key_press("esc")
