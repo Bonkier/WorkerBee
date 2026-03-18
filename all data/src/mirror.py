@@ -1136,9 +1136,9 @@ class Mirror:
         }
         def has(name, t=0.72):
             return bool(common.match_image(f"{NAV}/{name}.png", t, **kw))
-        if has("boss_ark", 0.70) or has("boss0", 0.65) or has("boss1", 0.65): return "Boss"
+        if has("boss_ark", 0.70) or has("boss0", 0.65) or has("boss1", 0.65) or has("boss_highlighted", 0.65): return "Boss"
         if has("event0") or has("event1") or has("event2"):                    return "Event"
-        if has("shop0") or has("shop1"):                                        return "Shop"
+        if has("shop0") or has("shop1") or has("shop_highlighted"):            return "Shop"
         if has("risk0", 0.65) or has("risk1", 0.65) or has("risk2", 0.65):    return "Risky"
         if has("focus0", 0.65) or has("focus1", 0.65) or has("focus2", 0.65) or has("focus3", 0.65): return "Focused"
         if has("coin", 0.70):
@@ -1330,10 +1330,10 @@ class Mirror:
                 def has(paths, t, gray=False):
                     kws = kw_gray if gray else kw
                     return any(common.match_image(p, t, **kws) for p in paths)
-                if has([f"{NAV}/boss_ark.png", f"{NAV}/boss0.png", f"{NAV}/boss1.png"], 0.65): return "Boss"
+                if has([f"{NAV}/boss_ark.png", f"{NAV}/boss0.png", f"{NAV}/boss1.png", f"{NAV}/boss_highlighted.png"], 0.65): return "Boss"
                 if has([f"{NAV}/event_node.png"], 0.65, gray=True) or \
                    has([f"{NAV}/event0.png", f"{NAV}/event1.png", f"{NAV}/event2.png"], 0.72): return "Event"
-                if has([f"{NAV}/shop0.png",    f"{NAV}/shop1.png",    f"{NAV}/super0.png",   f"{NAV}/super1.png"], 0.65): return "Shop"
+                if has([f"{NAV}/shop0.png",    f"{NAV}/shop1.png",    f"{NAV}/shop_highlighted.png", f"{NAV}/super0.png",   f"{NAV}/super1.png"], 0.65): return "Shop"
                 if has([f"{NAV}/risk0.png",    f"{NAV}/risk1.png",    f"{NAV}/risk2.png"],    0.65): return "Risky"
                 if has([f"{NAV}/focus0.png",   f"{NAV}/focus1.png",   f"{NAV}/focus2.png",   f"{NAV}/focus3.png"], 0.65): return "Focused"
                 if has([f"{NAV}/coin.png"],                                                    0.80): return "Normal"
