@@ -17,6 +17,7 @@ grace_dropdown_vars = []
 grace_upgrade_vars = []
 grace_expand_frame = None
 grace_selection_data = {}
+card_priority_vars = []
 
 def load_mirror_tab(parent, config, shared_vars, callbacks, ui_context, base_path, save_callback):
     """Load and render the Mirror Dungeon tab"""
@@ -209,6 +210,11 @@ def load_mirror_settings(parent, base_path, shared_vars, config, save_callback):
     grace_frame.pack(fill="x", pady=5)
     load_grace_selection_ui(grace_frame, base_path)
 
+    ctk.CTkLabel(parent, text="Card Priority", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
+    card_priority_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    card_priority_frame.pack(fill="x", pady=5)
+    load_card_priority_ui(card_priority_frame, base_path)
+
     ctk.CTkLabel(parent, text="Pack Configuration", font=UIStyle.SUBHEADER_FONT).pack(pady=(20, 5))
     pack_config_frame = ctk.CTkFrame(parent, fg_color="transparent")
     pack_config_frame.pack(fill="x", pady=5)
@@ -265,7 +271,7 @@ def load_grace_selection_ui(parent, base_path):
     if "upgrades" not in grace_selection_data:
         grace_selection_data["upgrades"] = {}
 
-    GRACE_NAMES = ["star of the beniggening", "cumulating starcloud", "interstellar travel", "star shower", "binary star shop", "moon star shop", "favor of the nebula", "starlight guidance", "chance comet", "perfected possibility"]
+    GRACE_NAMES = ["Star of the Beginning", "Cumulating Starcloud", "Interstellar Travel", "Star Shower", "Binary Star Shop", "Moon Star Shop", "Favor of the Nebula", "Starlight Guidance", "Chance Comet", "Perfected Possibility"]
     UPGRADE_OPTIONS = ["none", "left", "right"]
     UPGRADE_LABELS  = {"none": "-", "left": "+", "right": "++"}
 
@@ -374,6 +380,119 @@ def save_grace_selection(base_path):
     grace_selection_data["order"] = updated_order
     grace_selection_data["upgrades"] = updated_upgrades
     save_json_data(os.path.join(base_path, "config", "grace_selection.json"), grace_selection_data)
+
+CARD_TYPES = ["cost_gift", "cost", "gift", "resource"]
+CARD_DISPLAY = {"cost_gift": "Cost + Gift", "cost": "Cost", "gift": "Gift", "resource": "Resource"}
+CARD_DISPLAY_INV = {v: k for k, v in CARD_DISPLAY.items()}
+
+def load_card_priority_ui(parent, base_path):
+    global card_priority_vars
+
+    card_priority_path = os.path.join(base_path, "config", "card_priority.json")
+    saved = load_json_data(card_priority_path)
+    if not saved or not isinstance(saved, list):
+        saved = list(CARD_TYPES)
+    saved = [c for c in saved if c in CARD_TYPES]
+    for c in CARD_TYPES:
+        if c not in saved:
+            saved.append(c)
+
+    wrapper = ctk.CTkFrame(parent, fg_color="transparent")
+    wrapper.pack(fill="x", padx=10)
+
+    arrow_var = ctk.StringVar(value="+")
+
+    expand_frame = ctk.CTkFrame(wrapper, fg_color="transparent")
+
+    def toggle(btn=None):
+        if expand_frame.winfo_ismapped():
+            animate_collapse(expand_frame)
+            arrow_var.set("+")
+        else:
+            animate_expand(expand_frame, {"fill": "x", "pady": 5})
+            arrow_var.set("-")
+        if btn:
+            btn.configure(text=f"{arrow_var.get()} Card Priority")
+
+    btn = ctk.CTkButton(wrapper, text="+ Card Priority", command=lambda: toggle(btn),
+                        width=200, height=UIStyle.BUTTON_HEIGHT, font=UIStyle.SUBHEADER_FONT, anchor="w",
+                        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                        corner_radius=UIStyle.CORNER_RADIUS)
+    btn.pack(anchor="center")
+    expand_frame.pack_forget()
+
+    card_priority_vars = []
+    rows = []
+
+    def rebuild_rows():
+        for w in expand_frame.winfo_children():
+            w.destroy()
+        card_priority_vars.clear()
+        rows.clear()
+
+        for idx, card_key in enumerate(current_order):
+            row = ctk.CTkFrame(expand_frame, fg_color="transparent")
+            row.pack(pady=1, anchor="center")
+            rows.append(row)
+
+            ctk.CTkLabel(row, text=f"{idx+1}.", width=30, anchor="e", text_color="#b0b0b0").pack(side="left", padx=(0, 10))
+
+            var = ctk.StringVar(value=CARD_DISPLAY.get(card_key, card_key))
+            card_priority_vars.append(var)
+
+            ctk.CTkOptionMenu(row, variable=var,
+                              values=[CARD_DISPLAY[c] for c in CARD_TYPES],
+                              command=lambda choice, i=idx: on_change(choice, i),
+                              width=160,
+                              fg_color=UIStyle.OPTION_MENU_FG_COLOR,
+                              button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
+                              button_hover_color=UIStyle.OPTION_MENU_BUTTON_HOVER_COLOR,
+                              dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR,
+                              dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
+                              dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
+                              corner_radius=UIStyle.CORNER_RADIUS).pack(side="left")
+
+            up_btn = ctk.CTkButton(row, text="↑", width=28, height=24, font=UIStyle.SMALL_FONT,
+                                   fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                   corner_radius=UIStyle.CORNER_RADIUS,
+                                   command=lambda i=idx: move_row(i, -1))
+            up_btn.pack(side="left", padx=(6, 2))
+
+            dn_btn = ctk.CTkButton(row, text="↓", width=28, height=24, font=UIStyle.SMALL_FONT,
+                                   fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                                   corner_radius=UIStyle.CORNER_RADIUS,
+                                   command=lambda i=idx: move_row(i, 1))
+            dn_btn.pack(side="left", padx=(0, 2))
+
+    current_order = list(saved)
+
+    def on_change(choice, changed_idx):
+        new_key = CARD_DISPLAY_INV.get(choice, choice)
+        old_key = current_order[changed_idx]
+        if new_key == old_key:
+            return
+        if new_key in current_order:
+            swap_idx = current_order.index(new_key)
+            current_order[swap_idx] = old_key
+        current_order[changed_idx] = new_key
+        rebuild_rows()
+        save_card_priority(base_path, current_order)
+
+    def move_row(idx, direction):
+        target = idx + direction
+        if 0 <= target < len(current_order):
+            current_order[idx], current_order[target] = current_order[target], current_order[idx]
+            rebuild_rows()
+            save_card_priority(base_path, current_order)
+
+    rebuild_rows()
+
+def save_card_priority(base_path, order):
+    path = os.path.join(base_path, "config", "card_priority.json")
+    save_json_data(path, order)
 
 def load_floor_packs(base_path):
     floor_packs = {}

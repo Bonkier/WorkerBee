@@ -382,15 +382,15 @@ def mouse_move_click(x, y, log_click=True):
     time.sleep(random.uniform(0.04, 0.09))
     interception.mouse_up("left")
 
-def mouse_drag(x, y, seconds=1):
+def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
     interception.mouse_down("left")
-    time.sleep(random.uniform(0.03, 0.08))
+    time.sleep(hold)
     _bezier_move(real_x, real_y, duration=seconds * random.uniform(0.9, 1.1))
-    time.sleep(random.uniform(0.03, 0.08))
+    time.sleep(release_hold)
     interception.mouse_up("left")
 
 def key_press(Key, presses=1):
@@ -435,6 +435,8 @@ def get_template_reference_resolution(template_path):
         return REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P
     elif "/1366/" in template_path or "\\1366\\" in template_path:
         return 1366, 768
+    elif "mirror/navigation" in template_path or "mirror\\navigation" in template_path:
+        return REFERENCE_WIDTH_1080P, REFERENCE_HEIGHT_1080P
     else:
         return REFERENCE_WIDTH_1440P, REFERENCE_HEIGHT_1440P
 
