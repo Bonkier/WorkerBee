@@ -47,6 +47,7 @@ CONFIG_MERGE_FILES = [
     "config/status_selection.json",
     "config/fusion_exceptions.json",
     "config/grace_selection.json",
+    "config/card_priority.json",
     "config/exp_team_selection.json",
     "config/threads_team_selection.json",
     "config/image_thresholds.json"

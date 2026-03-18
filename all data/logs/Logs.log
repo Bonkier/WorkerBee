@@ -1,0 +1,6 @@
+18/03/2026 04:56:05 | common | INFO | detect_monitor_resolution:279 | Detected montior size: 1920x1080
+18/03/2026 04:56:05 | shared_vars | DEBUG | _calculate_coords:106 | Calculated scaled coordinates for grace_of_stars
+18/03/2026 04:56:05 | shared_vars | DEBUG | _calculate_coords:127 | Calculated scaled character positions for character_positions
+18/03/2026 04:56:05 | shared_vars | DEBUG | _calculate_coords:137 | Calculated scaled battle button coordinates for battle_buttons
+18/03/2026 04:56:05 | shared_vars | DEBUG | _calculate_coords:158 | Calculated scaled luxcavation coordinates for luxcavation_coords
+18/03/2026 04:56:05 | shared_vars | INFO | preload_all_coordinates:165 | Preloaded 4 coordinate sets

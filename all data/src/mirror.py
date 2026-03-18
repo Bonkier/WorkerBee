@@ -1062,10 +1062,15 @@ class Mirror:
 
     def encounter_reward_select(self):
         self.logger.info("Selecting encounter rewards")
-        encounter_reward = ["pictures/mirror/encounter_reward/cost_gift.png",
-                            "pictures/mirror/encounter_reward/cost.png",
-                            "pictures/mirror/encounter_reward/gift.png",
-                            "pictures/mirror/encounter_reward/resource.png"]
+        _valid = {"cost_gift", "cost", "gift", "resource"}
+        _priority = shared_vars.ConfigCache.get_config("card_priority")
+        if not _priority or not isinstance(_priority, list):
+            _priority = ["cost_gift", "cost", "gift", "resource"]
+        _priority = [c for c in _priority if c in _valid]
+        for c in ["cost_gift", "cost", "gift", "resource"]:
+            if c not in _priority:
+                _priority.append(c)
+        encounter_reward = [f"pictures/mirror/encounter_reward/{c}.png" for c in _priority]
         common.sleep(0.5)
 
         min_x = common.scale_x_1080p(360)
@@ -1140,11 +1145,13 @@ class Mirror:
             return "Miniboss" if has("gift", 0.70) else "Normal"
         return None
 
-    def _get_nav_connections(self, screenshot):
+    def _get_nav_connections(self, screenshot, x_adj=0, y_adj=0):
         import cv2
         NAV = "pictures/mirror/navigation"
-        rx1 = common.scale_x_1080p(850);  ry1 = common.scale_y_1080p(280)
-        rx2 = common.scale_x_1080p(1460); ry2 = common.scale_y_1080p(710)
+        rx1 = common.scale_x_1080p(850)  + x_adj; ry1 = common.scale_y_1080p(280) + y_adj
+        rx2 = common.scale_x_1080p(1460) + x_adj; ry2 = common.scale_y_1080p(710) + y_adj
+        rx1 = max(0, rx1); ry1 = max(0, ry1)
+        rx2 = min(screenshot.shape[1], rx2); ry2 = min(screenshot.shape[0], ry2)
         region = screenshot[ry1:ry2, rx1:rx2]
         if region.size == 0:
             return []
@@ -1165,7 +1172,7 @@ class Mirror:
                     src  = cv2.cvtColor(quad, cv2.COLOR_BGR2GRAY) if len(quad.shape) == 3 else quad.copy()
                     if tmpl is None or tmpl.shape[0] > src.shape[0] or tmpl.shape[1] > src.shape[1]:
                         continue
-                    if cv2.matchTemplate(src, tmpl, cv2.TM_CCOEFF_NORMED).max() >= 0.87:
+                    if cv2.matchTemplate(src, tmpl, cv2.TM_CCOEFF_NORMED).max() >= 0.80:
                         connections.append(((i % 2, (i // 2) + 1 - j), (i % 2 + 1, (i // 2) + j)))
                 except Exception:
                     pass
@@ -1184,8 +1191,10 @@ class Mirror:
                     adj.setdefault((i, j), [])
         for i in range(L - 1):
             for j in range(3):
-                if nodes[i][j] is not None and nodes[i + 1][j] is not None:
-                    adj.setdefault((i, j), []).append((i + 1, j))
+                if nodes[i][j] is not None:
+                    for nj in [j - 1, j, j + 1]:
+                        if 0 <= nj <= 2 and nodes[i + 1][nj] is not None:
+                            adj.setdefault((i, j), []).append((i + 1, nj))
         for (a, b), (c, d) in connections:
             if 0 <= a < L and 0 <= c < L and nodes[a][b] is not None and nodes[c][d] is not None:
                 if a + 1 == c:
@@ -1270,37 +1279,115 @@ class Mirror:
         if common.click_matching("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
             return
 
-        if self.aspect_ratio == "16:9" or self.res_x < 1920:
-            common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-            if found := common.match_image("pictures/mirror/general/danteh.png"):
-                x, y = found[0]
-                common.mouse_move(x, y)
-                _, offset_y = common.scale_offset_1440p(0, 100)
-                common.mouse_drag(x, y + offset_y)
-
-        node_y_1440p = [263, 689, 1115]
-        node_y_1440p = self.check_nodes(node_y_1440p)
-
-        node_locations = [common.scale_coordinates_1440p(1440, y) for y in node_y_1440p]
-
-        if not node_locations:
-            self.logger.error("No nodes detected, retrying")
-            common.error_screenshot()
-            self.navigation(_depth=_depth + 1)
-            return
-
-        self.logger.info(f"Found {len(node_locations)} node rows")
+        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+        dante_found = common.match_image("pictures/mirror/general/danteh.png") or \
+                      common.match_image("pictures/CustomAdded1080p/mirror/general/danteh_zoomed.png")
+        if dante_found:
+            dx, dy = dante_found[0]
+            common.mouse_move(dx, dy)
+            target_x, target_y = common.scale_coordinates_1080p(429, 480)
+            common.mouse_drag(target_x, target_y, seconds=0.4, hold=0.3, release_hold=0.3)
+            common.sleep(0.5)
+            common.mouse_move_click(*common.scale_coordinates_1080p(329, 710))
+            common.sleep(1.5)
 
         _COSTS = {"Event": 0, "Shop": 15, "Normal": 52, "Miniboss": 67,
                   "Boss": 60, "Focused": 77, "Risky": 87}
+
+        NAV = "pictures/mirror/navigation"
+        row_half = common.scale_y_1080p(120)
+
+        def _build_coords(x_adj=0, y_adj=0):
+            return (
+                [common.scale_y_1080p(238)+y_adj, common.scale_y_1080p(513)+y_adj, common.scale_y_1080p(788)+y_adj],
+                [
+                    (common.scale_x_1080p(624)+x_adj,  common.scale_x_1080p(906)+x_adj),
+                    (common.scale_x_1080p(1004)+x_adj, common.scale_x_1080p(1286)+x_adj),
+                    (common.scale_x_1080p(1384)+x_adj, common.scale_x_1080p(1666)+x_adj),
+                ],
+                common.scale_x_1080p(765) + x_adj,
+            )
+
+        def _scan_nodes(screenshot, x_adj=0, y_adj=0):
+            row_y_local, depth_x_local, _ = _build_coords(x_adj, y_adj)
+            arrow_x1 = common.scale_x_1080p(350) + x_adj
+            arrow_x2 = common.scale_x_1080p(906) + x_adj
+            ROW_ARROW = [f"{NAV}/_up.png", f"{NAV}/_forward.png", f"{NAV}/_down.png"]
+            rr = [
+                i for i, (arrow_img, row_y) in enumerate(zip(ROW_ARROW, row_y_local))
+                if common.match_image(arrow_img, 0.75, screenshot=screenshot,
+                                      x1=arrow_x1, x2=arrow_x2,
+                                      y1=row_y - row_half, y2=row_y + row_half,
+                                      quiet_failure=True)
+            ]
+            if not rr:
+                rr = [0, 1, 2]
+
+            def _classify_at(x_min, x_max, row_y, scr):
+                kw = dict(screenshot=scr, x1=x_min, x2=x_max,
+                          y1=row_y - row_half, y2=row_y + row_half, quiet_failure=True)
+                kw_gray = dict(**kw, grayscale=True)
+                def has(paths, t, gray=False):
+                    kws = kw_gray if gray else kw
+                    return any(common.match_image(p, t, **kws) for p in paths)
+                if has([f"{NAV}/boss_ark.png", f"{NAV}/boss0.png", f"{NAV}/boss1.png"], 0.65): return "Boss"
+                if has([f"{NAV}/event_node.png"], 0.65, gray=True) or \
+                   has([f"{NAV}/event0.png", f"{NAV}/event1.png", f"{NAV}/event2.png"], 0.72): return "Event"
+                if has([f"{NAV}/shop0.png",    f"{NAV}/shop1.png",    f"{NAV}/super0.png",   f"{NAV}/super1.png"], 0.65): return "Shop"
+                if has([f"{NAV}/risk0.png",    f"{NAV}/risk1.png",    f"{NAV}/risk2.png"],    0.65): return "Risky"
+                if has([f"{NAV}/focus0.png",   f"{NAV}/focus1.png",   f"{NAV}/focus2.png",   f"{NAV}/focus3.png"], 0.65): return "Focused"
+                if has([f"{NAV}/coin.png"],                                                    0.80): return "Normal"
+                return None
+
+            nd = [[None] * 3 for _ in range(3)]
+            for depth in range(3):
+                x_min, x_max = depth_x_local[depth]
+                rows = range(3)
+                for row in rows:
+                    nd[depth][row] = _classify_at(x_min, x_max, row_y_local[row], screenshot)
+            return nd, rr
+
         nav_screenshot = common.capture_screen()
-        classified = []
-        for loc in node_locations:
-            cx, cy = loc
-            node_type = self._classify_node_at(cx, cy, nav_screenshot)
-            classified.append((loc, node_type))
-            self.logger.info(f"Node at {loc}: {node_type}")
-        classified.sort(key=lambda item: _COSTS.get(item[1], 52))
+
+        x_adj = y_adj = 0
+        dante_in_nav = (
+            common.match_image("pictures/mirror/general/danteh.png", screenshot=nav_screenshot, quiet_failure=True) or
+            common.match_image("pictures/CustomAdded1080p/mirror/general/danteh_zoomed.png", screenshot=nav_screenshot, quiet_failure=True)
+        )
+        if dante_in_nav:
+            ax, ay = dante_in_nav[0]
+            x_adj = ax - common.scale_x_1080p(429)
+            y_adj = ay - common.scale_y_1080p(480)
+            if abs(x_adj) > 10 or abs(y_adj) > 10:
+                self.logger.info(f"Camera drift: Dante at ({ax},{ay}), adjusting coords by ({x_adj},{y_adj})")
+
+        ROW_Y, _, FALLBACK_X = _build_coords(x_adj, y_adj)
+
+        connections = self._get_nav_connections(nav_screenshot, x_adj, y_adj)
+        self.logger.info(f"Connections detected: {connections}")
+
+        nodes, reachable_rows = _scan_nodes(nav_screenshot, x_adj, y_adj)
+        self.logger.info(f"Node matrix: {nodes}")
+
+        if all(n is None for n in nodes[0]):
+            self.logger.warning("Depth-0 all None, retrying scan after 1s")
+            common.sleep(1.0)
+            nav_screenshot = common.capture_screen()
+            nodes, reachable_rows = _scan_nodes(nav_screenshot, x_adj, y_adj)
+            self.logger.info(f"Retry node matrix: {nodes}")
+
+        best_row, best_type = self._dfs_best_first_step(nodes, connections)
+        if best_row is not None:
+            classified = [((FALLBACK_X, ROW_Y[best_row]), best_type)]
+            self.logger.info(f"DFS best path: row {best_row} ({best_type})")
+        else:
+            classified = [
+                ((FALLBACK_X, ROW_Y[r]), nodes[0][r])
+                for r in reachable_rows
+                if nodes[0][r] is not None
+            ]
+            classified.sort(key=lambda item: _COSTS.get(item[1], 52))
+            self.logger.warning(f"DFS found no path, falling back to cost sort: {classified}")
 
         while not common.element_exist("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
             if time.time() - nav_start_time > 180:
@@ -1311,16 +1398,24 @@ class Mirror:
                 return
 
             nav_found = False
-            for (x, y), node_type in classified:
+            for (x, y), _ in classified:
                 common.mouse_move_click(x, y)
-                common.sleep(1)
+                common.sleep(1.5)
                 if common.element_exist("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
                     nav_found = True
                     break
 
             if not nav_found:
-                self.navigation(_depth=_depth + 1)
-                return
+                nav_screenshot = common.capture_screen()
+                renodes, reachable_rows = _scan_nodes(nav_screenshot, x_adj, y_adj)
+                re_row, re_type = self._dfs_best_first_step(renodes, connections)
+                if re_row is not None:
+                    classified = [((FALLBACK_X, ROW_Y[re_row]), re_type)]
+                    self.logger.info(f"Re-scan DFS: row {re_row} ({re_type})")
+                else:
+                    self.logger.warning("Re-scan found no path, recursing")
+                    self.navigation(_depth=_depth + 1)
+                    return
 
         common.sleep(0.4)
         for _ in range(3):

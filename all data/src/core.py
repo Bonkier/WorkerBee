@@ -276,9 +276,16 @@ def battle():
 
                 winrate_visible_start = None
                 current_time = time.time()
-                if winrate_invisible_start is None:
-                    winrate_invisible_start = current_time
 
+                _still_in_battle = (
+                    common.element_exist("pictures/battle/gear.png", screenshot=screenshot, quiet_failure=True) or
+                    common.element_exist("pictures/battle/gear2.png", screenshot=screenshot, quiet_failure=True) or
+                    common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", screenshot=screenshot, quiet_failure=True)
+                )
+                if _still_in_battle:
+                    winrate_invisible_start = None
+                elif winrate_invisible_start is None:
+                    winrate_invisible_start = current_time
                 elif current_time - winrate_invisible_start > winrate_invisible_timeout:
                     winrate_invisible_start = None
                     logger.debug(f"No winrate for {winrate_invisible_timeout} seconds")

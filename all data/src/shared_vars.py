@@ -67,7 +67,7 @@ class ConfigCache:
             "exp_team_selection", "threads_team_selection",
             "gui_config", "pack_priority", "delayed_pack_priority",
             "pack_exceptions", "delayed_pack_exceptions", "fusion_exceptions",
-            "grace_selection"
+            "grace_selection", "card_priority"
         ]
         with _cache_lock:
             for config_name in config_files:
@@ -91,8 +91,8 @@ class ScaledCoordinates:
         
         if coord_set_name == "grace_of_stars":
             GRACE_NAMES_ORDERED = [
-                "star of the beniggening", "cumulating starcloud", "interstellar travel", "star shower", "binary star shop",
-                "moon star shop", "favor of the nebula", "starlight guidance", "chance comet", "perfected possibility"
+                "Star of the Beginning", "Cumulating Starcloud", "Interstellar Travel", "Star Shower", "Binary Star Shop",
+                "Moon Star Shop", "Favor of the Nebula", "Starlight Guidance", "Chance Comet", "Perfected Possibility"
             ]
             scaled_coords = {}
             for i, name in enumerate(GRACE_NAMES_ORDERED):
