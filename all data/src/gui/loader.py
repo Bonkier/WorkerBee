@@ -30,7 +30,7 @@ def main():
     root.configure(bg=BORDER)
 
     if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
+        base_dir = sys._MEIPASS  # assets are bundled in _internal/
     else:
         base_dir = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
