@@ -1406,6 +1406,15 @@ class Mirror:
                     break
 
             if not nav_found:
+                self.logger.warning("Nav click failed, trying blind click fallback")
+                for row_y in ROW_Y:
+                    common.mouse_move_click(FALLBACK_X, row_y)
+                    common.sleep(1.5)
+                    if common.element_exist("pictures/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
+                        nav_found = True
+                        break
+
+            if not nav_found:
                 nav_screenshot = common.capture_screen()
                 renodes, reachable_rows = _scan_nodes(nav_screenshot, x_adj, y_adj)
                 re_row, re_type = self._dfs_best_first_step(renodes, connections)
