@@ -733,8 +733,8 @@ class Mirror:
                         ip_kept = common.non_max_suppression_fast(ip_boxes)
 
                         actual_h, actual_w = screenshot.shape[:2]
-                        name_y1 = round(675 * actual_h / 1080)
-                        name_y2 = round(715 * actual_h / 1080)
+                        name_y1 = round(660 * actual_h / 1080)
+                        name_y2 = round(720 * actual_h / 1080)
                         click_y_offset = round(150 * actual_h / 1080)
                         half_ocr_w = round(200 * actual_w / 1920)
 
@@ -744,15 +744,20 @@ class Mirror:
 
                         known_names = [f[:-4] for f in os.listdir(floor_dir) if f.endswith(".png")]
 
-                        for b in ip_kept:
-                            ip_cx = int((b[0] + b[2]) / 2)
+                        sorted_ip = sorted(ip_kept, key=lambda b: int((b[0] + b[2]) / 2))
+                        ip_cxs = [int((b[0] + b[2]) / 2) for b in sorted_ip]
+
+                        for idx, b in enumerate(sorted_ip):
+                            ip_cx = ip_cxs[idx]
                             ip_cy = int((b[1] + b[3]) / 2)
 
                             if any(abs(ip_cx - kx) < 80 for kx, ky in best_per_coord):
                                 continue
 
-                            sx1 = max(0, ip_cx - half_ocr_w)
-                            sx2 = min(actual_w, ip_cx + half_ocr_w)
+                            left_mid  = (ip_cxs[idx - 1] + ip_cx) // 2 if idx > 0 else 0
+                            right_mid = (ip_cx + ip_cxs[idx + 1]) // 2 if idx < len(ip_cxs) - 1 else actual_w
+                            sx1 = max(left_mid, ip_cx - half_ocr_w)
+                            sx2 = min(right_mid, ip_cx + half_ocr_w)
                             strip = screenshot[name_y1:name_y2, sx1:sx2]
                             ocr_texts = self._ocr_reader.readtext(strip, detail=0)
                             raw_text = " ".join(ocr_texts).strip()
