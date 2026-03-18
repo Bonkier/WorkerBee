@@ -11,7 +11,7 @@ from core import (skill_check, battle_check, battle, check_loading,
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        return sys._MEIPASS
     else:
         folder_path = os.path.dirname(os.path.abspath(__file__))
         return (os.path.dirname(folder_path) if os.path.basename(folder_path) == 'src' 

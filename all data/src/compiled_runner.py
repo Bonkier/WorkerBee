@@ -72,11 +72,8 @@ logger = None
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-        return base_path
-    else:
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return base_path
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def setup_paths_and_imports():
     BASE_PATH = get_base_path()

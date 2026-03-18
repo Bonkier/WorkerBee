@@ -7,7 +7,7 @@ import threading
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        return sys._MEIPASS
     else:
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

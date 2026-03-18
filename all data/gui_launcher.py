@@ -10,6 +10,18 @@ import time
 import traceback
 import multiprocessing
 
+multiprocessing.freeze_support()
+
+if "--loader" in sys.argv:
+    try:
+        if getattr(sys, 'frozen', False):
+            sys.path.insert(0, os.path.join(sys._MEIPASS, 'src'))
+        from src.gui.loader import main as _loader_main
+        _loader_main()
+    except Exception:
+        pass
+    sys.exit(0)
+
 def get_log_dir():
     if getattr(sys, 'frozen', False):
         base = os.path.dirname(sys.executable)
@@ -37,9 +49,12 @@ if __name__ == "__main__":
         if platform.system() == "Windows":
             creation_flags = subprocess.CREATE_NO_WINDOW
 
-        loader_path = os.path.join(base_dir, "src", "gui", "loader.py")
-        if os.path.exists(loader_path):
-             splash_process = subprocess.Popen([sys.executable, loader_path], creationflags=creation_flags)
+        if getattr(sys, 'frozen', False):
+            splash_process = subprocess.Popen([sys.executable, '--loader'], creationflags=creation_flags)
+        else:
+            loader_path = os.path.join(base_dir, "src", "gui", "loader.py")
+            if os.path.exists(loader_path):
+                splash_process = subprocess.Popen([sys.executable, loader_path], creationflags=creation_flags)
     except Exception as e:
         log_debug(f"Failed to launch splash screen: {e}")
         pass
@@ -450,22 +465,46 @@ def perform_cleanup():
 
 def fade_in(window, duration=0.25, steps=15, on_finish=None):
     """Fade in the window"""
+    _finished = [False]
+
+    def _call_finish():
+        if not _finished[0]:
+            _finished[0] = True
+            if on_finish:
+                try:
+                    on_finish()
+                except Exception:
+                    pass
+
     try:
         step_time = int((duration / steps) * 1000)
         step_val = 1.0 / steps
-        
+
         def _step(current):
-            if current >= 1.0:
-                window.attributes('-alpha', 1.0)
-                if on_finish: on_finish()
-                return
-            window.attributes('-alpha', current)
-            window.after(step_time, lambda: _step(current + step_val))
-            
+            try:
+                if current >= 1.0:
+                    window.attributes('-alpha', 1.0)
+                    _call_finish()
+                    return
+                window.attributes('-alpha', current)
+                window.after(step_time, lambda: _step(current + step_val))
+            except Exception:
+                try:
+                    window.attributes('-alpha', 1.0)
+                except Exception:
+                    pass
+                _call_finish()
+
         _step(0.0)
+        # Fallback: guarantee on_finish is called even if after-callbacks fail
+        fallback_ms = int(duration * 1000) + 500
+        window.after(fallback_ms, _call_finish)
     except Exception:
-        window.attributes('-alpha', 1.0)
-        if on_finish: on_finish()
+        try:
+            window.attributes('-alpha', 1.0)
+        except Exception:
+            pass
+        _call_finish()
 
 def fade_out(window, duration=0.25, steps=15, callback=None):
     """Fade out the window"""

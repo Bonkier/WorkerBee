@@ -72,19 +72,21 @@ class Updater:
 
         if getattr(sys, 'frozen', False):
             self.base_path = os.path.dirname(sys.executable)
+            self.parent_dir = self.base_path
+            self.all_data_dir = sys._MEIPASS
         else:
             script_path = os.path.abspath(__file__)
             self.base_path = os.path.dirname(script_path)
 
-        if os.path.basename(self.base_path) == "src":
-            self.all_data_dir = os.path.dirname(self.base_path)
-            self.parent_dir = os.path.dirname(self.all_data_dir)
-        elif os.path.basename(self.base_path) == "all data":
-            self.all_data_dir = self.base_path
-            self.parent_dir = os.path.dirname(self.all_data_dir)
-        else:
-            self.parent_dir = self.base_path
-            self.all_data_dir = os.path.join(self.parent_dir, "all data")
+            if os.path.basename(self.base_path) == "src":
+                self.all_data_dir = os.path.dirname(self.base_path)
+                self.parent_dir = os.path.dirname(self.all_data_dir)
+            elif os.path.basename(self.base_path) == "all data":
+                self.all_data_dir = self.base_path
+                self.parent_dir = os.path.dirname(self.all_data_dir)
+            else:
+                self.parent_dir = self.base_path
+                self.all_data_dir = os.path.join(self.parent_dir, "all data")
 
         self.version_file_path = os.path.join(self.all_data_dir, current_version_file)
 
@@ -159,14 +161,22 @@ class Updater:
             with urllib.request.urlopen(req, context=ssl_context) as response:
                 if response.getcode() == 200:
                     release_data = json.loads(response.read().decode())
-                    release_info = (release_data['tag_name'], release_data['zipball_url'])
+                    asset_url = next(
+                        (a['browser_download_url'] for a in release_data.get('assets', []) if a['name'].endswith('.zip')),
+                        None
+                    )
+                    release_info = (release_data['tag_name'], asset_url or release_data['zipball_url'])
         except Exception as e:
             pass
+
+        if getattr(sys, 'frozen', False):
+            if release_info:
+                return release_info
+            return None, None
 
         if ver_json_info and release_info:
             v_json = self.parse_version(ver_json_info[0])
             v_rel = self.parse_version(release_info[0])
-            
             if v_rel > v_json:
                 return release_info
             else:
@@ -420,22 +430,41 @@ class Updater:
 
             repo_dir = None
 
-            if "all data" in os.listdir(self.temp_path) and os.path.isdir(os.path.join(self.temp_path, "all data")):
-                repo_dir = self.temp_path
+            if getattr(sys, 'frozen', False):
+                # Compiled release: zip contains WorkerBee.exe + _internal/ directly
+                contents = os.listdir(self.temp_path)
+                has_exe = any(f.endswith('.exe') for f in contents)
+                has_internal = '_internal' in contents
+                subdirs = [d for d in contents if os.path.isdir(os.path.join(self.temp_path, d)) and d not in ('extracted',)]
+                if has_exe or has_internal:
+                    repo_dir = self.temp_path
+                elif len(subdirs) == 1:
+                    candidate = os.path.join(self.temp_path, subdirs[0])
+                    candidate_contents = os.listdir(candidate)
+                    if any(f.endswith('.exe') for f in candidate_contents) or '_internal' in candidate_contents:
+                        repo_dir = candidate
+                if not repo_dir:
+                    logger.error("Invalid update structure: no exe or _internal found in update")
+                    return False
             else:
-                subdirs = [d for d in os.listdir(self.temp_path) if os.path.isdir(os.path.join(self.temp_path, d)) and d != "extracted"]
-                for d in subdirs:
-                    if "all data" in os.listdir(os.path.join(self.temp_path, d)):
-                        repo_dir = os.path.join(self.temp_path, d)
-                        break
-            
-            if not repo_dir:
-                logger.error("Invalid update structure: 'all data' folder not found in update")
-                return False
+                if "all data" in os.listdir(self.temp_path) and os.path.isdir(os.path.join(self.temp_path, "all data")):
+                    repo_dir = self.temp_path
+                else:
+                    subdirs = [d for d in os.listdir(self.temp_path) if os.path.isdir(os.path.join(self.temp_path, d)) and d != "extracted"]
+                    for d in subdirs:
+                        if "all data" in os.listdir(os.path.join(self.temp_path, d)):
+                            repo_dir = os.path.join(self.temp_path, d)
+                            break
+                if not repo_dir:
+                    logger.error("Invalid update structure: 'all data' folder not found in update")
+                    return False
             
             logger.info(f"Found repository directory: {repo_dir}")
 
-            new_version_path = os.path.join(repo_dir, "all data", "version.json")
+            if getattr(sys, 'frozen', False):
+                new_version_path = os.path.join(repo_dir, "_internal", "version.json")
+            else:
+                new_version_path = os.path.join(repo_dir, "all data", "version.json")
             if os.path.exists(new_version_path):
                 try:
                     with open(new_version_path, 'r') as f:

@@ -55,6 +55,7 @@ def load_settings_tab(parent, config, shared_vars, save_callback, base_path, roo
     _setup_automation_settings(scroll_frame, shared_vars, save_callback)
     _setup_shortcuts(scroll_frame, config, save_callback, root_ref, update_shortcuts_callback)
     _setup_theme(scroll_frame, config, save_callback, base_path, root_ref, restart_callback)
+    _setup_driver_manager(scroll_frame, base_path)
     _setup_danger_zone(scroll_frame, base_path)
 
 def _setup_profiles(parent, base_path, save_callback):
@@ -723,6 +724,96 @@ def _setup_theme(parent, config, save_callback, base_path, root, restart_callbac
                       dropdown_fg_color=UIStyle.DROPDOWN_FG_COLOR, dropdown_hover_color=UIStyle.DROPDOWN_HOVER_COLOR,
                       dropdown_text_color=UIStyle.DROPDOWN_TEXT_COLOR,
                       corner_radius=UIStyle.CORNER_RADIUS).pack(pady=(0, 15))
+
+def _setup_driver_manager(parent, base_path):
+    import threading
+    import ctypes as _ctypes
+
+    card = CardFrame(parent)
+    card.pack(fill="x", pady=10, padx=10)
+    ctk.CTkLabel(card, text="Interception Driver", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
+    ctk.CTkLabel(
+        card,
+        text="Required for mouse/keyboard input. A PC restart is needed after install or uninstall.",
+        font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500
+    ).pack(pady=(0, 10), padx=20)
+
+    status_var = ctk.StringVar(value="Checking...")
+    status_label = ctk.CTkLabel(card, textvariable=status_var, font=UIStyle.SMALL_FONT)
+    status_label.pack(pady=(0, 5))
+
+    def _driver_installed():
+        drivers_dir = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers")
+        if os.path.exists(os.path.join(drivers_dir, "keyboard.sys")) and \
+           os.path.exists(os.path.join(drivers_dir, "mouse.sys")):
+            return True
+        try:
+            import winreg
+            winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Services\keyboard"
+            ).Close()
+            return True
+        except Exception:
+            pass
+        return False
+
+    def _refresh():
+        installed = _driver_installed()
+        if installed:
+            status_var.set("Status: Installed")
+            status_label.configure(text_color="#55cc88")
+        else:
+            status_var.set("Status: Not installed")
+            status_label.configure(text_color="#ff8855")
+
+    def _run_action(action):
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+        else:
+            exe_dir = base_path
+        exe = os.path.join(exe_dir, "drivers", "install-interception.exe")
+        if not os.path.exists(exe):
+            messagebox.showerror("Driver", f"Installer not found:\n{exe}\n\nEnsure the drivers folder is present.")
+            return
+        try:
+            ret = _ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, f"/{action}", None, 1)
+            if ret > 32:
+                messagebox.showinfo("Driver", f"Driver {action} complete.\n\nRestart your PC for changes to take effect.")
+                card.after(1500, _refresh)
+            else:
+                messagebox.showerror("Driver", f"Installer returned error {ret}. Try running WorkerBee as administrator.")
+        except Exception as e:
+            messagebox.showerror("Driver", f"Failed: {e}")
+
+    btn_row = ctk.CTkFrame(card, fg_color="transparent")
+    btn_row.pack(pady=(0, 15))
+
+    ctk.CTkButton(
+        btn_row, text="Install Driver", width=140,
+        command=lambda: _run_action("install"),
+        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS
+    ).pack(side="left", padx=5)
+
+    ctk.CTkButton(
+        btn_row, text="Uninstall Driver", width=140,
+        command=lambda: _run_action("uninstall"),
+        fg_color="#c42b1c", hover_color="#8f1f14",
+        corner_radius=UIStyle.CORNER_RADIUS
+    ).pack(side="left", padx=5)
+
+    ctk.CTkButton(
+        btn_row, text="Refresh", width=80,
+        command=_refresh,
+        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS
+    ).pack(side="left", padx=5)
+
+    threading.Thread(target=lambda: card.after(100, _refresh), daemon=True).start()
+
 
 def _setup_danger_zone(parent, base_path):
     card = CardFrame(parent)

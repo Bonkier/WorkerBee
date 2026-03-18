@@ -170,7 +170,7 @@ _template_cache = {}
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        return sys._MEIPASS
     else:
         folder_path = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(folder_path) == 'src':
