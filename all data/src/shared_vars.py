@@ -33,7 +33,10 @@ class ConfigCache:
     @staticmethod
     def _load_config(config_name):
         try:
+            import sys as _sys
             config_path = os.path.join(BASE_PATH, "config", f"{config_name}.json")
+            if not os.path.exists(config_path) and getattr(_sys, 'frozen', False):
+                config_path = os.path.join(_sys._MEIPASS, "config", f"{config_name}.json")
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:
                     _config_cache[config_name] = json.load(f)
