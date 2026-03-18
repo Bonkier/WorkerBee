@@ -540,6 +540,14 @@ class Mirror:
         excepted_visible_count = 0
 
         all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
+        priority_names = set(floor_priorities.keys()) if floor_priorities else set()
+        excepted_names  = set(exception_packs) if exception_packs else set()
+        def _pack_sort_key(fname):
+            n = fname[:-4]
+            if n in priority_names: return 0
+            if n in excepted_names:  return 2
+            return 1
+        all_packs.sort(key=_pack_sort_key)
 
         for pack_file in all_packs:
             pack_name = pack_file.replace(".png", "")
@@ -606,7 +614,7 @@ class Mirror:
                         self.logger.debug(f"Excepted pack not visible (score={best_score:.4f}), skipping: {pack_name}")
                     continue
                 coord_scores = (_extract_matches_scored(g_res, 0.65 + threshold_adj, g_tw, g_th) or
-                                _extract_matches_scored(g_res, 0.55 + threshold_adj, g_tw, g_th))
+                                _extract_matches_scored(g_res, 0.50 + threshold_adj, g_tw, g_th))
             elif is_excepted:
                 self.logger.debug(f"Excepted pack skipped (template too large for crop): {pack_name}")
                 continue
@@ -696,6 +704,78 @@ class Mirror:
                             best_per_coord[coord] = (inliers / 200.0, pack_name)
             except Exception as e:
                 self.logger.warning(f"ORB secondary scan failed: {e}")
+
+        if len(best_per_coord) < 5:
+            self.logger.debug(f"Template+ORB found {len(best_per_coord)} packs. Running OCR fallback.")
+            try:
+                import easyocr
+                from rapidfuzz import process, fuzz
+
+                inpack_path = common.resource_path("pictures/CustomAdded1080p/mirror/packs/inpack.png")
+                inpack_tmpl = None
+                try:
+                    with open(inpack_path, 'rb') as _f:
+                        raw = np.frombuffer(_f.read(), dtype=np.uint8)
+                    inpack_tmpl = cv2.imdecode(raw, cv2.IMREAD_GRAYSCALE)
+                except Exception:
+                    pass
+
+                if inpack_tmpl is not None:
+                    gray_ss = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY) if len(screenshot.shape) == 3 else screenshot
+                    res_ip = cv2.matchTemplate(gray_ss, inpack_tmpl, cv2.TM_CCOEFF_NORMED)
+                    ip_locs = np.where(res_ip >= 0.75)
+                    if ip_locs[0].size:
+                        ih, iw = inpack_tmpl.shape[:2]
+                        ip_boxes = np.array([
+                            [int(x), int(y), int(x + iw), int(y + ih)]
+                            for x, y in zip(ip_locs[1], ip_locs[0])
+                        ])
+                        ip_kept = common.non_max_suppression_fast(ip_boxes)
+
+                        actual_h, actual_w = screenshot.shape[:2]
+                        name_y1 = round(675 * actual_h / 1080)
+                        name_y2 = round(715 * actual_h / 1080)
+                        click_y_offset = round(150 * actual_h / 1080)
+                        half_ocr_w = round(200 * actual_w / 1920)
+
+                        if not hasattr(self, '_ocr_reader') or self._ocr_reader is None:
+                            self.logger.info("Initializing OCR reader (first use)")
+                            self._ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+
+                        known_names = [f[:-4] for f in os.listdir(floor_dir) if f.endswith(".png")]
+
+                        for b in ip_kept:
+                            ip_cx = int((b[0] + b[2]) / 2)
+                            ip_cy = int((b[1] + b[3]) / 2)
+
+                            if any(abs(ip_cx - kx) < 80 for kx, ky in best_per_coord):
+                                continue
+
+                            sx1 = max(0, ip_cx - half_ocr_w)
+                            sx2 = min(actual_w, ip_cx + half_ocr_w)
+                            strip = screenshot[name_y1:name_y2, sx1:sx2]
+                            ocr_texts = self._ocr_reader.readtext(strip, detail=0)
+                            raw_text = " ".join(ocr_texts).strip()
+
+                            click_cy = ip_cy + click_y_offset
+                            coord = (ip_cx, click_cy)
+                            if raw_text and known_names:
+                                match = process.extractOne(raw_text, known_names, scorer=fuzz.partial_ratio)
+                                if match and match[1] >= 70:
+                                    pack_name = match[0]
+                                    if pack_name not in exception_packs:
+                                        best_per_coord[coord] = (match[1] / 100.0, pack_name)
+                                        self.logger.info(f"OCR detected: '{pack_name}' at x={ip_cx} ('{raw_text}', {match[1]:.0f}%)")
+                                    else:
+                                        self.logger.debug(f"OCR detected excepted pack '{pack_name}' at x={ip_cx}, skipping")
+                                else:
+                                    best_per_coord[coord] = (0.1, "unknown_pack")
+                                    self.logger.info(f"OCR no match at x={ip_cx}: '{raw_text}'")
+                            else:
+                                best_per_coord[coord] = (0.1, "unknown_pack")
+                                self.logger.info(f"OCR empty at x={ip_cx}")
+            except Exception as e:
+                self.logger.warning(f"OCR fallback failed: {e}")
 
         selectable_packs_pos = []
         pack_identities = {}
@@ -1665,12 +1745,10 @@ class Mirror:
         self.logger.info("Starting gift fusion")
 
         def exit_fusion():
-            if common.element_exist("pictures/mirror/restshop/close.png"):
-                common.click_matching("pictures/mirror/restshop/close.png", recursive=False)
-            else:
+            if not common.click_matching("pictures/mirror/restshop/close.png", recursive=False):
                 common.sleep(1)
-                common.click_matching("pictures/mirror/restshop/close.png", recursive=False)
-
+                if not common.click_matching("pictures/mirror/restshop/close.png", recursive=False):
+                    common.key_press("esc")
             common.sleep(0.5)
 
         statuses = ["burn","bleed","tremor","rupture","sinking","poise","charge","slash","pierce","blunt"] 
@@ -1696,8 +1774,9 @@ class Mirror:
             return
 
         start_time = time.time()
-        duration = 3  
-        while not common.element_exist("pictures/mirror/restshop/fusion/fuse_menu.png"):
+        duration = 5
+        while not (common.element_exist("pictures/mirror/restshop/fusion/fuse_menu.png") or
+                   common.element_exist("pictures/mirror/restshop/fusion/fuse_b.png")):
             if time.time() > (start_time + duration):
                 logger.info(f"No fuse menu appeared after {duration}s. Aborting.")
                 exit_fusion()
@@ -1817,7 +1896,12 @@ class Mirror:
         if not shared_vars.skip_ego_fusion:
             self.logger.info("Attempting fusion")
             self.fuse_gifts()
-        
+            if (common.element_exist("pictures/mirror/restshop/fusion/fuse_menu.png", quiet_failure=True) or
+                    common.element_exist("pictures/mirror/restshop/fusion/fuse_b.png", quiet_failure=True)):
+                self.logger.warning("Fuse dialog still open after fusion, closing")
+                common.key_press("esc")
+                common.sleep(1)
+
         if common.element_exist("pictures/mirror/restshop/small_not.png"):
             leave_restshop()
             return
