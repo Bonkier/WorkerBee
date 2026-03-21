@@ -868,19 +868,45 @@ if __name__ == "__main__":
                     logger.warning("No internet connection detected. Running in offline mode.")
                     messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
                 else:
-                    if config['Settings'].get('auto_update', True):
-                        try:
-                            import updater
-                            def update_cb(success, msg):
-                                if success:
-                                    logger.info(f"Auto-update: {msg}")
-                                    perform_cleanup()
-                                    os._exit(0)
-                                else:
-                                    logger.info(f"Auto-update check: {msg}")
-                            updater.auto_update("Bonkier", "WorkerBee", create_backup=False, callback=update_cb, pre_exit_callback=perform_cleanup)
-                        except Exception as e:
-                            logger.error(f"Failed to initialize auto-updater: {e}")
+                    if not config['Settings'].get('dont_ask_updates', False):
+                        def _check_update_bg():
+                            try:
+                                import updater as _upd
+                                upd_instance = _upd.Updater("Bonkier", "WorkerBee", pre_exit_callback=perform_cleanup)
+                                update_available, latest_version, download_url = upd_instance.check_for_updates()
+                                if update_available:
+                                    def _show_dialog():
+                                        import customtkinter as _ctk
+                                        dialog = _ctk.CTkToplevel(root)
+                                        dialog.title("Update Available")
+                                        dialog.geometry("380x160")
+                                        dialog.grab_set()
+                                        _ctk.CTkLabel(dialog, text=f"Update available: {latest_version}\nWould you like to update now?", font=("Segoe UI", 13)).pack(pady=18)
+                                        btn_frame = _ctk.CTkFrame(dialog, fg_color="transparent")
+                                        btn_frame.pack(pady=4)
+                                        def _do_update():
+                                            dialog.destroy()
+                                            def update_cb(success, msg):
+                                                if success:
+                                                    logger.info(f"Update applied: {msg}")
+                                                    perform_cleanup()
+                                                    os._exit(0)
+                                                else:
+                                                    logger.info(f"Update failed: {msg}")
+                                            upd_instance.check_and_update_async(update_cb, create_backup=False)
+                                        def _skip():
+                                            dialog.destroy()
+                                        def _dont_ask():
+                                            config.setdefault('Settings', {})['dont_ask_updates'] = True
+                                            save_config(config)
+                                            dialog.destroy()
+                                        _ctk.CTkButton(btn_frame, text="Update", width=100, command=_do_update).grid(row=0, column=0, padx=6)
+                                        _ctk.CTkButton(btn_frame, text="Skip", width=100, command=_skip).grid(row=0, column=1, padx=6)
+                                        _ctk.CTkButton(btn_frame, text="Don't ask again", width=130, command=_dont_ask).grid(row=0, column=2, padx=6)
+                                    root.after(0, _show_dialog)
+                            except Exception as e:
+                                logger.error(f"Update check failed: {e}")
+                        threading.Thread(target=_check_update_bg, daemon=True).start()
                 
                 run_scheduler_check()
                 

@@ -26,5 +26,6 @@ class SharedVars:
         self.threads_runs = Value('i', 3)
         self.threads_difficulty = Value('i', 4)
         self.stop_after_current_run = Value('b', False)
+        self.convert_enkephalin_to_modules = Value('b', True)
         self.enable_animations = Value('b', True)
         self.audio_volume = Value('f', 0.5)

@@ -424,6 +424,12 @@ def _setup_misc_settings(parent, shared_vars, save_callback, config, base_path):
         save_callback()
     ctk.CTkCheckBox(frame, text="Auto Update on Startup", variable=auto_upd, command=toggle_upd).pack(anchor="w", pady=5)
 
+    dont_ask_var = ctk.BooleanVar(value=config.get("Settings", {}).get("dont_ask_updates", False))
+    def toggle_dont_ask():
+        config["Settings"]["dont_ask_updates"] = dont_ask_var.get()
+        save_callback()
+    ctk.CTkCheckBox(frame, text="Don't ask about updates", variable=dont_ask_var, command=toggle_dont_ask).pack(anchor="w", pady=5)
+
     row = ctk.CTkFrame(frame, fg_color="transparent")
     row.pack(fill="x", pady=5)
     ctk.CTkLabel(row, text="Reconnection Delay (s):", width=200, anchor="w").pack(side="left")

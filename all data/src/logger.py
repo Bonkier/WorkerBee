@@ -4,6 +4,7 @@ import queue
 import logging
 import threading
 import multiprocessing
+from logging.handlers import RotatingFileHandler
 from typing import Optional, Dict, Any
 
 _log_queue: Optional[queue.Queue] = None
@@ -33,7 +34,7 @@ class NoMillisecondsFormatter(logging.Formatter):
         return formatted
 
 def _log_worker_process(log_queue: multiprocessing.Queue, log_filename: str):
-    handler = logging.FileHandler(log_filename, encoding='utf-8')
+    handler = RotatingFileHandler(log_filename, maxBytes=1*1024*1024, backupCount=1, encoding='utf-8')
     formatter = NoMillisecondsFormatter(
         fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
         datefmt='%d/%m/%Y %H:%M:%S'
