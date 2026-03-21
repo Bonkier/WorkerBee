@@ -53,13 +53,33 @@ class Mirror:
         if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True, screenshot=screenshot):
             return ""
 
-        threshold = 0.73
-        best_floor = None
-        best_score = 0.0
-
         screen = screenshot
         if len(screen.shape) == 2:
             screen = cv2.cvtColor(screen, cv2.COLOR_GRAY2BGR)
+
+        try:
+            import re
+            import easyocr
+            import numpy as np
+            h = screen.shape[0]
+            y1, y2 = round(130 * h / 1080), round(200 * h / 1080)
+            title_strip = screen[y1:y2, :]
+            ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+            texts = ocr_reader.readtext(title_strip, detail=0)
+            combined = " ".join(texts)
+            m = re.search(r'FLOOR\s+(\d)', combined, re.IGNORECASE)
+            if m:
+                floor_num = int(m.group(1))
+                if 1 <= floor_num <= 5:
+                    logger.info(f"OCR floor detected: floor{floor_num} (from '{combined}')")
+                    return f"floor{floor_num}"
+            logger.warning(f"OCR floor detection failed (text='{combined}'), trying visual fallback")
+        except Exception as e:
+            logger.warning(f"OCR floor error: {e}, trying visual fallback")
+
+        threshold = 0.73
+        best_floor = None
+        best_score = 0.0
 
         for i in range(1, 6):
             floor_name = f"floor{i}"
@@ -93,7 +113,7 @@ class Mirror:
             res = cv2.matchTemplate(screen, scaled, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, _ = cv2.minMaxLoc(res)
 
-            logger.debug(f"Floor {i} confidence: {max_val:.4f}")
+            logger.debug(f"Floor {i} visual confidence: {max_val:.4f}")
 
             if max_val >= threshold and max_val > best_score:
                 best_score = max_val
@@ -102,9 +122,9 @@ class Mirror:
         if best_floor:
             logger.info(f"Visual floor detected: {best_floor} (confidence: {best_score:.4f})")
             return best_floor
-        else:
-            logger.warning(f"Could not detect current floor visually (best score below threshold {threshold})")
-            return ""
+
+        logger.warning("Both OCR and visual floor detection failed")
+        return ""
 
     def is_pack_screen(self):
         if common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True):
@@ -113,7 +133,7 @@ class Mirror:
             return False
         if common.element_exist("pictures/mirror/restshop/super_shop.png", quiet_failure=True):
             return False
-        if common.element_exist("pictures/CustomAdded1080p/mirror/general/enhancement_tier.png", quiet_failure=True):
+        if common.element_exist("pictures/CustomAdded1080p/mirror/general/enhance_ego_gift_page.png", quiet_failure=True):
             return False
 
         threshold = 0.82
@@ -303,6 +323,14 @@ class Mirror:
         elif common.element_exist("pictures/mirror/general/encounter_reward.png"):
             self.logger.info("Encounter reward detected")
             self.encounter_reward_select()
+
+        elif common.element_exist("pictures/CustomAdded1080p/mirror/general/enhance_ego_gift_page.png", quiet_failure=True):
+            self.logger.info("Enhancement screen detected")
+            import mirror_utils
+            status = mirror_utils.get_status_gift_template(self.status)
+            if status is None:
+                status = "pictures/mirror/restshop/enhance/poise_enhance.png"
+            self.enhance_gifts(status)
 
         elif self.is_pack_screen(): 
             self.logger.info("Pack selection detected")
@@ -832,17 +860,17 @@ class Mirror:
                     self.logger.warning("Could not find normal_toggle.png. Attempting to click floor_normal.png as fallback.")
                     common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", threshold=0.75, recursive=False, quiet_failure=True)
         else:
-            if (common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", 0.8, quiet_failure=True) or 
-                common.element_exist("pictures/mirror/packs/floor_hard.png", 0.8, quiet_failure=True) or
-                common.element_exist("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", 0.8, quiet_failure=True) or
-                common.element_exist("pictures/mirror/packs/hard_toggle.png", 0.8, quiet_failure=True)): 
+            if (common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", 0.65, quiet_failure=True) or
+                common.element_exist("pictures/mirror/packs/floor_hard.png", 0.65, quiet_failure=True) or
+                common.element_exist("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", 0.65, quiet_failure=True) or
+                common.element_exist("pictures/mirror/packs/hard_toggle.png", 0.65, quiet_failure=True)):
                 self.logger.info("Detected Hard Mode, switching to Normal Mode")
-                common.sleep(2) 
-                if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", threshold=0.75, recursive=False, quiet_failure=True):
-                    if not common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.75, recursive=False, quiet_failure=True):
+                common.sleep(2)
+                if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", threshold=0.65, recursive=False, quiet_failure=True):
+                    if not common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.65, recursive=False, quiet_failure=True):
                         self.logger.warning("Could not find hard_toggle.png. Attempting to click floor_hard.png as fallback.")
-                        if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True):
-                            common.click_matching("pictures/mirror/packs/floor_hard.png", threshold=0.75, recursive=False, quiet_failure=True)
+                        if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", threshold=0.65, recursive=False, quiet_failure=True):
+                            common.click_matching("pictures/mirror/packs/floor_hard.png", threshold=0.65, recursive=False, quiet_failure=True)
 
         min_y_scaled = common.scale_y_1080p(100)
         max_y_scaled = common.scale_y_1080p(980)
@@ -1147,12 +1175,12 @@ class Mirror:
 
     def encounter_reward_select(self):
         self.logger.info("Selecting encounter rewards")
-        _valid = {"cost_gift", "cost", "gift", "resource"}
+        _valid = {"cost_gift", "cost", "gift", "resource", "starlight"}
         _priority = shared_vars.ConfigCache.get_config("card_priority")
         if not _priority or not isinstance(_priority, list):
-            _priority = ["cost_gift", "cost", "gift", "resource"]
+            _priority = ["cost_gift", "cost", "gift", "resource", "starlight"]
         _priority = [c for c in _priority if c in _valid]
-        for c in ["cost_gift", "cost", "gift", "resource"]:
+        for c in ["cost_gift", "cost", "gift", "resource", "starlight"]:
             if c not in _priority:
                 _priority.append(c)
         encounter_reward = [f"pictures/mirror/encounter_reward/{c}.png" for c in _priority]
@@ -2036,13 +2064,20 @@ class Mirror:
 
     def enhance_gifts(self,status):
         self.logger.info("Starting gift enhancement")
-        
+
         x1, y1 = common.scale_coordinates_1080p(900, 300)
         x2, y2 = common.scale_coordinates_1080p(1700, 800)
-        
+
         attempted_gifts = []
+        enhance_deadline = time.time() + 180
 
         while(True):
+            if time.time() > enhance_deadline:
+                self.logger.warning("Enhancement timeout (3 min), pressing ESC to exit")
+                common.key_press("esc")
+                common.sleep(0.5)
+                common.click_matching("pictures/mirror/restshop/close.png", recursive=False, quiet_failure=True)
+                break
             screenshot = common.capture_screen()
             raw_gifts = common.ifexist_match(status, threshold=0.6, x1=x1, y1=y1, x2=x2, y2=y2, no_grayscale=True, screenshot=screenshot)
             gifts = raw_gifts

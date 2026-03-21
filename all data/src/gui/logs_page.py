@@ -227,6 +227,9 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
                     batch_text = "".join([format_log_line_with_time_ago(line) for line in new_lines if should_display_line(line)])
                     if batch_text:
                         log_text.insert("end", batch_text)
+                        line_count = int(log_text.index("end-1c").split(".")[0])
+                        if line_count > 500:
+                            log_text.delete("1.0", f"{line_count - 500}.0")
                         log_text.see("end")
                     log_text.configure(state="disabled")
         except Exception:

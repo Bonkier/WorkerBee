@@ -381,8 +381,8 @@ def save_grace_selection(base_path):
     grace_selection_data["upgrades"] = updated_upgrades
     save_json_data(os.path.join(base_path, "config", "grace_selection.json"), grace_selection_data)
 
-CARD_TYPES = ["cost_gift", "cost", "gift", "resource"]
-CARD_DISPLAY = {"cost_gift": "Cost + Gift", "cost": "Cost", "gift": "Gift", "resource": "Resource"}
+CARD_TYPES = ["cost_gift", "cost", "gift", "resource", "starlight"]
+CARD_DISPLAY = {"cost_gift": "Cost + Gift", "cost": "Cost", "gift": "Gift", "resource": "Resource", "starlight": "Starlight"}
 CARD_DISPLAY_INV = {v: k for k, v in CARD_DISPLAY.items()}
 
 def load_card_priority_ui(parent, base_path):

@@ -197,7 +197,7 @@ LOG_DIR = os.path.join(BASE_PATH, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILENAME = os.path.join(LOG_DIR, "Logs.log")
 
-handler = RotatingFileHandler(LOG_FILENAME, maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
+handler = RotatingFileHandler(LOG_FILENAME, maxBytes=1*1024*1024, backupCount=1, encoding='utf-8')
 formatter = NoMillisecondsFormatter(
     fmt='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
