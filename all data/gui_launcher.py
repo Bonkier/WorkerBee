@@ -36,29 +36,7 @@ def log_debug(msg):
             f.write(f"{time.strftime('%H:%M:%S')} - {msg}\n")
     except: pass
 
-# --- Loader Launch Logic ---
 splash_process = None
-if __name__ == "__main__":
-    try:
-        if getattr(sys, 'frozen', False):
-             base_dir = os.path.dirname(sys.executable)
-        else:
-             base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        creation_flags = 0
-        if platform.system() == "Windows":
-            creation_flags = subprocess.CREATE_NO_WINDOW
-
-        if getattr(sys, 'frozen', False):
-            splash_process = subprocess.Popen([sys.executable, '--loader'], creationflags=creation_flags)
-        else:
-            loader_path = os.path.join(base_dir, "src", "gui", "loader.py")
-            if os.path.exists(loader_path):
-                splash_process = subprocess.Popen([sys.executable, loader_path], creationflags=creation_flags)
-    except Exception as e:
-        log_debug(f"Failed to launch splash screen: {e}")
-        pass
-# ---------------------------
 
 log_debug("Starting gui_launcher.py")
 
@@ -96,8 +74,8 @@ try:
     from src.gui.logs_page import load_logs_tab as load_logs_page
     from src.gui.help_page import load_help_tab as load_help_page
     from src.gui.mirror_page import load_mirror_tab as load_mirror_page
-    # from src.gui.exp_page import load_exp_tab as load_exp_page
-    # from src.gui.threads_page import load_threads_tab as load_threads_page
+    from src.gui.exp_page import load_exp_tab as load_exp_page
+    from src.gui.threads_page import load_threads_tab as load_threads_page
     from src.gui.dashboard_page import load_dashboard_tab as load_dashboard_page
     import src.gui.process_handler as process_handler
     import src.gui.chain_automation as chain_automation
@@ -312,6 +290,17 @@ def start_mirror_dungeon(runs=None):
 
 def start_exp_luxcavation():
     try:
+        if 'exp_stage_var' in ui_context and ui_context['exp_stage_var']:
+            stage_val = ui_context['exp_stage_var'].get()
+            if stage_val != "latest":
+                shared_vars.exp_stage.value = int(stage_val)
+            config['Settings']['exp_stage'] = stage_val
+        if 'exp_runs_entry' in ui_context and ui_context['exp_runs_entry']:
+            try:
+                shared_vars.exp_runs.value = int(ui_context['exp_runs_entry'].get())
+            except ValueError:
+                pass
+        save_settings()
         if process_handler.start_exp_luxcavation(shared_vars):
             if 'exp_start_button' in ui_context and ui_context['exp_start_button']:
                 ui_context['exp_start_button'].configure(text="Stop", command=stop_running_process, fg_color="#c42b1c", hover_color="#8f1f14")
@@ -322,6 +311,17 @@ def start_exp_luxcavation():
 
 def start_thread_luxcavation():
     try:
+        if 'threads_difficulty_var' in ui_context and ui_context['threads_difficulty_var']:
+            diff_val = ui_context['threads_difficulty_var'].get()
+            if diff_val != "latest":
+                shared_vars.threads_difficulty.value = int(diff_val)
+            config['Settings']['threads_difficulty'] = diff_val
+        if 'threads_runs_entry' in ui_context and ui_context['threads_runs_entry']:
+            try:
+                shared_vars.threads_runs.value = int(ui_context['threads_runs_entry'].get())
+            except ValueError:
+                pass
+        save_settings()
         if process_handler.start_thread_luxcavation(shared_vars):
             if 'threads_start_button' in ui_context and ui_context['threads_start_button']:
                 ui_context['threads_start_button'].configure(text="Stop", command=stop_running_process, fg_color="#c42b1c", hover_color="#8f1f14")
@@ -594,10 +594,16 @@ def load_mirror_tab():
         logger.error(f"Failed to load mirror tab: {e}")
 
 def load_exp_tab():
-    pass
+    try:
+        load_exp_page(tab_exp, config, shared_vars, callbacks, ui_context, BASE_PATH, save_settings)
+    except Exception as e:
+        logger.error(f"Failed to load exp tab: {e}")
 
 def load_threads_tab():
-    pass
+    try:
+        load_threads_page(tab_threads, config, shared_vars, callbacks, ui_context, BASE_PATH, save_settings)
+    except Exception as e:
+        logger.error(f"Failed to load threads tab: {e}")
 
 def load_schedule_tab():
     try:
@@ -649,6 +655,85 @@ if __name__ == "__main__":
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
             except Exception as e:
                 log_debug(f"Failed to set AppUserModelID: {e}")
+
+        _loader_result = None
+        try:
+            from src.gui.loader import LoaderWindow as _LoaderWindow
+            _loader = _LoaderWindow()
+
+            def _run_update_check():
+                try:
+                    if '--updated' in sys.argv:
+                        _loader.set_status('Update installed. Starting...')
+                        import time as _time; _time.sleep(1.2)
+                        _loader.result = 'skip'
+                        _loader.close()
+                        return
+
+                    if not common.check_internet_connection():
+                        _loader.set_status('Offline mode - skipping update check')
+                        import time as _time; _time.sleep(0.8)
+                        _loader.result = 'skip'
+                        _loader.close()
+                        return
+
+                    _dont_ask = config.get('Settings', {}).get('dont_ask_updates', False)
+                    if _dont_ask:
+                        _loader.set_status('Starting...')
+                        import time as _time; _time.sleep(0.5)
+                        _loader.result = 'skip'
+                        _loader.close()
+                        return
+
+                    import updater as _upd
+                    _upd_instance = _upd.Updater("Bonkier", "WorkerBee", pre_exit_callback=perform_cleanup)
+                    _update_available, _latest_version, _download_url = _upd_instance.check_for_updates()
+
+                    if not _update_available:
+                        _loader.set_status('Up to date. Starting...')
+                        import time as _time; _time.sleep(0.6)
+                        _loader.result = 'skip'
+                        _loader.close()
+                        return
+
+                    def _on_yes():
+                        _loader.set_status('Preparing download...')
+                        def _progress(done, total):
+                            _loader.show_progress(done, total)
+                        def _update_cb(success, msg):
+                            if not success:
+                                _loader.set_status(f'Update failed. Starting anyway...')
+                                import time as _time; _time.sleep(1.5)
+                                _loader.result = 'skip'
+                                _loader.close()
+                        _upd_instance.check_and_update_async(
+                            _update_cb, create_backup=False, progress_callback=_progress
+                        )
+
+                    def _on_no():
+                        _loader.result = 'skip'
+                        _loader.close()
+
+                    def _on_no_ask():
+                        config.setdefault('Settings', {})['dont_ask_updates'] = True
+                        save_config(config)
+                        _loader.result = 'no_ask'
+                        _loader.close()
+
+                    _loader.show_update_available(_latest_version, _on_yes, _on_no, _on_no_ask)
+
+                except Exception as _e:
+                    log_debug(f"Loader update check error: {_e}")
+                    _loader.result = 'skip'
+                    _loader.close()
+
+            threading.Thread(target=_run_update_check, daemon=True).start()
+            _loader.run()
+            _loader_result = _loader.result
+
+        except Exception as _loader_err:
+            log_debug(f"Loader error: {_loader_err}")
+            _loader_result = 'skip'
 
         log_debug("Initializing Main UI (ctk.CTk)...")
         root = ctk.CTk()
@@ -748,8 +833,8 @@ if __name__ == "__main__":
 
         tab_dashboard = sidebar.add_page("Dashboard")
         tab_md = sidebar.add_page("Mirror Dungeon")
-        # tab_exp = sidebar.add_page("Exp")
-        # tab_threads = sidebar.add_page("Threads")
+        tab_exp = sidebar.add_page("Exp")
+        tab_threads = sidebar.add_page("Threads")
         tab_schedule = sidebar.add_page("Schedule")
         tab_others = sidebar.add_page("Others")
         tab_statistics = sidebar.add_page("Statistics")
@@ -860,54 +945,11 @@ if __name__ == "__main__":
                 root.after(500, load_settings_tab)
                 root.after(1000, setup_logs_tab)
                 
-                if "--updated" in sys.argv:
-                    messagebox.showinfo("Update Complete", f"WorkerBee has been updated to {get_display_version()}")
-
                 if not common.check_internet_connection():
                     root.title("WorkerBee | Bonk (Offline)")
                     logger.warning("No internet connection detected. Running in offline mode.")
                     messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
-                else:
-                    if not config['Settings'].get('dont_ask_updates', False):
-                        def _check_update_bg():
-                            try:
-                                import updater as _upd
-                                upd_instance = _upd.Updater("Bonkier", "WorkerBee", pre_exit_callback=perform_cleanup)
-                                update_available, latest_version, download_url = upd_instance.check_for_updates()
-                                if update_available:
-                                    def _show_dialog():
-                                        import customtkinter as _ctk
-                                        dialog = _ctk.CTkToplevel(root)
-                                        dialog.title("Update Available")
-                                        dialog.geometry("380x160")
-                                        dialog.grab_set()
-                                        _ctk.CTkLabel(dialog, text=f"Update available: {latest_version}\nWould you like to update now?", font=("Segoe UI", 13)).pack(pady=18)
-                                        btn_frame = _ctk.CTkFrame(dialog, fg_color="transparent")
-                                        btn_frame.pack(pady=4)
-                                        def _do_update():
-                                            dialog.destroy()
-                                            def update_cb(success, msg):
-                                                if success:
-                                                    logger.info(f"Update applied: {msg}")
-                                                    perform_cleanup()
-                                                    os._exit(0)
-                                                else:
-                                                    logger.info(f"Update failed: {msg}")
-                                            upd_instance.check_and_update_async(update_cb, create_backup=False)
-                                        def _skip():
-                                            dialog.destroy()
-                                        def _dont_ask():
-                                            config.setdefault('Settings', {})['dont_ask_updates'] = True
-                                            save_config(config)
-                                            dialog.destroy()
-                                        _ctk.CTkButton(btn_frame, text="Update", width=100, command=_do_update).grid(row=0, column=0, padx=6)
-                                        _ctk.CTkButton(btn_frame, text="Skip", width=100, command=_skip).grid(row=0, column=1, padx=6)
-                                        _ctk.CTkButton(btn_frame, text="Don't ask again", width=130, command=_dont_ask).grid(row=0, column=2, padx=6)
-                                    root.after(0, _show_dialog)
-                            except Exception as e:
-                                logger.error(f"Update check failed: {e}")
-                        threading.Thread(target=_check_update_bg, daemon=True).start()
-                
+
                 run_scheduler_check()
                 
             except Exception as e:
@@ -950,13 +992,7 @@ if __name__ == "__main__":
         
         log_debug("Starting mainloop...")
         
-        def on_ui_ready():
-            if splash_process:
-                try:
-                    splash_process.terminate()
-                except: pass
-            
-        fade_in(root, on_finish=on_ui_ready)
+        fade_in(root)
         root.mainloop()
 
     except Exception as e:

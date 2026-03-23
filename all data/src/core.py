@@ -181,22 +181,9 @@ def battle():
                 logger.info("Defeat detected during battle")
                 return
 
-            if _is_ego_animation(screenshot=screenshot):
-                logger.debug("EGO animation detected - holding mouse to skip")
-                import interception as _icp
-                _icp.mouse_down("left")
-                _ego_t = time.time()
-                while time.time() - _ego_t < 3.5:
-                    if not _is_ego_animation():
-                        break
-                    time.sleep(0.1)
-                _icp.mouse_up("left")
-                last_action_time = time.time()
-                continue
-
             if common.element_exist("pictures/general/loading.png", screenshot=screenshot) and not common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", screenshot=screenshot):
                 common.mouse_up()
-                if common.element_exist("pictures/battle/winrate.png"):
+                if common.element_exist("pictures/battle/winrate.png") or common.element_exist("pictures/battle/winrate_wave.png"):
                     logger.info("false read loading")
                     battle()
                     return
@@ -222,7 +209,21 @@ def battle():
 
                     common.click_matching("pictures/events/continue.png", recursive=False)
 
-            _winrate_match = common.match_image("pictures/battle/winrate.png", screenshot=screenshot, quiet_failure=True)
+            _winrate_match = (common.match_image("pictures/battle/winrate.png", screenshot=screenshot, quiet_failure=True) or
+                              common.match_image("pictures/battle/winrate_wave.png", screenshot=screenshot, quiet_failure=True))
+
+            if not _winrate_match and _is_ego_animation(screenshot=screenshot):
+                logger.debug("EGO animation detected - holding mouse to skip")
+                import interception as _icp
+                _icp.mouse_down("left")
+                _ego_t = time.time()
+                while time.time() - _ego_t < 3.5:
+                    if not _is_ego_animation():
+                        break
+                    time.sleep(0.1)
+                _icp.mouse_up("left")
+                last_action_time = time.time()
+                continue
             if _winrate_match:
                 logger.debug("Winrate screen detected")
                 winrate_invisible_start = None

@@ -223,28 +223,50 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
         common.mouse_move_click(latest_x, latest_y)
         success = True
     else:
-        thresholds = {
-            1: 0.95, 2: 0.95, 3: 0.95, 4: 0.97, 
-            5: 0.95, 6: 0.95, 7: 0.99
-        }
-        threshold = thresholds[Stage]
-        stage_image = f"pictures/CustomAdded1080p/luxcavation/exp/stage{Stage}.png"
+        enter_image = "pictures/CustomAdded1080p/luxcavation/exp/exp_enter.png"
+        target_label = f"{int(Stage):02d}"
 
         lux_coords = shared_vars.ScaledCoordinates.get_scaled_coords("luxcavation_coords")
         drag_start_x, drag_start_y = lux_coords["exp_drag_start"]
         drag_end_x, drag_end_y = lux_coords["exp_drag_end"]
-        drag_middle_x, drag_middle_y = lux_coords["exp_drag_middle"]
-        
-        success = click_matching_EXP(
-            stage_image, 
-            threshold, 
-            "bottom",
-            drag_start_x, drag_start_y,
-            drag_end_x, drag_end_y,
-            drag_end_x, drag_end_y,
-            drag_middle_x, drag_middle_y,
-            0.3
-        )
+
+        try:
+            import easyocr as _easyocr
+            _ocr = _easyocr.Reader(['en'], gpu=False, verbose=False)
+        except Exception as e:
+            logger.error(f"Failed to load OCR for stage detection: {e}")
+            _ocr = None
+
+        success = False
+        for attempt in range(8):
+            screenshot = common.capture_screen()
+            sh, sw = screenshot.shape[:2]
+            enter_matches = common.match_image(enter_image, 0.85)
+
+            if enter_matches and _ocr:
+                stage_y1 = int(0.268 * sh)
+                stage_y2 = int(0.398 * sh)
+                ocr_hw = int(0.094 * sw)
+                for ex, ey in enter_matches:
+                    cx1 = max(0, ex - ocr_hw)
+                    cx2 = min(sw, ex + ocr_hw)
+                    crop = screenshot[stage_y1:stage_y2, cx1:cx2]
+                    texts = _ocr.readtext(crop, detail=0)
+                    combined = " ".join(texts)
+                    if target_label in combined:
+                        logger.info(f"Stage {Stage} (label '{target_label}') found at x={ex}, clicking Enter at ({ex},{ey})")
+                        common.mouse_move_click(ex, ey)
+                        success = True
+                        break
+
+            if success:
+                break
+            logger.warning(f"Stage {Stage} not found on screen (attempt {attempt+1}), scrolling")
+            step = int((drag_end_x - drag_start_x) * 0.25)
+            scroll_x = drag_start_x + step
+            common.mouse_move(drag_start_x, drag_start_y)
+            common.mouse_drag(scroll_x, drag_end_y, 0.3)
+            time.sleep(0.5)
     
     if not success:
         logger.warning(f"Failed to click Stage {Stage}")
@@ -276,7 +298,7 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
 
 def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_selection"):
     
-    if Difficulty != "latest" and Difficulty not in [20, 30, 40, 50]:
+    if Difficulty != "latest" and Difficulty not in [20, 30, 40, 50, 60]:
         logger.error(f"Invalid thread difficulty: {Difficulty}")
         return
         
@@ -306,19 +328,25 @@ def navigate_to_threads(Difficulty, SelectTeam=False, config_type="threads_team_
         success = True
     else:
         difficulty_image = f"pictures/CustomAdded1080p/luxcavation/thread/difficulty{Difficulty}.png"
-        
-        if common.click_matching(difficulty_image, threshold=0.97, area="center", mousegoto200=False, recursive=False):
-            success = True
-        else:
-            for i in range(7):
-                found_matches = common.match_image("pictures/CustomAdded1080p/luxcavation/thread/difficulty.png", 0.97, area="left")
-                if found_matches:
-                    x, y = found_matches[0]
-                    common.mouse_move(x, y)
-                    common.mouse_scroll(1000)
-                    
-            common.click_matching(difficulty_image, 0.97, area="center", mousegoto200=False)
-            success = True
+
+        drag_x = common.scale_x_1080p(900)
+        drag_start_y = common.scale_y_1080p(500)
+        drag_end_y = common.scale_y_1080p(700)
+
+        for _ in range(3):
+            common.mouse_move(drag_x, drag_start_y)
+            common.mouse_drag(drag_x, drag_end_y, 0.3)
+        time.sleep(0.3)
+
+        success = False
+        for attempt in range(8):
+            if common.click_matching(difficulty_image, threshold=0.97, area="center", mousegoto200=False, recursive=False):
+                success = True
+                break
+            logger.warning(f"Difficulty {Difficulty} not found (attempt {attempt+1}), dragging down")
+            common.mouse_move(drag_x, drag_end_y)
+            common.mouse_drag(drag_x, drag_start_y, 0.3)
+            time.sleep(0.3)
         
     logger.debug(f"Click successful, waiting for UI to settle...")
     time.sleep(0.5) 

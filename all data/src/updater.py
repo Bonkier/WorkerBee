@@ -4,6 +4,7 @@ import json
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 import zipfile
 import shutil
 import logging
@@ -269,7 +270,94 @@ class Updater:
         
         return False
     
-    def download_update(self, download_url):
+    def _try_differential_update(self, current_version, latest_version, progress_callback=None):
+        """
+        Try to apply a differential update by downloading only changed files.
+        Returns True on success, False to signal caller to fall back to full download.
+        Only used for non-frozen (source) builds.
+        """
+        MAX_DIFF_FILES = 200
+
+        try:
+            compare_url = f"{self.api_url}/compare/{current_version}...{latest_version}"
+            logger.info(f"Fetching diff: {compare_url}")
+            req = urllib.request.Request(compare_url, headers={'User-Agent': 'WorkerBee-Updater'})
+            with urllib.request.urlopen(req, context=ssl_context, timeout=15) as resp:
+                compare_data = json.loads(resp.read().decode())
+        except Exception as e:
+            logger.warning(f"Could not fetch diff from GitHub API: {e}")
+            return False
+
+        changed_files = compare_data.get('files', [])
+        if not changed_files:
+            logger.info("Compare API returned no changed files - already up to date?")
+            return False
+
+        if len(changed_files) > MAX_DIFF_FILES:
+            logger.info(f"{len(changed_files)} files changed - too many for differential, falling back to full download")
+            return False
+
+        excluded_statuses = {'removed'}
+        files_to_download = [(f['filename'], f['status']) for f in changed_files]
+        removed_files = [f['filename'] for f in changed_files if f['status'] == 'removed']
+        download_files = [(name, status) for name, status in files_to_download if status not in excluded_statuses]
+
+        logger.info(f"Differential update: {len(download_files)} files to download, {len(removed_files)} to remove")
+
+        total = len(download_files)
+        done = 0
+
+        for filename, status in download_files:
+            excl_path = filename
+            for prefix in ("all data/", "all data\\"):
+                if filename.startswith(prefix):
+                    excl_path = filename[len(prefix):]
+                    break
+            if self.should_exclude(excl_path):
+                logger.info(f"Skipping excluded file: {filename}")
+                done += 1
+                continue
+
+            encoded = urllib.parse.quote(filename, safe='/')
+            raw_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/{latest_version}/{encoded}"
+            dest_path = os.path.join(self.parent_dir, filename)
+
+            try:
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'WorkerBee-Updater'})
+                with urllib.request.urlopen(req, context=ssl_context, timeout=30) as resp:
+                    data = resp.read()
+                with open(dest_path, 'wb') as f:
+                    f.write(data)
+                logger.debug(f"Updated: {filename}")
+            except Exception as e:
+                logger.error(f"Failed to download {filename}: {e}")
+                return False
+
+            done += 1
+            if progress_callback:
+                progress_callback(done, total)
+
+        for filename in removed_files:
+            excl_path = filename
+            for prefix in ("all data/", "all data\\"):
+                if filename.startswith(prefix):
+                    excl_path = filename[len(prefix):]
+                    break
+            if self.should_exclude(excl_path):
+                continue
+            full_path = os.path.join(self.parent_dir, filename)
+            try:
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+                    logger.info(f"Removed deleted file: {filename}")
+            except Exception as e:
+                logger.warning(f"Could not remove {filename}: {e}")
+
+        logger.info("Differential update applied successfully")
+        return True
+
+    def download_update(self, download_url, progress_callback=None):
         try:
             for item in os.listdir(self.temp_path):
                 item_path = os.path.join(self.temp_path, item)
@@ -280,7 +368,7 @@ class Updater:
             logger.info(f"Cleared temp directory {self.temp_path}")
         except Exception as e:
             logger.warning(f"Error clearing temp directory: {e}")
-        
+
         try:
             os.makedirs(self.temp_path, exist_ok=True)
 
@@ -288,9 +376,20 @@ class Updater:
             logger.info(f"Downloading update from {download_url}")
 
             req = urllib.request.Request(download_url, headers={'User-Agent': 'WorkerBee-Updater'})
-            with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:
-                shutil.copyfileobj(response, out_file)
-                
+            with urllib.request.urlopen(req, context=ssl_context) as response:
+                total = int(response.headers.get('Content-Length', 0))
+                downloaded = 0
+                chunk_size = 65536
+                with open(zip_path, 'wb') as out_file:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        out_file.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback:
+                            progress_callback(downloaded, total)
+
             logger.info(f"Download completed: {zip_path}")
             return zip_path
         except Exception as e:
@@ -824,7 +923,7 @@ except Exception as e:
         except Exception as e:
             logger.error(f"Error cleaning up old backups: {e}")
     
-    def perform_update(self, create_backup=True, auto_restart=True, preserve_only_last_3=True):
+    def perform_update(self, create_backup=True, auto_restart=True, preserve_only_last_3=True, progress_callback=None):
         backup_path = None
         if create_backup:
             backup_path = self.backup_current_version()
@@ -834,7 +933,7 @@ except Exception as e:
             logger.info("Skipping backup creation as requested")
 
         update_available, latest_version, download_url = self.check_for_updates()
-        
+
         if not update_available or download_url is None:
             logger.info("No updates available or failed to get update information")
             if not create_backup and backup_path and os.path.exists(backup_path):
@@ -845,12 +944,17 @@ except Exception as e:
                     pass
             return False, "No updates available"
 
-        zip_path = self.download_update(download_url)
-        if not zip_path:
-            return False, "Failed to download update"
+        differential_applied = False
+        if not getattr(sys, 'frozen', False):
+            current_version = self.get_current_version()
+            differential_applied = self._try_differential_update(current_version, latest_version, progress_callback=progress_callback)
 
-        if not self.apply_update(zip_path, auto_restart):
-            return False, "Failed to apply update"
+        if not differential_applied:
+            zip_path = self.download_update(download_url, progress_callback=progress_callback)
+            if not zip_path:
+                return False, "Failed to download update"
+            if not self.apply_update(zip_path, auto_restart):
+                return False, "Failed to apply update"
 
         self.update_version_file(latest_version)
 
@@ -871,12 +975,12 @@ except Exception as e:
         
         return True, f"Successfully updated to {latest_version}"
     
-    def check_and_update_async(self, callback=None, create_backup=False, auto_restart=True, preserve_only_last_3=True):
+    def check_and_update_async(self, callback=None, create_backup=False, auto_restart=True, preserve_only_last_3=True, progress_callback=None):
         def update_thread():
-            result, message = self.perform_update(create_backup, auto_restart, preserve_only_last_3)
+            result, message = self.perform_update(create_backup, auto_restart, preserve_only_last_3, progress_callback=progress_callback)
             if callback:
                 callback(result, message)
-        
+
         thread = threading.Thread(target=update_thread)
         thread.daemon = True
         thread.start()
@@ -901,7 +1005,13 @@ except Exception as e:
                 script_path = os.path.join(self.all_data_dir, "gui_launcher.py")
                 args = f'"{script_path}" --updated'
 
+            config_backup_path = os.path.join(self.temp_path, "config_backup")
             self.handle_config_merging(repo_dir)
+
+            if getattr(sys, 'frozen', False):
+                config_restore_dest = os.path.join(self.parent_dir, "_internal", "config")
+            else:
+                config_restore_dest = os.path.join(self.parent_dir, "all data", "config")
 
             batch_content = f"""@echo off
 echo Waiting for WorkerBee to close...
@@ -912,6 +1022,11 @@ taskkill /F /PID {current_pid} /T > NUL 2>&1
 
 echo Updating files...
 xcopy "{repo_dir}\\*" "{self.parent_dir}\\" /E /Y /I /Q > NUL
+
+echo Restoring user configs...
+if exist "{config_backup_path}\\" (
+    xcopy "{config_backup_path}\\*" "{config_restore_dest}\\" /Y /I /Q > NUL
+)
 
 """
             if auto_restart:
