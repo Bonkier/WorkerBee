@@ -33,7 +33,7 @@ def load_threads_tab(parent, config, shared_vars, callbacks, ui_context, base_pa
     diff_dropdown = ctk.CTkOptionMenu(
         master=run_card,
         variable=diff_var,
-        values=["20", "30", "40", "50", "latest"],
+        values=["20", "30", "40", "50", "60"],
         width=200,
         height=UIStyle.ENTRY_HEIGHT,
         font=UIStyle.BODY_FONT,

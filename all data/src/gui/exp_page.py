@@ -33,7 +33,7 @@ def load_exp_tab(parent, config, shared_vars, callbacks, ui_context, base_path, 
     stage_dropdown = ctk.CTkOptionMenu(
         master=run_card,
         variable=stage_var,
-        values=["1", "2", "3", "4", "5", "6", "7", "latest"],
+        values=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
         width=200,
         height=UIStyle.ENTRY_HEIGHT,
         font=UIStyle.BODY_FONT,

@@ -177,6 +177,7 @@ class Mirror:
         
         if (common.element_exist("pictures/mirror/general/danteh.png", quiet_failure=True) or
             common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or
+            common.element_exist("pictures/battle/winrate_wave.png", quiet_failure=True) or
             common.element_exist("pictures/CustomAdded1080p/battle/setting_cog.png", quiet_failure=True) or
             common.element_exist("pictures/events/skip.png", quiet_failure=True) or
             common.element_exist("pictures/mirror/restshop/shop.png", quiet_failure=True) or
@@ -295,7 +296,7 @@ class Mirror:
             self.logger.info("Event proceed button detected")
             self.event_choice()
 
-        elif common.element_exist("pictures/battle/winrate.png"):
+        elif common.element_exist("pictures/battle/winrate.png") or common.element_exist("pictures/battle/winrate_wave.png"):
             self.logger.info("Battle winrate button detected")
             battle()
             check_loading()
@@ -663,7 +664,7 @@ class Mirror:
         best_per_coord = kept
 
         already_found_names = {v[1] for v in best_per_coord.values()}
-        if len(best_per_coord) < 5:
+        if shared_vars.good_pc_mode and len(best_per_coord) < 5:
             self.logger.debug(f"CCOEFF found {len(best_per_coord)} packs. Running ORB secondary scan")
             try:
                 orb = cv2.ORB_create(nfeatures=500)
@@ -733,11 +734,15 @@ class Mirror:
             except Exception as e:
                 self.logger.warning(f"ORB secondary scan failed: {e}")
 
-        if len(best_per_coord) < 5:
-            self.logger.debug(f"Template+ORB found {len(best_per_coord)} packs. Running OCR fallback.")
+        has_unnamed = any(v[1] == "unknown_pack" for v in best_per_coord.values())
+        if len(best_per_coord) < 5 or has_unnamed:
+            self.logger.debug(f"Template+ORB found {len(best_per_coord)} packs (unnamed: {has_unnamed}). Running OCR fallback.")
             try:
                 import easyocr
                 from rapidfuzz import process, fuzz
+
+                if getattr(self, '_ocr_unavailable', False):
+                    raise RuntimeError("OCR previously failed to initialize, skipping")
 
                 inpack_path = common.resource_path("pictures/CustomAdded1080p/mirror/packs/inpack.png")
                 inpack_tmpl = None
@@ -768,7 +773,12 @@ class Mirror:
 
                         if not hasattr(self, '_ocr_reader') or self._ocr_reader is None:
                             self.logger.info("Initializing OCR reader (first use)")
-                            self._ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+                            try:
+                                self._ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+                            except Exception as ocr_init_e:
+                                self.logger.warning(f"OCR reader init failed, disabling for this session: {ocr_init_e}")
+                                self._ocr_unavailable = True
+                                raise
 
                         known_names = [f[:-4] for f in os.listdir(floor_dir) if f.endswith(".png")]
 
@@ -885,7 +895,8 @@ class Mirror:
         while retry_attempt > 0:
             retry_attempt -= 1
             
-            if (common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or 
+            if (common.element_exist("pictures/battle/winrate.png", quiet_failure=True) or
+                common.element_exist("pictures/battle/winrate_wave.png", quiet_failure=True) or
                 common.element_exist("pictures/CustomAdded1080p/battle/battle_in_progress.png", quiet_failure=True)):
                 self.logger.info("Battle detected inside pack_selection loop. Aborting.")
                 return
@@ -916,9 +927,12 @@ class Mirror:
 
             if len(selectable_packs_pos) == 0:
                 if excepted_visible_count > 0:
-                    self.logger.error(f"All {excepted_visible_count} visible pack(s) on {floor} are in the exception list. Stopping macro.")
-                    raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
-                if retry_attempt > 0:
+                    if floor_priorities and refresh_count < MAX_REFRESHES:
+                        self.logger.warning(f"Only excepted pack(s) detected on {floor}, but refreshes remain. Attempting refresh before giving up.")
+                    else:
+                        self.logger.error(f"All {excepted_visible_count} visible pack(s) on {floor} are in the exception list. Stopping macro.")
+                        raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
+                elif retry_attempt > 0:
                     logger.debug("No packs detected, retrying...")
                     common.sleep(0.5)
                     continue
@@ -926,14 +940,15 @@ class Mirror:
             self.logger.debug(f"Found {len(selectable_packs_pos)} selectable packs")
 
             def robust_drag_pack(x, y):
+                extra = 1.0 if not shared_vars.good_pc_mode else 0.0
                 common.mouse_move(x, y)
-                common.sleep(0.15)
+                common.sleep(0.15 + extra)
                 common.mouse_down()
-                common.sleep(0.15)
+                common.sleep(0.15 + extra)
                 drag_offset = round(350 * common.EXPECTED_HEIGHT / common.REFERENCE_HEIGHT_1080P)
                 dest_x, dest_y = common.get_MonCords(x, y + drag_offset)
-                common._bezier_move(dest_x, dest_y, duration=0.3)
-                common.sleep(0.15)
+                common._bezier_move(dest_x, dest_y, duration=0.3 + extra)
+                common.sleep(0.15 + extra)
                 common.mouse_up()
 
             def select_pack(coords, name="unknown_pack"):
@@ -1098,7 +1113,7 @@ class Mirror:
         
         common.mouse_move_click(*common.scale_coordinates_1080p(1722, 881))
         for i in range(20):
-            if common.element_exist("pictures/battle/winrate.png"):
+            if common.element_exist("pictures/battle/winrate.png") or common.element_exist("pictures/battle/winrate_wave.png"):
                 logger.debug("Premature break due to winrate detected.")
                 break
             if common.element_exist("pictures/events/skip.png"):
@@ -2058,6 +2073,8 @@ class Mirror:
                     common.click_matching("pictures/mirror/restshop/enhance/confirm.png", recursive=False)
                     common.sleep(0.2)
                 if not confirm_done:
+                    common.click_matching("pictures/mirror/restshop/enhance/cancel.png", recursive=False, quiet_failure=True)
+                    self.logger.warning("Enhancement confirm timed out (insufficient cost?), cancelling")
                     break
                 common.sleep(0.2)
         return True
@@ -2207,9 +2224,30 @@ class Mirror:
             if common.element_exist("pictures/mirror/general/ego_gift_get.png"): 
                 common.click_matching("pictures/general/confirm_b.png")
         
-        elif common.click_matching("pictures/CustomAdded1080p/mirror/events/slot_machine.png", recursive=False): 
+        elif common.click_matching("pictures/CustomAdded1080p/mirror/events/slot_machine.png", recursive=False):
             self.logger.info("Event: Slot Machine")
             pass
+
+        elif common.click_matching("pictures/CustomAdded1080p/mirror/events/amberchoice.png", recursive=False):
+            self.logger.info("Event: Amber - Disciplinary Team choice")
+            common.wait_skip("pictures/events/proceed.png")
+            if common.element_exist("pictures/events/skip.png"):
+                common.click_skip(15)
+                self.event_choice()
+
+        elif common.click_matching("pictures/CustomAdded1080p/mirror/events/lcbchoice.png", recursive=False):
+            self.logger.info("Event: LCB - Force the door open")
+            common.wait_skip("pictures/events/proceed.png")
+            if common.element_exist("pictures/events/skip.png"):
+                common.click_skip(15)
+                self.event_choice()
+
+        elif common.click_matching("pictures/CustomAdded1080p/mirror/events/amberchoice2.png", recursive=False):
+            self.logger.info("Event: Amber 2 - Repression Work choice")
+            common.wait_skip("pictures/events/proceed.png")
+            if common.element_exist("pictures/events/skip.png"):
+                common.click_skip(15)
+                self.event_choice()
 
         elif common.click_matching("pictures/events/proceed.png", recursive=False):
             pass
