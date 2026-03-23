@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tkinter as tk
 import platform
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
 
 from src.gui.styles import UIStyle
@@ -47,6 +47,7 @@ def load_settings_tab(parent, config, shared_vars, save_callback, base_path, roo
     ctk.CTkLabel(scroll_frame, text="Settings", font=UIStyle.HEADER_FONT).pack(pady=(20, 10), anchor="w", padx=20)
 
     _setup_profiles(scroll_frame, base_path, save_callback)
+    _setup_global_config(scroll_frame, base_path, save_callback)
     _setup_sinner_assignment(scroll_frame, base_path)
     _setup_display_settings(scroll_frame, shared_vars, save_callback)
     _setup_mouse_offsets(scroll_frame, shared_vars, save_callback, root_ref)
@@ -148,6 +149,98 @@ def _setup_profiles(parent, base_path, save_callback):
                   fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
                   corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
+
+def _setup_global_config(parent, base_path, save_callback):
+    config_dir = os.path.join(base_path, "config")
+    SKIP_EXPORT = {"stats.json"}
+
+    card = CardFrame(parent)
+    card.pack(fill="x", pady=10, padx=10)
+
+    ctk.CTkLabel(card, text="Share Config", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 6))
+    ctk.CTkLabel(
+        card,
+        text="Export all settings as a single file to share with others, or import one to apply their settings.",
+        font=UIStyle.SMALL_FONT,
+        text_color="gray",
+        wraplength=460,
+        justify="left",
+    ).pack(fill="x", padx=14, pady=(0, 10))
+
+    btn_row = ctk.CTkFrame(card, fg_color="transparent")
+    btn_row.pack(fill="x", padx=10, pady=(0, 15))
+
+    def do_export():
+        save_callback()
+        bundle = {}
+        for fname in os.listdir(config_dir):
+            if not fname.endswith(".json") or fname in SKIP_EXPORT:
+                continue
+            try:
+                with open(os.path.join(config_dir, fname), "r", encoding="utf-8") as f:
+                    bundle[fname[:-5]] = json.load(f)
+            except Exception:
+                pass
+
+        dest = filedialog.asksaveasfilename(
+            title="Export config",
+            defaultextension=".json",
+            filetypes=[("JSON file", "*.json")],
+            initialfile="WorkerBee_config.json",
+        )
+        if not dest:
+            return
+        try:
+            with open(dest, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, indent=2)
+            messagebox.showinfo("Exported", f"Config saved to:\n{dest}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save file:\n{e}")
+
+    def do_import():
+        src = filedialog.askopenfilename(
+            title="Import config",
+            filetypes=[("JSON file", "*.json")],
+        )
+        if not src:
+            return
+        try:
+            with open(src, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not read file:\n{e}")
+            return
+
+        if not isinstance(bundle, dict):
+            messagebox.showerror("Error", "Invalid config file format.")
+            return
+
+        known = {fn[:-5] for fn in os.listdir(config_dir) if fn.endswith(".json")}
+        written = 0
+        for key, value in bundle.items():
+            if key not in known or not isinstance(value, dict):
+                continue
+            try:
+                with open(os.path.join(config_dir, f"{key}.json"), "w", encoding="utf-8") as f:
+                    json.dump(value, f, indent=2)
+                written += 1
+            except Exception:
+                pass
+
+        if written:
+            messagebox.showinfo("Imported", f"Applied {written} config files. Please restart the application.")
+        else:
+            messagebox.showerror("Error", "No valid config entries found in the file.")
+
+    ctk.CTkButton(btn_row, text="Export", command=do_export, width=100,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=(0, 8))
+    ctk.CTkButton(btn_row, text="Import", command=do_import, width=100,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left")
+
 
 def _setup_sinner_assignment(parent, base_path):
     card = CardFrame(parent)

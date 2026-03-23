@@ -128,7 +128,6 @@ class LoaderWindow:
 
         self._bar_x = [-(self.W - 56) * 0.32]
         self.root.after(50, self._tick)
-        self.root.after(60_000, self.close)
 
         self.root.lift()
         self.root.attributes('-topmost', True)
@@ -218,6 +217,12 @@ class LoaderWindow:
         self.root.after(0, _update)
 
     def close(self):
+        try:
+            self.root.after(0, self._do_close)
+        except Exception:
+            pass
+
+    def _do_close(self):
         try:
             self.root.quit()
             self.root.destroy()
