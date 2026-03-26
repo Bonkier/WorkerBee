@@ -388,7 +388,10 @@ class Updater:
                         out_file.write(chunk)
                         downloaded += len(chunk)
                         if progress_callback:
-                            progress_callback(downloaded, total)
+                            try:
+                                progress_callback(downloaded, total)
+                            except Exception:
+                                pass
 
             logger.info(f"Download completed: {zip_path}")
             return zip_path

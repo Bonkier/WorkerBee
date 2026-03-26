@@ -1,6 +1,11 @@
 import os
 import sys
 import json
+
+if getattr(sys, 'frozen', False):
+    _torch_lib = os.path.join(sys._MEIPASS, 'torch', 'lib')
+    if os.path.isdir(_torch_lib):
+        os.add_dll_directory(_torch_lib)
 import math
 import time
 import ctypes

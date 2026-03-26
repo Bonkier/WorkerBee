@@ -215,7 +215,10 @@ class LoaderWindow:
                 )
             self._status_var.set(f'Downloading... {int(pct * 100)}%')
 
-        self.root.after(0, _update)
+        try:
+            self.root.after(0, _update)
+        except Exception:
+            pass
 
     def close(self):
         try:
