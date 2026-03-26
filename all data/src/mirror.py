@@ -159,10 +159,10 @@ class Mirror:
             common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", quiet_failure=True)
         )
 
-        if shared_vars.hard_mode:
-            toggle_found = common.element_exist("pictures/mirror/packs/hard_toggle.png", quiet_failure=True)
-        else:
-            toggle_found = common.element_exist("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", quiet_failure=True)
+        toggle_found = (
+            common.element_exist("pictures/mirror/packs/hard_toggle.png", quiet_failure=True) or
+            common.element_exist("pictures/CustomAdded1080p/mirror/packs/normal_toggle.png", quiet_failure=True)
+        )
 
         return difficulty_found and toggle_found
 
@@ -870,17 +870,26 @@ class Mirror:
                     self.logger.warning("Could not find normal_toggle.png. Attempting to click floor_normal.png as fallback.")
                     common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_normal.png", threshold=0.75, recursive=False, quiet_failure=True)
         else:
-            if (common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", 0.65, quiet_failure=True) or
-                common.element_exist("pictures/mirror/packs/floor_hard.png", 0.65, quiet_failure=True) or
-                common.element_exist("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", 0.65, quiet_failure=True) or
-                common.element_exist("pictures/mirror/packs/hard_toggle.png", 0.65, quiet_failure=True)):
-                self.logger.info("Detected Hard Mode, switching to Normal Mode")
-                common.sleep(2)
-                if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", threshold=0.65, recursive=False, quiet_failure=True):
-                    if not common.click_matching("pictures/mirror/packs/hard_toggle.png", threshold=0.65, recursive=False, quiet_failure=True):
-                        self.logger.warning("Could not find hard_toggle.png. Attempting to click floor_hard.png as fallback.")
-                        if not common.click_matching("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", threshold=0.65, recursive=False, quiet_failure=True):
-                            common.click_matching("pictures/mirror/packs/floor_hard.png", threshold=0.65, recursive=False, quiet_failure=True)
+            def _hard_mode_detected():
+                return (
+                    common.element_exist("pictures/CustomAdded1080p/mirror/packs/floor_hard.png", 0.80, quiet_failure=True) or
+                    common.element_exist("pictures/mirror/packs/floor_hard.png", 0.80, quiet_failure=True) or
+                    common.element_exist("pictures/CustomAdded1080p/mirror/packs/hard_toggle.png", 0.80, quiet_failure=True) or
+                    common.element_exist("pictures/mirror/packs/hard_toggle.png", 0.80, quiet_failure=True)
+                )
+
+            if _hard_mode_detected():
+                toggle_x, toggle_y = common.scale_x_1080p(1350), common.scale_y_1080p(60)
+                for _attempt in range(4):
+                    self.logger.info(f"Detected Hard Mode, switching to Normal Mode (attempt {_attempt + 1})")
+                    common.sleep(1)
+                    common.mouse_move_click(toggle_x, toggle_y)
+                    common.sleep(1.5)
+                    if not _hard_mode_detected():
+                        self.logger.info("Successfully switched to Normal Mode")
+                        break
+                else:
+                    self.logger.warning("Failed to switch out of Hard Mode after 4 attempts, continuing anyway")
 
         min_y_scaled = common.scale_y_1080p(100)
         max_y_scaled = common.scale_y_1080p(980)
