@@ -1035,6 +1035,7 @@ if exist "{config_backup_path}\\" (
             if auto_restart:
                 batch_content += f'\necho Restarting WorkerBee...\nstart "" "{executable}" {args}\n'
 
+            batch_content += f'\necho Cleaning up...\nstart "" /B cmd /C "ping 127.0.0.1 -n 3 > NUL & rmdir /S /Q \\"{self.temp_path}\\""\n'
             batch_content += "\necho Done.\nexit\n"
             with open(batch_script_path, "w") as f:
                 f.write(batch_content)
