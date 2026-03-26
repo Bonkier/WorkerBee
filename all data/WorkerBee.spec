@@ -123,7 +123,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['rthook_torch.py'],
     excludes=['pkg_resources.py2_warn'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
