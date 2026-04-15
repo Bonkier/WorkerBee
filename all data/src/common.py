@@ -27,46 +27,91 @@ from PIL import ImageGrab
 import shared_vars
 
 # ---------------------------------------------------------------------------
-# Cross-platform input backend (pynput replaces Windows-only interception)
+# Input backend — Linux / evdev uinput
+# Inputs appear as kernel-level hardware events (no synthetic-input flag).
+# Requires: pip install evdev
+# Permissions: sudo usermod -aG input $USER  (log out/in after)
 # ---------------------------------------------------------------------------
-from pynput.mouse import Controller as _MouseCtrl, Button as _Button
-from pynput.keyboard import Controller as _KbdCtrl, Key as _Key, KeyCode as _KeyCode
+from evdev import UInput as _UInput, ecodes as _ec
+from Xlib import display as _xdisplay_mod
 
-_mouse_ctrl = _MouseCtrl()
-_kbd_ctrl   = _KbdCtrl()
+_uinput_mouse = _UInput(
+    {_ec.EV_REL: [_ec.REL_X, _ec.REL_Y, _ec.REL_WHEEL],
+     _ec.EV_KEY: [_ec.BTN_LEFT, _ec.BTN_RIGHT, _ec.BTN_MIDDLE]},
+    name='workerbee-mouse',
+)
+_uinput_kbd = _UInput(
+    {_ec.EV_KEY: list(range(1, 249))},
+    name='workerbee-kbd',
+)
 
-_SPECIAL_KEYS = {
-    'enter': _Key.enter, 'return': _Key.enter,
-    'space': _Key.space, 'escape': _Key.esc, 'esc': _Key.esc,
-    'tab': _Key.tab, 'backspace': _Key.backspace, 'delete': _Key.delete,
-    'up': _Key.up, 'down': _Key.down, 'left': _Key.left, 'right': _Key.right,
-    'home': _Key.home, 'end': _Key.end,
-    'pageup': _Key.page_up, 'page_up': _Key.page_up,
-    'pagedown': _Key.page_down, 'page_down': _Key.page_down,
-    'f1': _Key.f1,  'f2': _Key.f2,  'f3': _Key.f3,  'f4': _Key.f4,
-    'f5': _Key.f5,  'f6': _Key.f6,  'f7': _Key.f7,  'f8': _Key.f8,
-    'f9': _Key.f9,  'f10': _Key.f10,'f11': _Key.f11,'f12': _Key.f12,
-    'ctrl': _Key.ctrl, 'alt': _Key.alt, 'shift': _Key.shift,
-    'win': _Key.cmd, 'cmd': _Key.cmd, 'super': _Key.cmd,
-    'insert': _Key.insert, 'caps_lock': _Key.caps_lock,
-    'num_lock': _Key.num_lock, 'scroll_lock': _Key.scroll_lock,
-    'print_screen': _Key.print_screen, 'pause': _Key.pause,
-    'media_play_pause': _Key.media_play_pause,
-    'media_next': _Key.media_next, 'media_previous': _Key.media_previous,
+_UINPUT_KEY_MAP = {
+    'enter': _ec.KEY_ENTER, 'return': _ec.KEY_ENTER,
+    'space': _ec.KEY_SPACE,
+    'escape': _ec.KEY_ESC, 'esc': _ec.KEY_ESC,
+    'tab': _ec.KEY_TAB,
+    'backspace': _ec.KEY_BACKSPACE,
+    'delete': _ec.KEY_DELETE,
+    'up': _ec.KEY_UP, 'down': _ec.KEY_DOWN,
+    'left': _ec.KEY_LEFT, 'right': _ec.KEY_RIGHT,
+    'home': _ec.KEY_HOME, 'end': _ec.KEY_END,
+    'pageup': _ec.KEY_PAGEUP, 'page_up': _ec.KEY_PAGEUP,
+    'pagedown': _ec.KEY_PAGEDOWN, 'page_down': _ec.KEY_PAGEDOWN,
+    'f1': _ec.KEY_F1,  'f2':  _ec.KEY_F2,  'f3':  _ec.KEY_F3,
+    'f4': _ec.KEY_F4,  'f5':  _ec.KEY_F5,  'f6':  _ec.KEY_F6,
+    'f7': _ec.KEY_F7,  'f8':  _ec.KEY_F8,  'f9':  _ec.KEY_F9,
+    'f10': _ec.KEY_F10,'f11': _ec.KEY_F11, 'f12': _ec.KEY_F12,
+    'insert': _ec.KEY_INSERT,
+    'caps_lock': _ec.KEY_CAPSLOCK,
+    'ctrl': _ec.KEY_LEFTCTRL, 'alt': _ec.KEY_LEFTALT,
+    'shift': _ec.KEY_LEFTSHIFT,
+    'p': _ec.KEY_P,
 }
+for _c in 'abcdefghijklmnopqrstuvwxyz':
+    _UINPUT_KEY_MAP.setdefault(_c, getattr(_ec, f'KEY_{_c.upper()}'))
+for _d in '0123456789':
+    _UINPUT_KEY_MAP.setdefault(_d, getattr(_ec, f'KEY_{_d}'))
 
-def _to_pynput_key(key_str):
-    if isinstance(key_str, str):
-        lower = key_str.lower().strip()
-        if lower in _SPECIAL_KEYS:
-            return _SPECIAL_KEYS[lower]
-        if len(key_str) == 1:
-            return _KeyCode.from_char(key_str)
-    return key_str  # already a Key / KeyCode object
+# Cursor-position tracker — avoids X11 read-lag during rapid bezier moves
+_uinput_pos = [None, None]
+_xdisp = _xdisplay_mod.Display()
 
 def _cursor_pos():
-    x, y = _mouse_ctrl.position
-    return int(x), int(y)
+    ptr = _xdisp.screen().root.query_pointer()
+    return ptr.root_x, ptr.root_y
+
+def _input_move_abs(x, y):
+    if _uinput_pos[0] is None:
+        _uinput_pos[0], _uinput_pos[1] = _cursor_pos()
+    dx = x - _uinput_pos[0]
+    dy = y - _uinput_pos[1]
+    if dx != 0 or dy != 0:
+        _uinput_mouse.write(_ec.EV_REL, _ec.REL_X, dx)
+        _uinput_mouse.write(_ec.EV_REL, _ec.REL_Y, dy)
+        _uinput_mouse.syn()
+    _uinput_pos[0] = x
+    _uinput_pos[1] = y
+
+def _input_press_left():
+    _uinput_mouse.write(_ec.EV_KEY, _ec.BTN_LEFT, 1)
+    _uinput_mouse.syn()
+
+def _input_release_left():
+    _uinput_mouse.write(_ec.EV_KEY, _ec.BTN_LEFT, 0)
+    _uinput_mouse.syn()
+
+def _input_scroll(amount):
+    _uinput_mouse.write(_ec.EV_REL, _ec.REL_WHEEL, amount)
+    _uinput_mouse.syn()
+
+def _input_key_tap(key_str):
+    lower = key_str.lower().strip() if isinstance(key_str, str) else ''
+    code = _UINPUT_KEY_MAP.get(lower)
+    if code is not None:
+        _uinput_kbd.write(_ec.EV_KEY, code, 1)
+        _uinput_kbd.syn()
+        _uinput_kbd.write(_ec.EV_KEY, code, 0)
+        _uinput_kbd.syn()
 
 try:
     from pathgenerator import PDPathGenerator as _PDPathGenerator
@@ -154,11 +199,11 @@ def _bezier_move(tx, ty, duration=None):
     duration *= random.uniform(jlo, jhi)
     pts = _generate_path(tx, ty)
     if not pts:
-        _mouse_ctrl.position = (tx, ty)
+        _input_move_abs(tx, ty)
         return
     delay = min(duration / len(pts), 0.006)
     for px, py in pts:
-        _mouse_ctrl.position = (px, py)
+        _input_move_abs(px, py)
         time.sleep(delay * random.uniform(0.6, 1.4))
 
 REFERENCE_WIDTH_1440P = 2560
@@ -345,7 +390,7 @@ def sleep(x):
     time.sleep(x)
 
 def mouse_scroll(amount):
-    _mouse_ctrl.scroll(0, amount)
+    _input_scroll(amount)
 
 def _validate_monitor_index(monitor_index, fallback=1):
     if monitor_index >= len(get_sct().monitors):
@@ -371,20 +416,20 @@ def mouse_click():
         caller_info = _get_caller_info()
         cx, cy = _cursor_pos()
         logger.debug(f"Mouse click at ({cx}, {cy}) - {caller_info}", dirty=True)
-    _mouse_ctrl.press(_Button.left)
+    _input_press_left()
     time.sleep(random.uniform(0.04, 0.09))
-    _mouse_ctrl.release(_Button.left)
+    _input_release_left()
 
 def mouse_hold():
-    _mouse_ctrl.press(_Button.left)
+    _input_press_left()
     sleep(2)
-    _mouse_ctrl.release(_Button.left)
+    _input_release_left()
 
 def mouse_down():
-    _mouse_ctrl.press(_Button.left)
+    _input_press_left()
 
 def mouse_up():
-    _mouse_ctrl.release(_Button.left)
+    _input_release_left()
 
 def mouse_move_click(x, y, log_click=True):
     if log_click and logger.isEnabledFor(logging.DEBUG):
@@ -398,7 +443,7 @@ def mouse_move_click(x, y, log_click=True):
     pause, drift = _profiles.rhythm_tick()
     if pause > 0:
         if drift != (0, 0):
-            _mouse_ctrl.position = (
+            _input_move_abs(
                 max(0, real_x + drift[0]),
                 max(0, real_y + drift[1]),
             )
@@ -416,26 +461,24 @@ def mouse_move_click(x, y, log_click=True):
     time.sleep(random.lognormvariate(
         prof["lognorm_pre_click_mu"], prof["lognorm_pre_click_sig"]
     ))
-    _mouse_ctrl.press(_Button.left)
+    _input_press_left()
     time.sleep(random.uniform(0.04, 0.09))
-    _mouse_ctrl.release(_Button.left)
+    _input_release_left()
 
 def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
-    _mouse_ctrl.press(_Button.left)
+    _input_press_left()
     time.sleep(hold)
     _bezier_move(real_x, real_y, duration=seconds * random.uniform(0.9, 1.1))
     time.sleep(release_hold)
-    _mouse_ctrl.release(_Button.left)
+    _input_release_left()
 
 def key_press(Key, presses=1):
-    k = _to_pynput_key(Key)
     for _ in range(presses):
-        _kbd_ctrl.press(k)
-        _kbd_ctrl.release(k)
+        _input_key_tap(Key)
 
 def capture_screen(monitor_index=None):
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor

@@ -12,6 +12,22 @@ import multiprocessing
 
 multiprocessing.freeze_support()
 
+if platform.system() != 'Linux':
+    print("WorkerBee is Linux only. Windows is no longer supported.")
+    try:
+        import tkinter as _tk
+        import tkinter.messagebox as _mb
+        _r = _tk.Tk()
+        _r.withdraw()
+        _mb.showerror(
+            "Unsupported Platform",
+            "WorkerBee is Linux only.\nWindows is no longer supported."
+        )
+        _r.destroy()
+    except Exception:
+        pass
+    sys.exit(1)
+
 if "--loader" in sys.argv:
     try:
         if getattr(sys, 'frozen', False):
