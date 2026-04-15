@@ -88,10 +88,10 @@ a = Analysis(
         'src.gui.statistics_page',
         'src.gui.styles',
         'src.gui.themes',
+        'src.gui.theme_page',
         'src.gui.threads_page',
         'src.gui.ui_updater',
         'src.gui.utils',
-        'src.gui.theme_page',
         # third-party
         'pathgenerator',
         'cv2',
@@ -103,6 +103,9 @@ a = Analysis(
         'pynput',
         'pynput.keyboard',
         'pynput.mouse',
+        'evdev',
+        'Xlib',
+        'Xlib.display',
         'PyQt5',
         'PyQt5.QtCore',
         'PyQt5.QtGui',
@@ -116,8 +119,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['rthook_torch.py', 'rthook_loose_src.py'],
     excludes=['pkg_resources.py2_warn'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
@@ -135,11 +136,6 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='app_icon.ico',
 )
 
 coll = COLLECT(
