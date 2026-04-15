@@ -4,7 +4,6 @@ import json
 import common
 import core
 import logging
-import keyboard
 import time
 import threading
 import signal
