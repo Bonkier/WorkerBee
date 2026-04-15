@@ -2,7 +2,7 @@ import os
 import sys
 import json
 
-if getattr(sys, 'frozen', False):
+if getattr(sys, 'frozen', False) and sys.platform == 'win32':
     _torch_lib = os.path.join(sys._MEIPASS, 'torch', 'lib')
     if os.path.isdir(_torch_lib):
         os.add_dll_directory(_torch_lib)
@@ -16,26 +16,57 @@ from logging.handlers import RotatingFileHandler
 import threading
 import inspect
 from functools import partial
-from ctypes import wintypes
+if platform.system() == 'Windows':
+    from ctypes import wintypes
 import cv2
 import numpy as np
 import random
-import interception
-try:
-    interception.auto_capture_devices(keyboard=True, mouse=True)
-except AttributeError:
-    raise RuntimeError("Wrong interception package installed. Run: pip install interception-python")
 from mss import mss
 from mss.tools import to_png
 from PIL import ImageGrab
 import shared_vars
 
+# ---------------------------------------------------------------------------
+# Cross-platform input backend (pynput replaces Windows-only interception)
+# ---------------------------------------------------------------------------
+from pynput.mouse import Controller as _MouseCtrl, Button as _Button
+from pynput.keyboard import Controller as _KbdCtrl, Key as _Key, KeyCode as _KeyCode
+
+_mouse_ctrl = _MouseCtrl()
+_kbd_ctrl   = _KbdCtrl()
+
+_SPECIAL_KEYS = {
+    'enter': _Key.enter, 'return': _Key.enter,
+    'space': _Key.space, 'escape': _Key.esc, 'esc': _Key.esc,
+    'tab': _Key.tab, 'backspace': _Key.backspace, 'delete': _Key.delete,
+    'up': _Key.up, 'down': _Key.down, 'left': _Key.left, 'right': _Key.right,
+    'home': _Key.home, 'end': _Key.end,
+    'pageup': _Key.page_up, 'page_up': _Key.page_up,
+    'pagedown': _Key.page_down, 'page_down': _Key.page_down,
+    'f1': _Key.f1,  'f2': _Key.f2,  'f3': _Key.f3,  'f4': _Key.f4,
+    'f5': _Key.f5,  'f6': _Key.f6,  'f7': _Key.f7,  'f8': _Key.f8,
+    'f9': _Key.f9,  'f10': _Key.f10,'f11': _Key.f11,'f12': _Key.f12,
+    'ctrl': _Key.ctrl, 'alt': _Key.alt, 'shift': _Key.shift,
+    'win': _Key.cmd, 'cmd': _Key.cmd, 'super': _Key.cmd,
+    'insert': _Key.insert, 'caps_lock': _Key.caps_lock,
+    'num_lock': _Key.num_lock, 'scroll_lock': _Key.scroll_lock,
+    'print_screen': _Key.print_screen, 'pause': _Key.pause,
+    'media_play_pause': _Key.media_play_pause,
+    'media_next': _Key.media_next, 'media_previous': _Key.media_previous,
+}
+
+def _to_pynput_key(key_str):
+    if isinstance(key_str, str):
+        lower = key_str.lower().strip()
+        if lower in _SPECIAL_KEYS:
+            return _SPECIAL_KEYS[lower]
+        if len(key_str) == 1:
+            return _KeyCode.from_char(key_str)
+    return key_str  # already a Key / KeyCode object
+
 def _cursor_pos():
-    class _POINT(ctypes.Structure):
-        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-    pt = _POINT()
-    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-    return pt.x, pt.y
+    x, y = _mouse_ctrl.position
+    return int(x), int(y)
 
 try:
     from pathgenerator import PDPathGenerator as _PDPathGenerator
@@ -123,11 +154,11 @@ def _bezier_move(tx, ty, duration=None):
     duration *= random.uniform(jlo, jhi)
     pts = _generate_path(tx, ty)
     if not pts:
-        interception.move_to(tx, ty)
+        _mouse_ctrl.position = (tx, ty)
         return
     delay = min(duration / len(pts), 0.006)
     for px, py in pts:
-        interception.move_to(px, py)
+        _mouse_ctrl.position = (px, py)
         time.sleep(delay * random.uniform(0.6, 1.4))
 
 REFERENCE_WIDTH_1440P = 2560
@@ -314,7 +345,7 @@ def sleep(x):
     time.sleep(x)
 
 def mouse_scroll(amount):
-    interception.scroll(amount)
+    _mouse_ctrl.scroll(0, amount)
 
 def _validate_monitor_index(monitor_index, fallback=1):
     if monitor_index >= len(get_sct().monitors):
@@ -340,18 +371,20 @@ def mouse_click():
         caller_info = _get_caller_info()
         cx, cy = _cursor_pos()
         logger.debug(f"Mouse click at ({cx}, {cy}) - {caller_info}", dirty=True)
-    interception.click()
+    _mouse_ctrl.press(_Button.left)
+    time.sleep(random.uniform(0.04, 0.09))
+    _mouse_ctrl.release(_Button.left)
 
 def mouse_hold():
-    interception.mouse_down("left")
+    _mouse_ctrl.press(_Button.left)
     sleep(2)
-    interception.mouse_up("left")
+    _mouse_ctrl.release(_Button.left)
 
 def mouse_down():
-    interception.mouse_down("left")
+    _mouse_ctrl.press(_Button.left)
 
 def mouse_up():
-    interception.mouse_up("left")
+    _mouse_ctrl.release(_Button.left)
 
 def mouse_move_click(x, y, log_click=True):
     if log_click and logger.isEnabledFor(logging.DEBUG):
@@ -365,7 +398,7 @@ def mouse_move_click(x, y, log_click=True):
     pause, drift = _profiles.rhythm_tick()
     if pause > 0:
         if drift != (0, 0):
-            interception.move_to(
+            _mouse_ctrl.position = (
                 max(0, real_x + drift[0]),
                 max(0, real_y + drift[1]),
             )
@@ -383,24 +416,26 @@ def mouse_move_click(x, y, log_click=True):
     time.sleep(random.lognormvariate(
         prof["lognorm_pre_click_mu"], prof["lognorm_pre_click_sig"]
     ))
-    interception.mouse_down("left")
+    _mouse_ctrl.press(_Button.left)
     time.sleep(random.uniform(0.04, 0.09))
-    interception.mouse_up("left")
+    _mouse_ctrl.release(_Button.left)
 
 def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):
     if logger.isEnabledFor(logging.DEBUG):
         caller_info = _get_caller_info()
         logger.debug(f"Mouse drag to ({x}, {y}) over {seconds}s - {caller_info}", dirty=True)
     real_x, real_y = get_MonCords(x, y)
-    interception.mouse_down("left")
+    _mouse_ctrl.press(_Button.left)
     time.sleep(hold)
     _bezier_move(real_x, real_y, duration=seconds * random.uniform(0.9, 1.1))
     time.sleep(release_hold)
-    interception.mouse_up("left")
+    _mouse_ctrl.release(_Button.left)
 
 def key_press(Key, presses=1):
+    k = _to_pynput_key(Key)
     for _ in range(presses):
-        interception.press(Key)
+        _kbd_ctrl.press(k)
+        _kbd_ctrl.release(k)
 
 def capture_screen(monitor_index=None):
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
@@ -1077,21 +1112,23 @@ def check_internet_connection(timeout=5):
         return False
 
 def draw_debug_rect(x, y, width, height, duration=2):
+    if platform.system() != 'Windows':
+        return
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
-    
+
     desktop_dc = user32.GetDC(0)
     pen = gdi32.CreatePen(0, 4, 0x05B0FE)
     old_pen = gdi32.SelectObject(desktop_dc, pen)
     old_brush = gdi32.SelectObject(desktop_dc, gdi32.GetStockObject(5))
-    
+
     gdi32.Rectangle(desktop_dc, int(x), int(y), int(x + width), int(y + height))
-    
+
     time.sleep(duration)
-    
+
     rect = wintypes.RECT(int(x) - 5, int(y) - 5, int(x + width) + 5, int(y + height) + 5)
     user32.InvalidateRect(0, ctypes.byref(rect), 1)
-    
+
     gdi32.SelectObject(desktop_dc, old_pen)
     gdi32.SelectObject(desktop_dc, old_brush)
     gdi32.DeleteObject(pen)

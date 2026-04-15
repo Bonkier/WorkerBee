@@ -84,7 +84,6 @@ def _is_ego_animation(screenshot=None):
 def _skill_chain(bar_y):
     import cv2
     import numpy as np
-    import interception as _icp
 
     shot = common.capture_screen()
     h, w = shot.shape[:2]
@@ -123,13 +122,13 @@ def _skill_chain(bar_y):
     sx     = gx + common.scale_x_1080p(75)
     step   = common.scale_x_1080p(115)
 
-    _icp.move_to(int(gx), int(bar_y))
-    _icp.mouse_down("left")
+    common.mouse_move(int(gx), int(bar_y))
+    common.mouse_down()
     for i, is3 in enumerate(moves):
-        _icp.move_to(int(sx + step * i + common.scale_x_1080p(68)), int(hi_y if is3 else lo_y))
+        common.mouse_move(int(sx + step * i + common.scale_x_1080p(68)), int(hi_y if is3 else lo_y))
         time.sleep(0.01)
-    _icp.move_to(int(sx + step * skill_num + common.scale_x_1080p(68)), int(base_y + common.scale_y_1080p(120)))
-    _icp.mouse_up("left")
+    common.mouse_move(int(sx + step * skill_num + common.scale_x_1080p(68)), int(base_y + common.scale_y_1080p(120)))
+    common.mouse_up()
     time.sleep(0.2)
     logger.info(f"Skill chain: {sum(moves)}/{skill_num} skill-3 slots chained")
 
@@ -214,14 +213,13 @@ def battle():
 
             if not _winrate_match and _is_ego_animation(screenshot=screenshot):
                 logger.debug("EGO animation detected - holding mouse to skip")
-                import interception as _icp
-                _icp.mouse_down("left")
+                common.mouse_down()
                 _ego_t = time.time()
                 while time.time() - _ego_t < 3.5:
                     if not _is_ego_animation():
                         break
                     time.sleep(0.1)
-                _icp.mouse_up("left")
+                common.mouse_up()
                 last_action_time = time.time()
                 continue
             if _winrate_match:
@@ -340,14 +338,13 @@ def ego_check():
 
             usable_ego = []
             common.mouse_move(slot_x, slot_y)
-            import interception as _icp
-            _icp.mouse_down("left")
+            common.mouse_down()
             _hold_start = time.time()
             while time.time() - _hold_start < 2.5:
                 if common.element_exist("pictures/battle/ego/sanity.png", quiet_failure=True):
                     break
                 time.sleep(0.1)
-            _icp.mouse_up("left")
+            common.mouse_up()
             egos = common.match_image("pictures/battle/ego/sanity.png")
             for i in egos:
                 x,y = i

@@ -546,14 +546,16 @@ def _perform_exit():
         except:
             pass
 
-        if platform.system() == "Windows":
-            try:
+        try:
+            if platform.system() == "Windows":
                 subprocess.Popen(f"taskkill /F /PID {os.getpid()} /T",
-                               shell=True, 
-                               creationflags=0x08000000)
+                                 shell=True, creationflags=0x08000000)
                 time.sleep(0.2)
-            except:
-                pass
+            else:
+                import signal as _signal
+                os.kill(os.getpid(), _signal.SIGTERM)
+        except Exception:
+            pass
         
         os._exit(0)
 
@@ -742,16 +744,25 @@ if __name__ == "__main__":
 
         try:
             icon_path = os.path.join(BASE_PATH, "app_icon.ico")
-            if os.path.exists(icon_path):
-                root.wm_iconbitmap(default=icon_path)
-                root.iconbitmap(icon_path)
-                
-                def _enforce_icon():
-                    try: root.iconbitmap(icon_path)
-                    except: pass
-                root.after(200, _enforce_icon)
+            png_path  = os.path.join(BASE_PATH, "app_icon.png")
+            if platform.system() == "Windows":
+                if os.path.exists(icon_path):
+                    root.wm_iconbitmap(default=icon_path)
+                    root.iconbitmap(icon_path)
+                    def _enforce_icon():
+                        try: root.iconbitmap(icon_path)
+                        except: pass
+                    root.after(200, _enforce_icon)
             else:
-                log_debug(f"Window icon not found: {icon_path}")
+                # Use PNG icon on Linux/macOS
+                icon_file = png_path if os.path.exists(png_path) else None
+                if icon_file:
+                    try:
+                        import tkinter as _tk
+                        _icon_img = _tk.PhotoImage(file=icon_file)
+                        root.iconphoto(True, _icon_img)
+                    except Exception as _ie:
+                        log_debug(f"iconphoto failed: {_ie}")
         except Exception as e:
             log_debug(f"Failed to set window icon: {e}")
 

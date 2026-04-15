@@ -1,8 +1,8 @@
 import subprocess
-import winreg
 import os
 import common
 import sys
+import platform
 import logging
 def get_base_path():
     if getattr(sys, 'frozen', False):
@@ -21,15 +21,48 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 def get_steam_exe():
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam")
-        steam_path, _ = winreg.QueryValueEx(key, "SteamExe")
-        winreg.CloseKey(key)
-        if not os.path.isfile(steam_path):
-            raise FileNotFoundError(f"Steam.exe not found at {steam_path}")
-        return steam_path
-    except Exception as e:
-        raise RuntimeError(f"Failed to locate Steam.exe: {e}")
+    if platform.system() == 'Windows':
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam")
+            steam_path, _ = winreg.QueryValueEx(key, "SteamExe")
+            winreg.CloseKey(key)
+            if os.path.isfile(steam_path):
+                return steam_path
+        except Exception:
+            pass
+        # Fallback common Windows paths
+        for candidate in [
+            r"C:\Program Files (x86)\Steam\steam.exe",
+            r"C:\Program Files\Steam\steam.exe",
+        ]:
+            if os.path.isfile(candidate):
+                return candidate
+        raise RuntimeError("Failed to locate Steam.exe")
+
+    elif platform.system() == 'Darwin':
+        candidate = os.path.expanduser("~/Library/Application Support/Steam/Steam.app/Contents/MacOS/steam_osx")
+        if os.path.isfile(candidate):
+            return candidate
+        raise RuntimeError("Failed to locate Steam on macOS")
+
+    else:  # Linux
+        for candidate in [
+            os.path.expanduser("~/.local/share/Steam/steam.sh"),
+            "/usr/bin/steam",
+            "/usr/games/steam",
+            "/snap/bin/steam",
+        ]:
+            if os.path.isfile(candidate):
+                return candidate
+        # Try which
+        try:
+            result = subprocess.run(["which", "steam"], capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except Exception:
+            pass
+        raise RuntimeError("Failed to locate Steam on Linux")
 
 def launch_game(appid):
     steam_exe = get_steam_exe()

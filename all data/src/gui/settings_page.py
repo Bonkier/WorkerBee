@@ -803,15 +803,26 @@ def _setup_theme(parent, config, save_callback, base_path, root, restart_callbac
                       corner_radius=UIStyle.CORNER_RADIUS).pack(pady=(0, 15))
 
 def _setup_driver_manager(parent, base_path):
-    import threading
-    import ctypes as _ctypes
+    import platform as _platform
 
     card = CardFrame(parent)
     card.pack(fill="x", pady=10, padx=10)
-    ctk.CTkLabel(card, text="Interception Driver", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
+    ctk.CTkLabel(card, text="Input Driver", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
+
+    if _platform.system() != "Windows":
+        ctk.CTkLabel(
+            card,
+            text="Input is handled by pynput on Linux/macOS — no driver installation required.",
+            font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500,
+        ).pack(pady=(0, 15), padx=20)
+        return
+
+    import ctypes as _ctypes
+
     ctk.CTkLabel(
         card,
-        text="Required for mouse/keyboard input. A PC restart is needed after install or uninstall.",
+        text="Interception driver required for mouse/keyboard input on Windows.\n"
+             "A PC restart is needed after install or uninstall.",
         font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500
     ).pack(pady=(0, 10), padx=20)
 
@@ -819,9 +830,11 @@ def _setup_driver_manager(parent, base_path):
     status_label.pack(pady=(0, 5))
 
     def _driver_installed():
-        drivers_dir = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers")
-        if os.path.exists(os.path.join(drivers_dir, "keyboard.sys")) and \
-           os.path.exists(os.path.join(drivers_dir, "mouse.sys")):
+        drivers_dir = os.path.join(
+            os.environ.get("SystemRoot", r"C:\Windows"), "System32", "drivers"
+        )
+        if (os.path.exists(os.path.join(drivers_dir, "keyboard.sys")) and
+                os.path.exists(os.path.join(drivers_dir, "mouse.sys"))):
             return True
         try:
             import winreg

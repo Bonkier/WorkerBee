@@ -55,7 +55,13 @@ class LoaderWindow:
 
         try:
             if os.path.exists(icon_path):
-                self.root.wm_iconbitmap(default=icon_path)
+                if sys.platform == 'win32':
+                    self.root.wm_iconbitmap(default=icon_path)
+                else:
+                    import tkinter as _tk
+                    _img = _tk.PhotoImage(file=icon_path) if icon_path.endswith('.png') else None
+                    if _img:
+                        self.root.iconphoto(True, _img)
         except Exception as e:
             _logger.debug(f"Could not set window icon: {e}")
 
