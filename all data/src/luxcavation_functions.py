@@ -12,6 +12,22 @@ import mirror
 import mirror_utils
 import shared_vars
 
+_ocr_reader = None
+
+def _get_ocr():
+    global _ocr_reader
+    if _ocr_reader is None:
+        logger = logging.getLogger(__name__)
+        logger.info("Loading EasyOCR model (first use, may take a moment)...")
+        try:
+            import easyocr as _easyocr
+            _ocr_reader = _easyocr.Reader(['en'], gpu=False, verbose=False)
+            logger.info("EasyOCR model loaded")
+        except Exception as e:
+            import traceback
+            logger.error(f"Failed to load OCR: {e}\n{traceback.format_exc()}")
+    return _ocr_reader
+
 def get_base_path():
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
@@ -208,13 +224,14 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
     logger.info(f"Navigating to EXP stage: {Stage} with config: {config_type}")
     
     already_on_lux_screen = common.element_exist("pictures/CustomAdded1080p/luxcavation/luxcavation_brown.png")
-    
+
     if not already_on_lux_screen:
         logger.debug(f"Not on Luxcavation screen, navigating there first")
         navigate_to_lux()
-    else:
-        logger.debug("Already on Luxcavation screen, clicking EXP tab")
-        common.click_matching("pictures/CustomAdded1080p/luxcavation/exp/exp.png", 0.8)
+
+    logger.debug("Clicking EXP tab")
+    common.click_matching("pictures/CustomAdded1080p/luxcavation/exp/exp.png", 0.8)
+    time.sleep(1.0)
     
     if Stage == "latest":
         logger.debug("Clicking latest stage using coordinates")
@@ -230,12 +247,7 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
         drag_start_x, drag_start_y = lux_coords["exp_drag_start"]
         drag_end_x, drag_end_y = lux_coords["exp_drag_end"]
 
-        try:
-            import easyocr as _easyocr
-            _ocr = _easyocr.Reader(['en'], gpu=False, verbose=False)
-        except Exception as e:
-            logger.error(f"Failed to load OCR for stage detection: {e}")
-            _ocr = None
+        _ocr = _get_ocr()
 
         success = False
         for attempt in range(8):
@@ -243,6 +255,10 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
             sh, sw = screenshot.shape[:2]
             enter_matches = common.match_image(enter_image, 0.85)
 
+            if not enter_matches:
+                logger.debug(f"No exp_enter buttons visible on screen (attempt {attempt+1})")
+            elif not _ocr:
+                logger.warning("OCR unavailable, cannot read stage labels")
             if enter_matches and _ocr:
                 stage_y1 = int(0.268 * sh)
                 stage_y2 = int(0.398 * sh)
@@ -253,6 +269,7 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
                     crop = screenshot[stage_y1:stage_y2, cx1:cx2]
                     texts = _ocr.readtext(crop, detail=0)
                     combined = " ".join(texts)
+                    logger.debug(f"OCR at x={ex}: '{combined}' (looking for '{target_label}')")
                     if target_label in combined:
                         logger.info(f"Stage {Stage} (label '{target_label}') found at x={ex}, clicking Enter at ({ex},{ey})")
                         common.mouse_move_click(ex, ey)
@@ -262,6 +279,9 @@ def navigate_to_exp(Stage, SelectTeam=False, config_type="exp_team_selection"):
             if success:
                 break
             logger.warning(f"Stage {Stage} not found on screen (attempt {attempt+1}), scrolling")
+            if not common.element_exist("pictures/CustomAdded1080p/luxcavation/luxcavation_brown.png"):
+                logger.warning("No longer on Luxcavation screen, aborting scroll")
+                break
             step = int((drag_end_x - drag_start_x) * 0.25)
             scroll_x = drag_start_x + step
             common.mouse_move(drag_start_x, drag_start_y)

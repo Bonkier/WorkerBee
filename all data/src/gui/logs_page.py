@@ -188,8 +188,8 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
                     "The log file has exceeded 2 GB.\n\nWould you like to clear it now?"
                 ):
                     clear_log_file()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Log size check failed: {e}")
 
     def should_display_line(line):
         for module, pattern in log_modules.items():
@@ -232,16 +232,16 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
                             log_text.delete("1.0", f"{line_count - 500}.0")
                         log_text.see("end")
                     log_text.configure(state="disabled")
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to load log file: {e}")
 
     def check_log_file_changes():
         if auto_reload_var.get():
             try:
                 if os.path.exists(log_filename):
                     load_log_file(reload_all=False)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Log file change check failed: {e}")
         root.after(200, check_log_file_changes)
 
     check_log_size_and_warn()

@@ -123,8 +123,8 @@ def handle_command(cmd_data):
                 shared_vars.exp_runs.value = runs
                 if str(stage) != "latest":
                     shared_vars.exp_stage.value = int(stage)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to set exp shared vars: {e}")
             success = process_handler.start_exp_luxcavation(shared_vars, runs, stage)
             response["success"] = success
             
@@ -135,8 +135,8 @@ def handle_command(cmd_data):
                 shared_vars.threads_runs.value = runs
                 if str(difficulty) != "latest":
                     shared_vars.threads_difficulty.value = int(difficulty)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to set threads shared vars: {e}")
             success = process_handler.start_thread_luxcavation(shared_vars, runs, difficulty)
             response["success"] = success
             

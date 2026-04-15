@@ -70,7 +70,10 @@ class UIUpdater:
         except Exception as e:
             logging.getLogger("gui_launcher").error(f"Error in UI update loop: {e}")
 
-        self.root.after(1000, self.check_processes)
+        try:
+            self.root.after(1000, self.check_processes)
+        except Exception:
+            pass
 
     def update_compact_status(self):
         """Update status label in compact mode"""
@@ -88,7 +91,10 @@ class UIUpdater:
                         if self.ui_context['compact_stop_btn'].winfo_ismapped():
                             self.ui_context['compact_stop_btn'].pack_forget()
         
-        self.root.after(1000, self.update_compact_status)
+        try:
+            self.root.after(1000, self.update_compact_status)
+        except Exception:
+            pass
 
     def check_stats_update(self):
         """Check if stats file has changed and reload stats tab"""
@@ -100,11 +106,20 @@ class UIUpdater:
                     if current_mtime != self.last_stats_mtime:
                         self.last_stats_mtime = current_mtime
                         self.commands['load_statistics_tab']()
-            except Exception:
-                pass
-        self.root.after(2000, self.check_stats_update)
+            except Exception as e:
+                logging.getLogger("gui_launcher").warning(f"Stats update check failed: {e}")
+        try:
+            self.root.after(2000, self.check_stats_update)
+        except Exception:
+            pass
 
     def check_chain_status(self):
-        import src.gui.chain_automation as chain_automation
-        chain_automation.check_chain_status(self.root, self.ui_context, self.shared_vars)
-        self.root.after(1000, self.check_chain_status)
+        try:
+            import src.gui.chain_automation as chain_automation
+            chain_automation.check_chain_status(self.root, self.ui_context, self.shared_vars)
+        except Exception as e:
+            logging.getLogger("gui_launcher").error(f"Error in chain status check: {e}")
+        try:
+            self.root.after(1000, self.check_chain_status)
+        except Exception:
+            pass

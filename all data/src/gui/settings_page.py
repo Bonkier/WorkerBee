@@ -1,13 +1,16 @@
 import os
 import json
+import logging
 import shutil
 import time
 import subprocess
 import sys
 import tkinter as tk
 import platform
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
+
+_logger = logging.getLogger(__name__)
 
 from src.gui.styles import UIStyle
 from src.gui.components import CardFrame, ToolTip, ModernEntry, animate_expand, animate_collapse
@@ -141,11 +144,78 @@ def _setup_profiles(parent, base_path, save_callback):
         messagebox.showinfo("Success", "Profile loaded. Please restart application.")
 
     ctk.CTkButton(actions_frame, text="Save", command=save_profile, width=80,
-                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
                   corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
     ctk.CTkButton(actions_frame, text="Load", command=load_profile, width=80,
-                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR, 
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
+
+    # Export / Import all configs as a single JSON file
+    config_dir = os.path.join(base_path, "config")
+
+    def export_config():
+        out_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+            title="Export Config",
+            initialfile="workerbee_config.json",
+        )
+        if not out_path:
+            return
+        try:
+            bundle = {}
+            for filename in os.listdir(config_dir):
+                if not filename.endswith(".json"):
+                    continue
+                with open(os.path.join(config_dir, filename), "r", encoding="utf-8") as f:
+                    bundle[filename] = json.load(f)
+            if not bundle:
+                messagebox.showerror("Error", "No config files found to export.")
+                return
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, indent=2)
+            messagebox.showinfo("Success", f"Exported {len(bundle)} config files to:\n{out_path}")
+        except Exception as e:
+            _logger.error(f"Config export failed: {e}")
+            messagebox.showerror("Error", f"Export failed: {e}")
+
+    def import_config():
+        in_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json")],
+            title="Import Config",
+        )
+        if not in_path:
+            return
+        if not messagebox.askyesno("Confirm", "Import config? Current settings will be overwritten."):
+            return
+        try:
+            with open(in_path, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+            if not isinstance(bundle, dict) or not any(k.endswith(".json") for k in bundle):
+                messagebox.showerror("Error", "File does not appear to be a valid WorkerBee config export.")
+                return
+            count = 0
+            for filename, data in bundle.items():
+                if filename.endswith(".json"):
+                    with open(os.path.join(config_dir, filename), "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2)
+                    count += 1
+            messagebox.showinfo("Success", f"Imported {count} config files.\nPlease restart the application.")
+        except Exception as e:
+            _logger.error(f"Config import failed: {e}")
+            messagebox.showerror("Error", f"Import failed: {e}")
+
+    io_frame = ctk.CTkFrame(card, fg_color="transparent")
+    io_frame.pack(fill="x", padx=10, pady=(0, 15))
+    ctk.CTkLabel(io_frame, text="Backup / Share:", font=UIStyle.SMALL_FONT, text_color="gray").pack(side="left", padx=(0, 8))
+    ctk.CTkButton(io_frame, text="Export Config", command=export_config, width=110,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+                  border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+                  corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
+    ctk.CTkButton(io_frame, text="Import Config", command=import_config, width=110,
+                  fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
                   border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
                   corner_radius=UIStyle.CORNER_RADIUS).pack(side="left", padx=5)
 
@@ -297,7 +367,8 @@ def _setup_display_settings(parent, shared_vars, save_callback):
     try:
         monitors = common.list_available_monitors()
         options = [f"Monitor {m['index']} ({m['width']}x{m['height']})" for m in monitors]
-    except:
+    except Exception as e:
+        _logger.warning(f"Could not list monitors, defaulting to Monitor 1: {e}")
         options = ["Monitor 1"]
         
     current = shared_vars.game_monitor.value
@@ -311,8 +382,8 @@ def _setup_display_settings(parent, shared_vars, save_callback):
             shared_vars.game_monitor.value = idx
             common.set_game_monitor(idx)
             save_callback()
-        except:
-            pass
+        except Exception as e:
+            _logger.warning(f"Failed to update monitor selection: {e}")
             
     ctk.CTkOptionMenu(frame, variable=var, values=options, command=update_monitor, width=200,
                       fg_color=UIStyle.OPTION_MENU_FG_COLOR, button_color=UIStyle.OPTION_MENU_BUTTON_COLOR,
@@ -347,8 +418,8 @@ def _setup_mouse_offsets(parent, shared_vars, save_callback, root):
                 new_val = int(entry.get())
                 getattr(shared_vars, var_name).value = new_val
                 save_callback()
-            except:
-                pass
+            except Exception as e:
+                _logger.warning(f"Failed to save offset value for {var_name}: {e}")
         
         entry.bind("<FocusOut>", save)
         entry.bind("<Return>", save)
@@ -744,8 +815,7 @@ def _setup_driver_manager(parent, base_path):
         font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500
     ).pack(pady=(0, 10), padx=20)
 
-    status_var = ctk.StringVar(value="Checking...")
-    status_label = ctk.CTkLabel(card, textvariable=status_var, font=UIStyle.SMALL_FONT)
+    status_label = ctk.CTkLabel(card, text="Checking...", font=UIStyle.SMALL_FONT)
     status_label.pack(pady=(0, 5))
 
     def _driver_installed():
@@ -767,11 +837,9 @@ def _setup_driver_manager(parent, base_path):
     def _refresh():
         installed = _driver_installed()
         if installed:
-            status_var.set("Status: Installed")
-            status_label.configure(text_color="#55cc88")
+            status_label.configure(text="Status: Installed", text_color="#55cc88")
         else:
-            status_var.set("Status: Not installed")
-            status_label.configure(text_color="#ff8855")
+            status_label.configure(text="Status: Not installed", text_color="#ff8855")
 
     def _run_action(action):
         if getattr(sys, 'frozen', False):
@@ -818,7 +886,7 @@ def _setup_driver_manager(parent, base_path):
         corner_radius=UIStyle.CORNER_RADIUS
     ).pack(side="left", padx=5)
 
-    threading.Thread(target=lambda: card.after(100, _refresh), daemon=True).start()
+    card.after(100, _refresh)
 
 
 def _setup_danger_zone(parent, base_path):

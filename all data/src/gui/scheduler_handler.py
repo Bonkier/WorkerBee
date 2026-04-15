@@ -23,7 +23,8 @@ class SchedulerHandler:
             try:
                 with open(schedule_path, 'r') as f:
                     schedule_data = json.load(f)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.warning(f"Scheduler: failed to parse schedule.json: {e}")
                 return
                 
             if not schedule_data.get("enabled", False):

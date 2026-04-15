@@ -34,14 +34,14 @@ class OptimizedLogHandler(logging.Handler):
                     msg = self.format(record)
                     try:
                         self.text_widget.after(0, self._append_log, msg)
-                    except:
+                    except Exception:
                         self.running = False
                         break
                 self.queue.task_done()
             except queue.Empty:
                 continue
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Log handler update error: {e}")
 
     def _should_show_record(self, record):
         level_name = record.levelname

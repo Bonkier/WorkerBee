@@ -79,5 +79,5 @@ def format_log_line_with_time_ago(line):
                 
             return f"{timestamp_str} ({time_ago}) | {parts[1]}"
     except Exception:
-        pass
+        pass  # Line doesn't match expected format; return it unchanged below
     return line

@@ -54,19 +54,29 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
                     prev_img = Image.open(prev_path)
                     curr_arr = np.array(img)
                     prev_arr = np.array(prev_img)
-                    if curr_arr.shape == prev_arr.shape:
-                        diff = np.mean(np.abs(curr_arr.astype(np.int32) - prev_arr.astype(np.int32)))
-                        if diff < STUCK_THRESHOLD:
-                            logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f}), injecting TimeoutError")
-                            ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                                ctypes.c_long(main_thread_id),
-                                ctypes.py_object(TimeoutError)
-                            )
-                            break
+                    try:
+                        if curr_arr.shape == prev_arr.shape:
+                            diff = np.mean(np.abs(curr_arr.astype(np.int32) - prev_arr.astype(np.int32)))
+                            if diff < STUCK_THRESHOLD:
+                                logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f}), injecting TimeoutError")
+                                ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                                    ctypes.c_long(main_thread_id),
+                                    ctypes.py_object(TimeoutError)
+                                )
+                                break
+                    finally:
+                        del curr_arr, prev_arr
+                        prev_img.close()
                 screenshot_index += 1
                 last_screenshot = now
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Run watchdog: screenshot check failed: {e}")
+            finally:
+                try:
+                    img.close()
+                    del img
+                except Exception:
+                    pass
 
 logger = None
 
@@ -134,7 +144,7 @@ class ConnectionManager:
     
     def _connection_check(self):
         from common import element_exist
-        
+
         while True:
             try:
                 if element_exist("pictures/general/connection.png", quiet_failure=True):
@@ -143,6 +153,7 @@ class ConnectionManager:
                     self.connection_event.set()
             except Exception as e:
                 logger.error(f"Error in connection check: {e}")
+            time.sleep(2)
     
     def handle_reconnection(self):
         try:
@@ -154,7 +165,9 @@ class ConnectionManager:
             
             connection_listener_thread = threading.Thread(target=reconnect)
             connection_listener_thread.start()
-            connection_listener_thread.join()
+            connection_listener_thread.join(timeout=300)
+            if connection_listener_thread.is_alive():
+                logger.warning("Reconnection thread did not complete within 5 minutes, continuing anyway")
             
             self.connection_event.set()
         except Exception as e:
@@ -310,7 +323,7 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
                     if connection_manager.connection_event.is_set():
                         win_flag, run_complete, run_stats = MD.mirror_loop()
                     else:
-                        connection_manager.connection_event.wait()
+                        connection_manager.connection_event.wait(timeout=30)
 
                     if element_exist("pictures/general/server_error.png"):
                         connection_manager.handle_reconnection()
@@ -358,9 +371,9 @@ def main(num_runs, shared_vars):
         try:
             from common import error_screenshot
             error_screenshot()
-        except:
-            pass 
-        return  
+        except Exception as screenshot_err:
+            logger.warning(f"Failed to take error screenshot: {screenshot_err}")
+        return
 
 if __name__ == "__main__":
     """Legacy support for command line execution"""
@@ -418,8 +431,8 @@ if __name__ == "__main__":
         try:
             from common import error_screenshot
             error_screenshot()
-        except:
-            pass
-        sys.exit(1) 
+        except Exception as screenshot_err:
+            logger.warning(f"Failed to take error screenshot: {screenshot_err}")
+        sys.exit(1)
     
     logger.info(f"compiled_runner.py completed successfully")

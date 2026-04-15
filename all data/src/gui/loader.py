@@ -2,6 +2,9 @@ import tkinter as tk
 import sys
 import os
 import threading
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class LoaderWindow:
@@ -53,8 +56,8 @@ class LoaderWindow:
         try:
             if os.path.exists(icon_path):
                 self.root.wm_iconbitmap(default=icon_path)
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug(f"Could not set window icon: {e}")
 
         card = tk.Frame(self.root, bg=self.CARD)
         card.place(x=1, y=1, width=self.W - 2, height=self.H - 2)
@@ -68,8 +71,8 @@ class LoaderWindow:
             if os.path.exists(ver_path):
                 with open(ver_path, 'r', encoding='utf-8') as f:
                     version = f.read().strip()
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug(f"Could not read version.json: {e}")
 
         icon_photo = None
         try:
@@ -78,8 +81,8 @@ class LoaderWindow:
                 img = Image.open(icon_path)
                 img = img.resize((36, 36), Image.LANCZOS)
                 icon_photo = ImageTk.PhotoImage(img)
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug(f"Could not load icon image: {e}")
 
         header = tk.Frame(card, bg=self.CARD)
         header.pack(fill='x', padx=28, pady=(20, 0))
@@ -127,7 +130,7 @@ class LoaderWindow:
         self._bar_cv.pack(fill='x')
 
         self._bar_x = [-(self.W - 56) * 0.32]
-        self.root.after(50, self._tick)
+        self._tick_id = self.root.after(50, self._tick)
         self.root.after(60_000, self.close)
 
         self.root.lift()
@@ -153,7 +156,7 @@ class LoaderWindow:
         self._bar_x[0] += 10
         if self._bar_x[0] > track_w + seg:
             self._bar_x[0] = -seg
-        self.root.after(16, self._tick)
+        self._tick_id = self.root.after(16, self._tick)
 
     def _clear_bottom(self):
         self._animating = False
@@ -220,10 +223,23 @@ class LoaderWindow:
         except Exception:
             pass
 
-    def close(self):
+    def _do_close(self):
+        self._animating = False
+        try:
+            if hasattr(self, '_tick_id') and self._tick_id:
+                self.root.after_cancel(self._tick_id)
+        except Exception:
+            pass
         try:
             self.root.quit()
             self.root.destroy()
+        except Exception:
+            pass
+
+    def close(self):
+        # Safe to call from any thread — schedules _do_close on the main thread
+        try:
+            self.root.after(0, self._do_close)
         except Exception:
             pass
 

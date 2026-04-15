@@ -32,7 +32,7 @@ class ConnectionManager:
     
     def _connection_check(self):
         from common import element_exist
-        
+
         while True:
             try:
                 if element_exist("pictures/general/connection.png", quiet_failure=True):
@@ -41,6 +41,7 @@ class ConnectionManager:
                     self.connection_event.set()
             except Exception as e:
                 logger.error(f"Error in connection check: {e}")
+            time.sleep(2)
     
     def handle_reconnection(self):
         try:
@@ -51,8 +52,10 @@ class ConnectionManager:
             
             connection_listener_thread = threading.Thread(target=reconnect)
             connection_listener_thread.start()
-            connection_listener_thread.join()
-            
+            connection_listener_thread.join(timeout=300)
+            if connection_listener_thread.is_alive():
+                logger.warning("Reconnection thread did not complete within 5 minutes, continuing anyway")
+
             self.connection_event.set()
         except Exception as e:
             logger.error(f"Error in reconnection: {e}")
@@ -120,7 +123,7 @@ def main(runs, stage, shared_vars=None):
                         luxcavation_functions.pre_exp_setup(stage, config_type="exp_team_selection")
                         break
                     else:
-                        connection_manager.connection_event.wait()
+                        connection_manager.connection_event.wait(timeout=30)
 
                     try:
                         from common import element_exist

@@ -67,9 +67,9 @@ def parse_function_call(function_string):
         except (SyntaxError, ValueError) as e:
             logger.warning(f"Could not parse arguments '{args_str}': {e}")
             try:
-                args = [eval(arg.strip()) for arg in args_str.split(',') if arg.strip()]
+                args = [ast.literal_eval(arg.strip()) for arg in args_str.split(',') if arg.strip()]
             except Exception as e:
-                    logger.error(f"Failed to parse arguments: {e}")
+                logger.error(f"Failed to parse arguments: {e}")
     
     return module_name, function_name, args
 

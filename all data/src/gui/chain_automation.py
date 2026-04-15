@@ -74,13 +74,13 @@ def stop_chain_automation(ui_context):
     if ui_context and 'chain_start_button' in ui_context:
         try:
             ui_context['chain_start_button'].after(0, lambda: ui_context['chain_start_button'].configure(text="Start Chain"))
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to update chain start button: {e}")
     if ui_context and 'chain_status_label' in ui_context:
         try:
             ui_context['chain_status_label'].after(0, lambda: ui_context['chain_status_label'].configure(text="Chain Status: Stopped"))
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to update chain status label: {e}")
 
 def run_next_chain_step(ui_context, shared_vars):
     global current_chain_step, chain_running

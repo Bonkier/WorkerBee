@@ -152,8 +152,8 @@ def start_battle(base_path, python_cmd):
     if battle_process is not None and battle_process.poll() is None:
         try:
             os.kill(battle_process.pid, signal.SIGTERM)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to terminate battle process: {e}")
         battle_process = None
 
     try:
@@ -206,8 +206,8 @@ def terminate_functions():
                     proc.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to terminate function process: {e}")
     function_process_list.clear()
 
 def cleanup_processes():
@@ -244,8 +244,8 @@ def cleanup_processes():
             except subprocess.TimeoutExpired:
                 logger.warning("Battle process did not terminate gracefully, forcing kill...")
                 battle_process.kill()
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to stop battle process: {e}")
             
     terminate_functions()
 

@@ -164,8 +164,8 @@ def reset_sct(target_thread_id=None):
         if sct is not None:
             try:
                 sct.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to close screen capture instance: {e}")
         _template_cache.clear()
         logger.info("Screen capture and template cache reset")
     except Exception as e:
@@ -499,8 +499,8 @@ def _get_caller_info():
                 function_name = frame_info.function
                 line_number = frame_info.lineno
                 return f"{module_name}.{function_name}:{line_number}"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to get caller info: {e}")
     return "unknown"
 
 def _base_match_template(template_path, threshold=0.8, grayscale=False,no_grayscale=False, debug=False, area="center", quiet_failure=False, x1=None, y1=None, x2=None, y2=None, screenshot=None, enable_scaling=False):

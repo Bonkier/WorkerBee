@@ -2,6 +2,7 @@ import os
 import json
 import time
 import threading
+import logging
 import customtkinter as ctk
 from tkinter import messagebox
 from src.gui.styles import UIStyle
@@ -243,8 +244,8 @@ def save_team_selection(base_path):
                 existing_list = [existing_data[str(i)] for i in sorted([int(k) for k in existing_data.keys()])]
             elif "selected_statuses" in existing_data:
                 existing_list = existing_data.get("selected_statuses", [])
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to parse existing status selection: {e}")
 
     final_list = [s for s in existing_list if s in selected]
     for s in selected:

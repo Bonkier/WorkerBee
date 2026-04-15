@@ -168,7 +168,7 @@ class Updater:
                     )
                     release_info = (release_data['tag_name'], asset_url or release_data['zipball_url'])
         except Exception as e:
-            pass
+            logger.warning(f"Could not fetch latest release info: {e}")
 
         if getattr(sys, 'frozen', False):
             if release_info:
@@ -390,8 +390,8 @@ class Updater:
                         if progress_callback:
                             try:
                                 progress_callback(downloaded, total)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Progress callback error: {e}")
 
             logger.info(f"Download completed: {zip_path}")
             return zip_path
@@ -782,14 +782,14 @@ class Updater:
         try:
             with open(user_config_path, 'r') as f:
                 user_config = json.load(f)
-        except:
+        except Exception:
             logger.warning(f"Failed to load user config: {user_config_path}")
             return
-        
+
         try:
             with open(new_config_path, 'r') as f:
                 new_config = json.load(f)
-        except:
+        except Exception:
             logger.warning(f"Failed to load new config: {new_config_path}")
             shutil.copy2(user_config_path, new_config_path)
             return
@@ -943,8 +943,8 @@ except Exception as e:
                 try:
                     shutil.rmtree(backup_path)
                     logger.info("Cleaned up unnecessary backup")
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to clean up backup: {e}")
             return False, "No updates available"
 
         differential_applied = False
@@ -965,8 +965,8 @@ except Exception as e:
             try:
                 shutil.rmtree(backup_path)
                 logger.info("Cleaned up unwanted backup after successful update")
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up backup after update: {e}")
 
         if create_backup and preserve_only_last_3:
             self.cleanup_old_backups(keep_count=3)

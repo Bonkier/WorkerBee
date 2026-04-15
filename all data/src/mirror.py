@@ -750,8 +750,8 @@ class Mirror:
                     with open(inpack_path, 'rb') as _f:
                         raw = np.frombuffer(_f.read(), dtype=np.uint8)
                     inpack_tmpl = cv2.imdecode(raw, cv2.IMREAD_GRAYSCALE)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to load inpack template: {e}")
 
                 if inpack_tmpl is not None:
                     gray_ss = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY) if len(screenshot.shape) == 3 else screenshot
@@ -1311,8 +1311,8 @@ class Mirror:
                         continue
                     if cv2.matchTemplate(src, tmpl, cv2.TM_CCOEFF_NORMED).max() >= 0.80:
                         connections.append(((i % 2, (i // 2) + 1 - j), (i % 2 + 1, (i // 2) + j)))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Template match failed for quad {i} direction {direction}: {e}")
         return connections
 
     def _dfs_best_first_step(self, nodes, connections):
