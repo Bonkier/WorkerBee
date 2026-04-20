@@ -16,8 +16,7 @@ from logging.handlers import RotatingFileHandler
 import threading
 import inspect
 from functools import partial
-if platform.system() == 'Windows':
-    from ctypes import wintypes
+from ctypes import wintypes
 import cv2
 import numpy as np
 import random
@@ -27,91 +26,71 @@ from PIL import ImageGrab
 import shared_vars
 
 # ---------------------------------------------------------------------------
-# Input backend — Linux / evdev uinput
-# Inputs appear as kernel-level hardware events (no synthetic-input flag).
-# Requires: pip install evdev
-# Permissions: sudo usermod -aG input $USER  (log out/in after)
+# Input backend — Windows / LGHub bridge
+# Inputs emit through Logitech HID driver as real hardware events.
+# Requires: LGHub 2021.10 installed and running (blocked from auto-updating).
+# Uses ChargeGrinder's bridge.dll (GPL v3) under src/bridge/.
 # ---------------------------------------------------------------------------
-from evdev import UInput as _UInput, ecodes as _ec
-from Xlib import display as _xdisplay_mod
+from src.bridge.bridge import Bridge as _Bridge
 
-_uinput_mouse = _UInput(
-    {_ec.EV_REL: [_ec.REL_X, _ec.REL_Y, _ec.REL_WHEEL],
-     _ec.EV_KEY: [_ec.BTN_LEFT, _ec.BTN_RIGHT, _ec.BTN_MIDDLE]},
-    name='workerbee-mouse',
-)
-_uinput_kbd = _UInput(
-    {_ec.EV_KEY: list(range(1, 249))},
-    name='workerbee-kbd',
-)
+_bridge = _Bridge(auto_open=True)
+_mouse_settings_active = False
 
-_UINPUT_KEY_MAP = {
-    'enter': _ec.KEY_ENTER, 'return': _ec.KEY_ENTER,
-    'space': _ec.KEY_SPACE,
-    'escape': _ec.KEY_ESC, 'esc': _ec.KEY_ESC,
-    'tab': _ec.KEY_TAB,
-    'backspace': _ec.KEY_BACKSPACE,
-    'delete': _ec.KEY_DELETE,
-    'up': _ec.KEY_UP, 'down': _ec.KEY_DOWN,
-    'left': _ec.KEY_LEFT, 'right': _ec.KEY_RIGHT,
-    'home': _ec.KEY_HOME, 'end': _ec.KEY_END,
-    'pageup': _ec.KEY_PAGEUP, 'page_up': _ec.KEY_PAGEUP,
-    'pagedown': _ec.KEY_PAGEDOWN, 'page_down': _ec.KEY_PAGEDOWN,
-    'f1': _ec.KEY_F1,  'f2':  _ec.KEY_F2,  'f3':  _ec.KEY_F3,
-    'f4': _ec.KEY_F4,  'f5':  _ec.KEY_F5,  'f6':  _ec.KEY_F6,
-    'f7': _ec.KEY_F7,  'f8':  _ec.KEY_F8,  'f9':  _ec.KEY_F9,
-    'f10': _ec.KEY_F10,'f11': _ec.KEY_F11, 'f12': _ec.KEY_F12,
-    'insert': _ec.KEY_INSERT,
-    'caps_lock': _ec.KEY_CAPSLOCK,
-    'ctrl': _ec.KEY_LEFTCTRL, 'alt': _ec.KEY_LEFTALT,
-    'shift': _ec.KEY_LEFTSHIFT,
-    'p': _ec.KEY_P,
-}
-for _c in 'abcdefghijklmnopqrstuvwxyz':
-    _UINPUT_KEY_MAP.setdefault(_c, getattr(_ec, f'KEY_{_c.upper()}'))
-for _d in '0123456789':
-    _UINPUT_KEY_MAP.setdefault(_d, getattr(_ec, f'KEY_{_d}'))
+def _ensure_mouse_settings():
+    global _mouse_settings_active
+    if not _mouse_settings_active:
+        _bridge.mouse_settings_apply()
+        _mouse_settings_active = True
 
-# Cursor-position tracker — avoids X11 read-lag during rapid bezier moves
-_uinput_pos = [None, None]
-_xdisp = _xdisplay_mod.Display()
+def restore_mouse_settings():
+    global _mouse_settings_active
+    if _mouse_settings_active:
+        try:
+            _bridge.mouse_settings_restore()
+        finally:
+            _mouse_settings_active = False
+
+# Cursor-position tracker — same-delta tracking used on both platforms
+_input_pos = [None, None]
+
+_user32 = ctypes.windll.user32
 
 def _cursor_pos():
-    ptr = _xdisp.screen().root.query_pointer()
-    return ptr.root_x, ptr.root_y
+    point = wintypes.POINT()
+    _user32.GetCursorPos(ctypes.byref(point))
+    return int(point.x), int(point.y)
 
 def _input_move_abs(x, y):
-    if _uinput_pos[0] is None:
-        _uinput_pos[0], _uinput_pos[1] = _cursor_pos()
-    dx = x - _uinput_pos[0]
-    dy = y - _uinput_pos[1]
+    _ensure_mouse_settings()
+    if _input_pos[0] is None:
+        _input_pos[0], _input_pos[1] = _cursor_pos()
+    dx = x - _input_pos[0]
+    dy = y - _input_pos[1]
     if dx != 0 or dy != 0:
-        _uinput_mouse.write(_ec.EV_REL, _ec.REL_X, dx)
-        _uinput_mouse.write(_ec.EV_REL, _ec.REL_Y, dy)
-        _uinput_mouse.syn()
-    _uinput_pos[0] = x
-    _uinput_pos[1] = y
+        _bridge.mouse_move_relative(dx, dy)
+    _input_pos[0] = x
+    _input_pos[1] = y
 
 def _input_press_left():
-    _uinput_mouse.write(_ec.EV_KEY, _ec.BTN_LEFT, 1)
-    _uinput_mouse.syn()
+    _ensure_mouse_settings()
+    _bridge.mouse_press('left')
 
 def _input_release_left():
-    _uinput_mouse.write(_ec.EV_KEY, _ec.BTN_LEFT, 0)
-    _uinput_mouse.syn()
+    _bridge.mouse_release('left')
 
 def _input_scroll(amount):
-    _uinput_mouse.write(_ec.EV_REL, _ec.REL_WHEEL, amount)
-    _uinput_mouse.syn()
+    _ensure_mouse_settings()
+    direction = 1 if amount > 0 else -1
+    for _ in range(abs(int(amount))):
+        _bridge.mouse_scroll(direction)
+        time.sleep(0.01)
 
 def _input_key_tap(key_str):
-    lower = key_str.lower().strip() if isinstance(key_str, str) else ''
-    code = _UINPUT_KEY_MAP.get(lower)
-    if code is not None:
-        _uinput_kbd.write(_ec.EV_KEY, code, 1)
-        _uinput_kbd.syn()
-        _uinput_kbd.write(_ec.EV_KEY, code, 0)
-        _uinput_kbd.syn()
+    key = key_str.lower().strip() if isinstance(key_str, str) else ''
+    try:
+        _bridge.key_tap(key)
+    except Exception:
+        pass
 
 try:
     from pathgenerator import PDPathGenerator as _PDPathGenerator

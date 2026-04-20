@@ -5,7 +5,9 @@ block_cipher = None
 a = Analysis(
     ['gui_launcher.py'],
     pathex=['.', 'src'],
-    binaries=[],
+    binaries=[
+        ('src/bridge/bridge.dll', 'src/bridge'),
+    ],
     datas=[
         ('pictures',    'pictures'),
         ('audio',       'audio'),
@@ -68,6 +70,8 @@ a = Analysis(
         'src.updater',
         'src.Game_Launcher',
         'src.theme_restart',
+        'src.bridge',
+        'src.bridge.bridge',
         'src.gui.app_lifecycle',
         'src.gui.chain_automation',
         'src.gui.components',
@@ -97,15 +101,13 @@ a = Analysis(
         'cv2',
         'numpy',
         'mss',
+        'mss.windows',
         'PIL',
         'PIL._tkinter_finder',
         'customtkinter',
         'pynput',
         'pynput.keyboard',
         'pynput.mouse',
-        'evdev',
-        'Xlib',
-        'Xlib.display',
         'PyQt5',
         'PyQt5.QtCore',
         'PyQt5.QtGui',
@@ -119,6 +121,8 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['rthook_torch.py', 'rthook_loose_src.py'],
     excludes=['pkg_resources.py2_warn'],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
@@ -136,6 +140,11 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon='app_icon.ico',
 )
 
 coll = COLLECT(

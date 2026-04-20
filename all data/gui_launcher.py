@@ -12,8 +12,8 @@ import multiprocessing
 
 multiprocessing.freeze_support()
 
-if platform.system() != 'Linux':
-    print("WorkerBee is Linux only. Windows is no longer supported.")
+if platform.system() != 'Windows':
+    print("This build of WorkerBee is Windows only. Use the Linux build on Linux.")
     try:
         import tkinter as _tk
         import tkinter.messagebox as _mb
@@ -21,7 +21,7 @@ if platform.system() != 'Linux':
         _r.withdraw()
         _mb.showerror(
             "Unsupported Platform",
-            "WorkerBee is Linux only.\nWindows is no longer supported."
+            "This build of WorkerBee is Windows only.\nUse the Linux build on Linux."
         )
         _r.destroy()
     except Exception:
