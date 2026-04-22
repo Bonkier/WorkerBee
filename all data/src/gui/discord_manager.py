@@ -236,6 +236,7 @@ def start(config):
             return True
 
         from src.discord_integration import DiscordBot
+        from src import secret_store
 
         d = config.get('Discord', {}) or {}
         if not d.get('enabled'):
@@ -243,8 +244,10 @@ def start(config):
 
         log_path = os.path.join(_base_path, 'logs', 'Logs.log') if _base_path else ''
 
+        raw_token = secret_store.decrypt(d.get('bot_token', ''))
+
         _bot = DiscordBot(
-            token=d.get('bot_token', ''),
+            token=raw_token,
             channel_id=d.get('channel_id', ''),
             update_interval_minutes=int(d.get('update_interval_minutes', 15)),
             callbacks=get_callbacks(),
