@@ -251,18 +251,53 @@ _template_cache = {}
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
+        return os.path.dirname(sys.executable)
     else:
         folder_path = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(folder_path) == 'src':
             return os.path.dirname(folder_path)
         return folder_path
 
+def get_bundle_path():
+    """Path to bundled read-only resources (Nuitka/PyInstaller extract dir)."""
+    if getattr(sys, 'frozen', False):
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass and os.path.isdir(meipass):
+            return meipass
+    return get_base_path()
+
 BASE_PATH = get_base_path()
+BUNDLE_PATH = get_bundle_path()
+
+
+def _materialize_user_folder(name):
+    """Copy a bundled folder to BASE_PATH on first run so users can edit it."""
+    dest = os.path.join(BASE_PATH, name)
+    if os.path.isdir(dest):
+        return
+    src = os.path.join(BUNDLE_PATH, name)
+    if not os.path.isdir(src) or src == dest:
+        return
+    try:
+        import shutil
+        shutil.copytree(src, dest)
+    except Exception:
+        pass
+
+
+if getattr(sys, 'frozen', False):
+    for _folder in ('pictures', 'config', 'audio', 'themes', 'profiles'):
+        _materialize_user_folder(_folder)
+
 
 def resource_path(relative_path):
-    base_path = BASE_PATH
-    return os.path.join(base_path, relative_path)
+    user_path = os.path.join(BASE_PATH, relative_path)
+    if os.path.exists(user_path):
+        return user_path
+    bundle_path = os.path.join(BUNDLE_PATH, relative_path)
+    if os.path.exists(bundle_path):
+        return bundle_path
+    return user_path
 
 class NoMillisecondsFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
