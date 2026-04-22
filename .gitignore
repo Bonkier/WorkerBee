@@ -11,6 +11,12 @@ venv/
 Thumbs.db
 # Build artifacts
 all data/build/
+all data/build_nuitka/
+all data/embed_python/
 all data/dist/
 release/
 *.zip
+
+# User config (may contain secrets like Discord bot tokens)
+all data/config/gui_config.json
+all data/config/schedule.json

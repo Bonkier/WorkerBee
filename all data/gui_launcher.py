@@ -1,3 +1,19 @@
+import inspect as _inspect
+_orig_getsourcefile = _inspect.getsourcefile
+def _patched_getsourcefile(object):
+    try:
+        return _orig_getsourcefile(object)
+    except (AttributeError, TypeError):
+        return None
+_inspect.getsourcefile = _patched_getsourcefile
+_orig_getabsfile = _inspect.getabsfile
+def _patched_getabsfile(object, _filename=None):
+    try:
+        return _orig_getabsfile(object, _filename)
+    except (AttributeError, TypeError):
+        return None
+_inspect.getabsfile = _patched_getabsfile
+
 import os
 import sys
 import logging
@@ -463,6 +479,12 @@ def perform_cleanup():
                 keyboard_handler.stop()
         except Exception as e:
             pass
+
+        try:
+            from src.gui import discord_manager
+            discord_manager.stop()
+        except Exception:
+            pass
         
         try:
             if process_handler.process and hasattr(process_handler.process, '_target') and process_handler.process._target:
@@ -679,28 +701,33 @@ if __name__ == "__main__":
             from src.gui.loader import LoaderWindow as _LoaderWindow
             _loader = _LoaderWindow()
 
+            def _preload_ocr_and_close(result='skip'):
+                try:
+                    _loader.set_status('Loading OCR model...')
+                    import luxcavation_functions as _lux
+                    _lux._get_ocr()
+                except Exception as _e:
+                    log_debug(f"OCR preload failed: {_e}")
+                _loader.result = result
+                _loader.close()
+
             def _run_update_check():
                 try:
                     if '--updated' in sys.argv:
                         _loader.set_status('Update installed. Starting...')
                         import time as _time; _time.sleep(1.2)
-                        _loader.result = 'skip'
-                        _loader.close()
+                        _preload_ocr_and_close()
                         return
 
                     if not common.check_internet_connection():
                         _loader.set_status('Offline mode - skipping update check')
                         import time as _time; _time.sleep(0.8)
-                        _loader.result = 'skip'
-                        _loader.close()
+                        _preload_ocr_and_close()
                         return
 
                     _dont_ask = config.get('Settings', {}).get('dont_ask_updates', False)
                     if _dont_ask:
-                        _loader.set_status('Starting...')
-                        import time as _time; _time.sleep(0.5)
-                        _loader.result = 'skip'
-                        _loader.close()
+                        _preload_ocr_and_close()
                         return
 
                     import updater as _upd
@@ -708,10 +735,7 @@ if __name__ == "__main__":
                     _update_available, _latest_version, _download_url = _upd_instance.check_for_updates()
 
                     if not _update_available:
-                        _loader.set_status('Up to date. Starting...')
-                        import time as _time; _time.sleep(0.6)
-                        _loader.result = 'skip'
-                        _loader.close()
+                        _preload_ocr_and_close()
                         return
 
                     def _on_yes():
@@ -729,21 +753,18 @@ if __name__ == "__main__":
                         )
 
                     def _on_no():
-                        _loader.result = 'skip'
-                        _loader.close()
+                        _preload_ocr_and_close('skip')
 
                     def _on_no_ask():
                         config.setdefault('Settings', {})['dont_ask_updates'] = True
                         save_config(config)
-                        _loader.result = 'no_ask'
-                        _loader.close()
+                        _preload_ocr_and_close('no_ask')
 
                     _loader.show_update_available(_latest_version, _on_yes, _on_no, _on_no_ask)
 
                 except Exception as _e:
                     log_debug(f"Loader update check error: {_e}")
-                    _loader.result = 'skip'
-                    _loader.close()
+                    _preload_ocr_and_close()
 
             threading.Thread(target=_run_update_check, daemon=True).start()
             _loader.run()
@@ -978,7 +999,15 @@ if __name__ == "__main__":
                     messagebox.showwarning("Offline Mode", "No internet connection detected.\nRunning in offline mode.")
 
                 run_scheduler_check()
-                
+
+                try:
+                    from src.gui import discord_manager
+                    discord_manager.register_shared_vars(shared_vars, BASE_PATH)
+                    if config.get('Discord', {}).get('enabled'):
+                        discord_manager.start(config)
+                except Exception as _e:
+                    logger.error(f"Discord init failed: {_e}")
+
             except Exception as e:
                 log_debug(f"Error in start_application: {e}")
                 logger.error(f"Error in start_application: {e}")

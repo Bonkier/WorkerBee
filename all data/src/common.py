@@ -1,3 +1,19 @@
+import inspect as _inspect
+_orig_getsourcefile = _inspect.getsourcefile
+def _patched_getsourcefile(object):
+    try:
+        return _orig_getsourcefile(object)
+    except (AttributeError, TypeError):
+        return None
+_inspect.getsourcefile = _patched_getsourcefile
+_orig_getabsfile = _inspect.getabsfile
+def _patched_getabsfile(object, _filename=None):
+    try:
+        return _orig_getabsfile(object, _filename)
+    except (AttributeError, TypeError):
+        return None
+_inspect.getabsfile = _patched_getabsfile
+
 import os
 import sys
 import json
@@ -31,22 +47,27 @@ import shared_vars
 # Requires: LGHub 2021.10 installed and running (blocked from auto-updating).
 # Uses ChargeGrinder's bridge.dll (GPL v3) under src/bridge/.
 # ---------------------------------------------------------------------------
-from src.bridge.bridge import Bridge as _Bridge
-
-_bridge = _Bridge(auto_open=True)
+_bridge = None
 _mouse_settings_active = False
+
+def _get_bridge():
+    global _bridge
+    if _bridge is None:
+        from src.bridge.bridge import Bridge as _Bridge
+        _bridge = _Bridge(auto_open=True)
+    return _bridge
 
 def _ensure_mouse_settings():
     global _mouse_settings_active
     if not _mouse_settings_active:
-        _bridge.mouse_settings_apply()
+        _get_bridge().mouse_settings_apply()
         _mouse_settings_active = True
 
 def restore_mouse_settings():
     global _mouse_settings_active
     if _mouse_settings_active:
         try:
-            _bridge.mouse_settings_restore()
+            _get_bridge().mouse_settings_restore()
         finally:
             _mouse_settings_active = False
 
@@ -67,28 +88,28 @@ def _input_move_abs(x, y):
     dx = x - _input_pos[0]
     dy = y - _input_pos[1]
     if dx != 0 or dy != 0:
-        _bridge.mouse_move_relative(dx, dy)
+        _get_bridge().mouse_move_relative(dx, dy)
     _input_pos[0] = x
     _input_pos[1] = y
 
 def _input_press_left():
     _ensure_mouse_settings()
-    _bridge.mouse_press('left')
+    _get_bridge().mouse_press('left')
 
 def _input_release_left():
-    _bridge.mouse_release('left')
+    _get_bridge().mouse_release('left')
 
 def _input_scroll(amount):
     _ensure_mouse_settings()
     direction = 1 if amount > 0 else -1
     for _ in range(abs(int(amount))):
-        _bridge.mouse_scroll(direction)
+        _get_bridge().mouse_scroll(direction)
         time.sleep(0.01)
 
 def _input_key_tap(key_str):
     key = key_str.lower().strip() if isinstance(key_str, str) else ''
     try:
-        _bridge.key_tap(key)
+        _get_bridge().key_tap(key)
     except Exception:
         pass
 

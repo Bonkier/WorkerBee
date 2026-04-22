@@ -355,8 +355,14 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
 def main(num_runs, shared_vars):
     try:
         base_path, status_path = setup_paths_and_imports()
-        
+
         logger.info(f"compiled_runner.py main function started with {num_runs} runs")
+
+        try:
+            import luxcavation_functions as _lux
+            _lux._get_ocr()
+        except Exception as _e:
+            logger.warning(f"OCR preload failed: {_e}")
         
         status_list_file = load_status_list(status_path)
         

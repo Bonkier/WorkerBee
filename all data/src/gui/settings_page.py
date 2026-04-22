@@ -59,6 +59,7 @@ def load_settings_tab(parent, config, shared_vars, save_callback, base_path, roo
     _setup_shortcuts(scroll_frame, config, save_callback, root_ref, update_shortcuts_callback)
     _setup_theme(scroll_frame, config, save_callback, base_path, root_ref, restart_callback)
     _setup_driver_manager(scroll_frame, base_path)
+    _setup_discord(scroll_frame, config, save_callback)
     _setup_danger_zone(scroll_frame, base_path)
 
 def _setup_profiles(parent, base_path, save_callback):
@@ -820,8 +821,8 @@ def _setup_driver_manager(parent, base_path):
 
     def _refresh():
         try:
-            from src.common import _bridge
-            if _bridge.is_open():
+            from src.common import _get_bridge
+            if _get_bridge().is_open():
                 status_label.configure(text="Status: Connected to LGHub", text_color="#55cc88")
             else:
                 status_label.configure(text="Status: Bridge not open", text_color="#ff8855")
@@ -829,6 +830,107 @@ def _setup_driver_manager(parent, base_path):
             status_label.configure(text=f"Status: LGHub not reachable ({e})", text_color="#ff8855")
 
     card.after(500, _refresh)
+
+
+def _setup_discord(parent, config, save_callback):
+    card = CardFrame(parent)
+    card.pack(fill="x", pady=10, padx=10)
+    ctk.CTkLabel(card, text="Discord Bot", font=UIStyle.SUBHEADER_FONT).pack(pady=(15, 5))
+
+    ctk.CTkLabel(
+        card,
+        text="Sends periodic screenshots + stats with Start/Stop buttons to a Discord channel.\n"
+             "Requires a Discord bot token and the target channel ID.",
+        font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500,
+    ).pack(pady=(0, 10), padx=20)
+
+    from src import secret_store as _secret_store
+
+    d = config.setdefault('Discord', {})
+    d.setdefault('enabled', False)
+    d.setdefault('bot_token', '')
+    d.setdefault('channel_id', '')
+    d.setdefault('update_interval_minutes', 15)
+
+    enabled_var = ctk.BooleanVar(value=bool(d.get('enabled')))
+    _decrypted_token = _secret_store.decrypt(d.get('bot_token', ''))
+    token_var = ctk.StringVar(value=_decrypted_token)
+    channel_var = ctk.StringVar(value=str(d.get('channel_id', '')))
+    interval_var = ctk.StringVar(value=str(d.get('update_interval_minutes', 15)))
+
+    status_label = ctk.CTkLabel(card, text="", font=UIStyle.SMALL_FONT)
+    status_label.pack(pady=(0, 5))
+
+    def _refresh_status():
+        try:
+            from src.gui import discord_manager
+            if discord_manager.is_running():
+                status_label.configure(text="Status: Connected", text_color="#55cc88")
+            elif enabled_var.get():
+                status_label.configure(text="Status: Enabled (not connected)", text_color="#ff8855")
+            else:
+                status_label.configure(text="Status: Disabled", text_color="gray")
+        except Exception as e:
+            status_label.configure(text=f"Status: {e}", text_color="#ff8855")
+
+    def _row(label, var, width=280, show=None):
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=4)
+        ctk.CTkLabel(row, text=label, width=130, anchor="e", font=UIStyle.BODY_FONT).pack(side="left", padx=(0, 10))
+        entry = ModernEntry(row, width=width, textvariable=var)
+        if show:
+            entry.configure(show=show)
+        entry.pack(side="left")
+        return entry
+
+    _row("Bot Token:", token_var, show="*")
+    _row("Channel ID:", channel_var)
+    _row("Interval (min):", interval_var, width=80)
+
+    chk_row = ctk.CTkFrame(card, fg_color="transparent")
+    chk_row.pack(fill="x", padx=20, pady=(6, 0))
+    ctk.CTkCheckBox(
+        chk_row, text="Enable Discord bot", variable=enabled_var,
+        font=UIStyle.BODY_FONT,
+    ).pack(side="left")
+
+    def _save_and_apply():
+        try:
+            d['enabled'] = bool(enabled_var.get())
+            _raw_token = token_var.get().strip()
+            d['bot_token'] = _secret_store.encrypt(_raw_token) if _raw_token else ''
+            d['channel_id'] = channel_var.get().strip()
+            try:
+                d['update_interval_minutes'] = max(1, int(interval_var.get() or 15))
+            except ValueError:
+                d['update_interval_minutes'] = 15
+            save_callback()
+
+            from src.gui import discord_manager
+            discord_manager.stop()
+            if d['enabled']:
+                discord_manager.start(config)
+            parent.after(1000, _refresh_status)
+        except Exception as e:
+            status_label.configure(text=f"Error: {e}", text_color="#ff8855")
+
+    btn_row = ctk.CTkFrame(card, fg_color="transparent")
+    btn_row.pack(fill="x", padx=20, pady=(10, 15))
+    ctk.CTkButton(
+        btn_row, text="Save & Apply", width=140,
+        command=_save_and_apply,
+        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS,
+    ).pack(side="left", padx=(0, 8))
+    ctk.CTkButton(
+        btn_row, text="Refresh", width=80, command=_refresh_status,
+        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        border_width=1, border_color=UIStyle.BUTTON_BORDER_COLOR,
+        corner_radius=UIStyle.CORNER_RADIUS,
+    ).pack(side="left")
+
+    card.after(500, _refresh_status)
 
 
 def _setup_danger_zone(parent, base_path):

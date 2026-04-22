@@ -92,8 +92,13 @@ def signal_handler(sig, frame):
 def main(runs, stage, shared_vars=None):
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-   
+
     try:
+        try:
+            luxcavation_functions._get_ocr()
+        except Exception as _e:
+            logger.warning(f"OCR preload failed: {_e}")
+
         if shared_vars:
             sync_thread = threading.Thread(target=sync_shared_vars, args=(shared_vars,), daemon=True)
             sync_thread.start()

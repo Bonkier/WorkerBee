@@ -156,17 +156,28 @@ class Updater:
             logger.warning(f"Could not read version.json from repository: {e}")
 
         try:
-            release_url = f"{self.api_url}/releases/latest"
+            release_url = f"{self.api_url}/releases"
 
             req = urllib.request.Request(release_url, headers={'User-Agent': 'WorkerBee-Updater'})
             with urllib.request.urlopen(req, context=ssl_context) as response:
                 if response.getcode() == 200:
-                    release_data = json.loads(response.read().decode())
-                    asset_url = next(
-                        (a['browser_download_url'] for a in release_data.get('assets', []) if a['name'].endswith('.zip')),
-                        None
-                    )
-                    release_info = (release_data['tag_name'], asset_url or release_data['zipball_url'])
+                    releases = json.loads(response.read().decode()) or []
+
+                    import platform as _p
+                    _is_linux = _p.system() == 'Linux'
+
+                    def _match(tag):
+                        is_linux_tag = tag.upper().startswith('LINUX-')
+                        return is_linux_tag if _is_linux else not is_linux_tag
+
+                    candidates = [r for r in releases if not r.get('draft') and not r.get('prerelease') and _match(r.get('tag_name', ''))]
+                    if candidates:
+                        release_data = candidates[0]
+                        asset_url = next(
+                            (a['browser_download_url'] for a in release_data.get('assets', []) if a['name'].endswith('.zip')),
+                            None
+                        )
+                        release_info = (release_data['tag_name'], asset_url or release_data['zipball_url'])
         except Exception as e:
             logger.warning(f"Could not fetch latest release info: {e}")
 
