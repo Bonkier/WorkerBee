@@ -72,9 +72,19 @@ class Updater:
             self.api_url = api_url
 
         if getattr(sys, 'frozen', False):
-            self.base_path = os.path.dirname(sys.executable)
+            try:
+                import common as _common
+                self.base_path = _common.BASE_PATH
+                self.all_data_dir = _common.BUNDLE_PATH
+            except Exception:
+                # Fallback path detection for Nuitka onefile
+                if sys.argv and sys.argv[0]:
+                    self.base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+                else:
+                    self.base_path = os.path.dirname(sys.executable)
+                meipass = getattr(sys, '_MEIPASS', None)
+                self.all_data_dir = meipass if meipass and os.path.isdir(meipass) else os.path.dirname(sys.executable)
             self.parent_dir = self.base_path
-            self.all_data_dir = sys._MEIPASS
         else:
             script_path = os.path.abspath(__file__)
             self.base_path = os.path.dirname(script_path)
