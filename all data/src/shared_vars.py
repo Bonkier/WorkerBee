@@ -3,9 +3,23 @@ import json
 import logging
 from threading import Lock
 
+def _is_frozen():
+    import sys as _s, os as _o
+    if getattr(_s, 'frozen', False):
+        return True
+    if hasattr(_s, '_MEIPASS'):
+        return True
+    if hasattr(_s.modules.get('__main__') or object(), '__compiled__'):
+        return True
+    exe_name = _o.path.basename(_s.executable).lower()
+    if exe_name and exe_name not in ('python.exe', 'pythonw.exe', 'py.exe', 'python3.exe', 'python'):
+        return True
+    return False
+
+
 def get_base_path():
     import sys
-    if getattr(sys, 'frozen', False):
+    if _is_frozen():
         candidates = []
         if sys.argv and sys.argv[0]:
             candidates.append(os.path.dirname(os.path.abspath(sys.argv[0])))

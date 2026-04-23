@@ -268,6 +268,26 @@ def reset_sct(target_thread_id=None):
 
 _template_cache = {}
 
+def _is_frozen():
+    """Detect packaged run (PyInstaller sets sys.frozen; Nuitka doesn't).
+
+    Fallbacks: _MEIPASS presence, __compiled__ attr, or exe name.
+    """
+    if getattr(sys, 'frozen', False):
+        return True
+    if hasattr(sys, '_MEIPASS'):
+        return True
+    if '__compiled__' in globals():
+        return True
+    main = sys.modules.get('__main__')
+    if main is not None and hasattr(main, '__compiled__'):
+        return True
+    exe_name = os.path.basename(sys.executable).lower()
+    if exe_name and exe_name not in ('python.exe', 'pythonw.exe', 'py.exe', 'python3.exe', 'python'):
+        return True
+    return False
+
+
 def get_base_path():
     """Returns the folder containing the real user-visible exe (writable).
 
@@ -276,7 +296,7 @@ def get_base_path():
     user-facing path, then fall back to sys.executable. A final sanity check
     rejects any path inside %TEMP%.
     """
-    if getattr(sys, 'frozen', False):
+    if _is_frozen():
         candidates = []
         if sys.argv and sys.argv[0]:
             candidates.append(os.path.dirname(os.path.abspath(sys.argv[0])))
@@ -304,11 +324,10 @@ def get_bundle_path():
     In Nuitka onefile, this is the temp extraction directory (sys.executable
     points there). PyInstaller uses sys._MEIPASS. Falls back to BASE_PATH.
     """
-    if getattr(sys, 'frozen', False):
+    if _is_frozen():
         meipass = getattr(sys, '_MEIPASS', None)
         if meipass and os.path.isdir(meipass):
             return meipass
-        # Nuitka onefile: extracted python lives alongside bundled resources
         exe_dir = os.path.dirname(sys.executable)
         if os.path.isdir(exe_dir):
             return exe_dir
@@ -333,7 +352,7 @@ def _materialize_user_folder(name):
         pass
 
 
-if getattr(sys, 'frozen', False):
+if _is_frozen():
     for _folder in ('pictures', 'config', 'audio', 'themes', 'profiles'):
         _materialize_user_folder(_folder)
 
