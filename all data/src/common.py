@@ -82,13 +82,32 @@ def _cursor_pos():
     return int(point.x), int(point.y)
 
 def _input_move_abs(x, y):
+    """Move to (x, y). Always samples the real cursor position and emits a
+    correction pass so DPI scaling / residual mouse-accel / rounding errors
+    don't accumulate between moves."""
     _ensure_mouse_settings()
-    if _input_pos[0] is None:
-        _input_pos[0], _input_pos[1] = _cursor_pos()
-    dx = x - _input_pos[0]
-    dy = y - _input_pos[1]
+
+    cx, cy = _cursor_pos()
+    dx = x - cx
+    dy = y - cy
     if dx != 0 or dy != 0:
         _get_bridge().mouse_move_relative(dx, dy)
+
+    # Convergence — re-read real cursor and nudge until within 1px.
+    # Caps at ~80ms to avoid stalling when a drifting mouse can't converge.
+    import time as _t
+    deadline = _t.time() + 0.08
+    while _t.time() < deadline:
+        cx, cy = _cursor_pos()
+        dx = x - cx
+        dy = y - cy
+        if abs(dx) <= 1 and abs(dy) <= 1:
+            break
+        step_dx = max(-10, min(10, dx))
+        step_dy = max(-10, min(10, dy))
+        _get_bridge().mouse_move_relative(step_dx, step_dy)
+        _t.sleep(0.001)
+
     _input_pos[0] = x
     _input_pos[1] = y
 
@@ -250,8 +269,29 @@ def reset_sct(target_thread_id=None):
 _template_cache = {}
 
 def get_base_path():
+    """Returns the folder containing the real user-visible exe (writable).
+
+    In Nuitka onefile mode, ``sys.executable`` points to the temp extraction
+    dir, NOT the real exe — so we prefer sys.argv[0] which reflects the
+    user-facing path, then fall back to sys.executable. A final sanity check
+    rejects any path inside %TEMP%.
+    """
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        candidates = []
+        if sys.argv and sys.argv[0]:
+            candidates.append(os.path.dirname(os.path.abspath(sys.argv[0])))
+        candidates.append(os.path.dirname(sys.executable))
+
+        temp_dir = os.environ.get('TEMP', '') or os.environ.get('TMP', '')
+        temp_dir = os.path.abspath(temp_dir) if temp_dir else ''
+
+        for c in candidates:
+            if not c:
+                continue
+            if temp_dir and os.path.abspath(c).lower().startswith(temp_dir.lower()):
+                continue  # inside %TEMP%, skip — it's the extraction dir
+            return c
+        return candidates[0] if candidates else os.getcwd()
     else:
         folder_path = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(folder_path) == 'src':
@@ -259,11 +299,19 @@ def get_base_path():
         return folder_path
 
 def get_bundle_path():
-    """Path to bundled read-only resources (Nuitka/PyInstaller extract dir)."""
+    """Path to bundled read-only resources.
+
+    In Nuitka onefile, this is the temp extraction directory (sys.executable
+    points there). PyInstaller uses sys._MEIPASS. Falls back to BASE_PATH.
+    """
     if getattr(sys, 'frozen', False):
         meipass = getattr(sys, '_MEIPASS', None)
         if meipass and os.path.isdir(meipass):
             return meipass
+        # Nuitka onefile: extracted python lives alongside bundled resources
+        exe_dir = os.path.dirname(sys.executable)
+        if os.path.isdir(exe_dir):
+            return exe_dir
     return get_base_path()
 
 BASE_PATH = get_base_path()

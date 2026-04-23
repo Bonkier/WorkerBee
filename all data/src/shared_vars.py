@@ -6,7 +6,19 @@ from threading import Lock
 def get_base_path():
     import sys
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        candidates = []
+        if sys.argv and sys.argv[0]:
+            candidates.append(os.path.dirname(os.path.abspath(sys.argv[0])))
+        candidates.append(os.path.dirname(sys.executable))
+        temp_dir = os.environ.get('TEMP', '') or os.environ.get('TMP', '')
+        temp_dir = os.path.abspath(temp_dir) if temp_dir else ''
+        for c in candidates:
+            if not c:
+                continue
+            if temp_dir and os.path.abspath(c).lower().startswith(temp_dir.lower()):
+                continue
+            return c
+        return candidates[0] if candidates else os.getcwd()
     else:
         folder_path = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(folder_path) == 'src':
