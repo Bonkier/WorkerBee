@@ -70,10 +70,8 @@ class UIUpdater:
         except Exception as e:
             logging.getLogger("gui_launcher").error(f"Error in UI update loop: {e}")
 
-        try:
-            self.root.after(1000, self.check_processes)
-        except Exception:
-            pass
+        # Scheduling is now owned by _unified_tick (see bottom of class) to
+        # avoid four parallel after() loops hammering the UI thread.
 
     def update_compact_status(self):
         """Update status label in compact mode"""
@@ -91,10 +89,7 @@ class UIUpdater:
                         if self.ui_context['compact_stop_btn'].winfo_ismapped():
                             self.ui_context['compact_stop_btn'].pack_forget()
         
-        try:
-            self.root.after(1000, self.update_compact_status)
-        except Exception:
-            pass
+        # Scheduling owned by _unified_tick.
 
     def check_stats_update(self):
         """Check if stats file has changed and reload stats tab"""
@@ -108,10 +103,7 @@ class UIUpdater:
                         self.commands['load_statistics_tab']()
             except Exception as e:
                 logging.getLogger("gui_launcher").warning(f"Stats update check failed: {e}")
-        try:
-            self.root.after(2000, self.check_stats_update)
-        except Exception:
-            pass
+        # Scheduling owned by _unified_tick.
 
     def check_chain_status(self):
         try:
@@ -119,7 +111,21 @@ class UIUpdater:
             chain_automation.check_chain_status(self.root, self.ui_context, self.shared_vars)
         except Exception as e:
             logging.getLogger("gui_launcher").error(f"Error in chain status check: {e}")
+        # Scheduling owned by _unified_tick.
+
+    def _unified_tick(self):
+        """Run every periodic UI check from a single timer to reduce Tk
+        scheduling overhead on lower-end systems. Runs every 1500ms; the
+        stats check only runs every other tick (roughly 3s cadence)."""
+        self._tick_count = getattr(self, '_tick_count', 0) + 1
         try:
-            self.root.after(1000, self.check_chain_status)
-        except Exception:
-            pass
+            self.check_processes()
+            self.update_compact_status()
+            self.check_chain_status()
+            if self._tick_count % 2 == 0:
+                self.check_stats_update()
+        finally:
+            try:
+                self.root.after(1500, self._unified_tick)
+            except Exception:
+                pass

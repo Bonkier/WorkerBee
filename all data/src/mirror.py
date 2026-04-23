@@ -286,8 +286,10 @@ class Mirror:
             self.logger.critical("Server under maintenance")
             sys.exit(0)
 
-        if common.element_exist("pictures/events/skip.png"): 
-            self.logger.info("Event skip button detected")
+        if (common.element_exist("pictures/events/skip.png") or
+                common.element_exist("pictures/events/skipgrey.png", quiet_failure=True) or
+                common.element_exist("pictures/events/who_should_go_forth.png", quiet_failure=True)):
+            self.logger.info("Event skip button detected (or 'who should go forth' prompt)")
             common.mouse_move(*common.scale_coordinates_1080p(200, 200))
             common.click_skip(15)
             self.event_choice()

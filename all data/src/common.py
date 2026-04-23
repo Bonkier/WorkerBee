@@ -42,7 +42,7 @@ from PIL import ImageGrab
 import shared_vars
 
 # ---------------------------------------------------------------------------
-# Input backend — Windows / LGHub bridge
+# Input backend: Windows / LGHub bridge
 # Inputs emit through Logitech HID driver as real hardware events.
 # Requires: LGHub 2021.10 installed and running (blocked from auto-updating).
 # Uses ChargeGrinder's bridge.dll (GPL v3) under src/bridge/.
@@ -71,7 +71,7 @@ def restore_mouse_settings():
         finally:
             _mouse_settings_active = False
 
-# Cursor-position tracker — same-delta tracking used on both platforms
+# Cursor-position tracker: same-delta tracking used on both platforms
 _input_pos = [None, None]
 
 _user32 = ctypes.windll.user32
@@ -81,23 +81,26 @@ def _cursor_pos():
     _user32.GetCursorPos(ctypes.byref(point))
     return int(point.x), int(point.y)
 
-def _input_move_abs(x, y):
-    """Move to (x, y). Always samples the real cursor position and emits a
-    correction pass so DPI scaling / residual mouse-accel / rounding errors
-    don't accumulate between moves."""
+def _input_move_abs_fast(x, y):
+    """Move to (x, y) with a single relative emit from the actual cursor
+    position. No convergence loop, so it is safe to call per bezier step."""
     _ensure_mouse_settings()
-
     cx, cy = _cursor_pos()
     dx = x - cx
     dy = y - cy
     if dx != 0 or dy != 0:
         _get_bridge().mouse_move_relative(dx, dy)
+    _input_pos[0] = x
+    _input_pos[1] = y
 
-    # Convergence — re-read real cursor and nudge until within 1px.
-    # Caps at ~80ms to avoid stalling when a drifting mouse can't converge.
-    import time as _t
-    deadline = _t.time() + 0.08
-    while _t.time() < deadline:
+
+def _input_move_abs(x, y):
+    """Move to (x, y) with a convergence pass. Use on the final position of
+    a movement (e.g. before a click). Intermediate bezier points should use
+    the fast variant."""
+    _input_move_abs_fast(x, y)
+    deadline = time.time() + 0.06
+    while time.time() < deadline:
         cx, cy = _cursor_pos()
         dx = x - cx
         dy = y - cy
@@ -106,10 +109,7 @@ def _input_move_abs(x, y):
         step_dx = max(-10, min(10, dx))
         step_dy = max(-10, min(10, dy))
         _get_bridge().mouse_move_relative(step_dx, step_dy)
-        _t.sleep(0.001)
-
-    _input_pos[0] = x
-    _input_pos[1] = y
+        time.sleep(0.001)
 
 def _input_press_left():
     _ensure_mouse_settings()
@@ -128,7 +128,20 @@ def _input_scroll(amount):
 def _input_key_tap(key_str):
     key = key_str.lower().strip() if isinstance(key_str, str) else ''
     try:
-        _get_bridge().key_tap(key)
+        # Humanized key hold: 40-95ms (bridge default is 35ms flat)
+        hold_ms = random.randint(40, 95)
+        _get_bridge().key_tap(key, delay_ms=hold_ms)
+    except Exception:
+        pass
+
+
+def _input_hotkey(keys):
+    """Press multiple keys together (modifier combo), then release."""
+    try:
+        clean = [k.lower().strip() for k in keys if k]
+        _get_bridge().key_multi_press(clean)
+        time.sleep(random.uniform(0.04, 0.09))
+        _get_bridge().key_release_all()
     except Exception:
         pass
 
@@ -221,8 +234,13 @@ def _bezier_move(tx, ty, duration=None):
         _input_move_abs(tx, ty)
         return
     delay = min(duration / len(pts), 0.006)
-    for px, py in pts:
-        _input_move_abs(px, py)
+    last_idx = len(pts) - 1
+    for i, (px, py) in enumerate(pts):
+        # Intermediate steps: fast (no convergence). Final step: converge.
+        if i == last_idx:
+            _input_move_abs(px, py)
+        else:
+            _input_move_abs_fast(px, py)
         time.sleep(delay * random.uniform(0.6, 1.4))
 
 REFERENCE_WIDTH_1440P = 2560
@@ -268,70 +286,7 @@ def reset_sct(target_thread_id=None):
 
 _template_cache = {}
 
-def _is_frozen():
-    """Detect packaged run (PyInstaller sets sys.frozen; Nuitka doesn't).
-
-    Fallbacks: _MEIPASS presence, __compiled__ attr, or exe name.
-    """
-    if getattr(sys, 'frozen', False):
-        return True
-    if hasattr(sys, '_MEIPASS'):
-        return True
-    if '__compiled__' in globals():
-        return True
-    main = sys.modules.get('__main__')
-    if main is not None and hasattr(main, '__compiled__'):
-        return True
-    exe_name = os.path.basename(sys.executable).lower()
-    if exe_name and exe_name not in ('python.exe', 'pythonw.exe', 'py.exe', 'python3.exe', 'python'):
-        return True
-    return False
-
-
-def get_base_path():
-    """Returns the folder containing the real user-visible exe (writable).
-
-    In Nuitka onefile mode, ``sys.executable`` points to the temp extraction
-    dir, NOT the real exe — so we prefer sys.argv[0] which reflects the
-    user-facing path, then fall back to sys.executable. A final sanity check
-    rejects any path inside %TEMP%.
-    """
-    if _is_frozen():
-        candidates = []
-        if sys.argv and sys.argv[0]:
-            candidates.append(os.path.dirname(os.path.abspath(sys.argv[0])))
-        candidates.append(os.path.dirname(sys.executable))
-
-        temp_dir = os.environ.get('TEMP', '') or os.environ.get('TMP', '')
-        temp_dir = os.path.abspath(temp_dir) if temp_dir else ''
-
-        for c in candidates:
-            if not c:
-                continue
-            if temp_dir and os.path.abspath(c).lower().startswith(temp_dir.lower()):
-                continue  # inside %TEMP%, skip — it's the extraction dir
-            return c
-        return candidates[0] if candidates else os.getcwd()
-    else:
-        folder_path = os.path.dirname(os.path.abspath(__file__))
-        if os.path.basename(folder_path) == 'src':
-            return os.path.dirname(folder_path)
-        return folder_path
-
-def get_bundle_path():
-    """Path to bundled read-only resources.
-
-    In Nuitka onefile, this is the temp extraction directory (sys.executable
-    points there). PyInstaller uses sys._MEIPASS. Falls back to BASE_PATH.
-    """
-    if _is_frozen():
-        meipass = getattr(sys, '_MEIPASS', None)
-        if meipass and os.path.isdir(meipass):
-            return meipass
-        exe_dir = os.path.dirname(sys.executable)
-        if os.path.isdir(exe_dir):
-            return exe_dir
-    return get_base_path()
+from paths import is_frozen as _is_frozen, get_base_path, get_bundle_path
 
 BASE_PATH = get_base_path()
 BUNDLE_PATH = get_bundle_path()
@@ -343,14 +298,32 @@ def _materialize_user_folder(name):
     if os.path.isdir(dest):
         return
     src = os.path.join(BUNDLE_PATH, name)
-    if not os.path.isdir(src) or src == dest:
+    if src == dest:
+        _log_boot(f"materialize skip {name}: src == dest ({src})")
+        return
+    if not os.path.isdir(src):
+        _log_boot(f"materialize skip {name}: src missing ({src})")
         return
     try:
         import shutil
         shutil.copytree(src, dest)
+        _log_boot(f"materialize ok: {src} -> {dest}")
+    except Exception as e:
+        _log_boot(f"materialize FAIL {name}: {e}")
+
+
+def _log_boot(msg):
+    try:
+        path = os.path.join(BASE_PATH, "logs", "boot.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            import datetime as _dt
+            f.write(f"{_dt.datetime.now().isoformat()} {msg}\n")
     except Exception:
         pass
 
+
+_log_boot(f"boot: frozen={_is_frozen()} base={BASE_PATH} bundle={BUNDLE_PATH} argv0={sys.argv[0] if sys.argv else '?'} exe={sys.executable}")
 
 if _is_frozen():
     for _folder in ('pictures', 'config', 'audio', 'themes', 'profiles'):
@@ -521,6 +494,7 @@ def mouse_click():
     _input_press_left()
     time.sleep(random.uniform(0.04, 0.09))
     _input_release_left()
+    time.sleep(0.05)
 
 def mouse_hold():
     _input_press_left()
@@ -563,9 +537,20 @@ def mouse_move_click(x, y, log_click=True):
     time.sleep(random.lognormvariate(
         prof["lognorm_pre_click_mu"], prof["lognorm_pre_click_sig"]
     ))
+    # Defensive: verify cursor is actually at the target before clicking.
+    # DPI scaling / mouse accel / other input sources can push it off by a
+    # few pixels even after convergence. Re-sync here catches that.
+    _cx, _cy = _cursor_pos()
+    if abs(_cx - real_x) > 3 or abs(_cy - real_y) > 3:
+        _input_move_abs(real_x, real_y)
+        time.sleep(random.uniform(0.02, 0.04))
     _input_press_left()
     time.sleep(random.uniform(0.04, 0.09))
     _input_release_left()
+    # Settle delay: ensure the release HID event reaches the game before any
+    # subsequent mouse movement, otherwise the game interprets the sequence
+    # as a drag (press + move + release) instead of a click.
+    time.sleep(0.05)
 
 def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):
     if logger.isEnabledFor(logging.DEBUG):
@@ -579,8 +564,16 @@ def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):
     _input_release_left()
 
 def key_press(Key, presses=1):
-    for _ in range(presses):
+    for i in range(presses):
+        if i > 0:
+            # Humanized inter-press interval
+            time.sleep(random.uniform(0.08, 0.18))
         _input_key_tap(Key)
+
+
+def hotkey(*keys):
+    """Press multiple keys together (e.g. hotkey('ctrl', 'p'))."""
+    _input_hotkey(list(keys))
 
 def capture_screen(monitor_index=None):
     mon_idx = monitor_index if monitor_index is not None else shared_vars.game_monitor
@@ -1124,9 +1117,21 @@ def scale_offset_1080p(x: int, y: int) -> tuple[int, int]:
     return scale_x_1080p(x, padding=False), scale_y_1080p(y, padding=False)
 
 def click_skip(times):
-    mouse_move_click(*scale_coordinates_1080p(895, 465))
-    for i in range(times):
-        mouse_click()
+    # Prefer clicking an actual skip button (red or grey); some events won't
+    # advance from middle-screen clicks and need the skip button specifically.
+    clicked_skip = (click_matching("pictures/events/skip.png", recursive=False,
+                                   quiet_failure=True)
+                    or click_matching("pictures/events/skipgrey.png", recursive=False,
+                                      quiet_failure=True))
+    if not clicked_skip:
+        mouse_move_click(*scale_coordinates_1080p(895, 465))
+    for _ in range(times):
+        # Re-try skip button on each iteration in case it appeared mid-sequence
+        if not click_matching("pictures/events/skip.png", recursive=False,
+                              quiet_failure=True):
+            if not click_matching("pictures/events/skipgrey.png", recursive=False,
+                                  quiet_failure=True):
+                mouse_click()
 
 def wait_skip(img_path, threshold=0.8):
     mouse_move_click(*scale_coordinates_1080p(895, 465))

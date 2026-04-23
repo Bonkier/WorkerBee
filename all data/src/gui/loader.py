@@ -243,7 +243,7 @@ class LoaderWindow:
             pass
 
     def close(self):
-        # Safe to call from any thread — schedules _do_close on the main thread
+        # Safe to call from any thread (schedules _do_close on the main thread)
         try:
             self.root.after(0, self._do_close)
         except Exception:

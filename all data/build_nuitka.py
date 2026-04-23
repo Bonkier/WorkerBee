@@ -15,6 +15,7 @@ BARE_MODULES = [
     "extractor", "function_runner", "headless_bridge", "audio_manager",
     "logger", "movement_detector", "mp_types", "profiles", "updater",
     "Game_Launcher", "theme_restart", "secret_store", "discord_integration",
+    "paths",
 ]
 
 SRC_GUI_MODULES = [
@@ -33,6 +34,8 @@ def build():
         "--onefile",
         "--msvc=latest",
         "--assume-yes-for-downloads",
+        # Exclude only genuinely unused packages. Release builds bundle
+        # torch/easyocr/skimage/scipy/rapidfuzz so users get a single exe.
         "--nofollow-import-to=tensorflow",
         "--nofollow-import-to=tensorflow_lite",
         "--nofollow-import-to=pandas",
@@ -72,6 +75,13 @@ def build():
         "--include-package=aiohttp",
         "--include-package=requests",
         "--include-package=pathgenerator",
+        # OCR stack, bundled for release
+        "--include-package=easyocr",
+        "--include-package=torch",
+        "--include-package=torchvision",
+        "--include-package=skimage",
+        "--include-package=scipy",
+        "--include-package=rapidfuzz",
     ]
 
     # Add each bare-name WorkerBee module explicitly so Nuitka finds them via SRC path

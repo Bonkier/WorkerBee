@@ -81,57 +81,6 @@ def _is_ego_animation(screenshot=None):
             return True
     return False
 
-def _skill_chain(bar_y):
-    import cv2
-    import numpy as np
-
-    shot = common.capture_screen()
-    h, w = shot.shape[:2]
-
-    gx  = common.scale_x_1080p(60)
-    g2x = common.scale_x_1080p(1490)
-    length = g2x - gx
-    logger.debug(f"Skill chain: bar gx={gx} bar_y={bar_y} g2x={g2x} length={length}")
-
-    scan_x1 = max(0, gx + common.scale_x_1080p(100))
-    scan_x2 = min(w, g2x - common.scale_x_1080p(100))
-    scan_y  = max(0, bar_y - common.scale_y_1080p(43))
-    scan_y2 = min(h, scan_y + common.scale_y_1080p(10))
-    if scan_x2 <= scan_x1 or scan_y2 <= scan_y:
-        logger.debug("Skill chain: invalid strip dimensions, aborting")
-        return
-    strip = shot[scan_y:scan_y2, scan_x1:scan_x2]
-
-    skill_num = max(1, int(round((length - common.scale_x_1080p(140)) / common.scale_x_1080p(115))))
-    slot_w    = max(1, (scan_x2 - scan_x1) / skill_num)
-    moves     = [False] * skill_num
-    for bgr in _SIN_BGRS:
-        lo = np.clip(np.array(bgr, dtype=np.int32) - 40, 0, 255).astype(np.uint8)
-        hi = np.clip(np.array(bgr, dtype=np.int32) + 40, 0, 255).astype(np.uint8)
-        for col in np.where(cv2.inRange(strip, lo, hi).any(axis=0))[0]:
-            moves[min(int(col / slot_w), skill_num - 1)] = True
-
-    logger.debug(f"Skill chain: {skill_num} slots, s3 detected={moves}")
-    if not any(moves):
-        logger.debug("Skill chain: no skill-3 coins detected, skipping drag")
-        return
-
-    base_y = bar_y - common.scale_y_1080p(46)
-    hi_y   = base_y + common.scale_y_1080p(200)
-    lo_y   = base_y + common.scale_y_1080p(70)
-    sx     = gx + common.scale_x_1080p(75)
-    step   = common.scale_x_1080p(115)
-
-    common.mouse_move(int(gx), int(bar_y))
-    common.mouse_down()
-    for i, is3 in enumerate(moves):
-        common.mouse_move(int(sx + step * i + common.scale_x_1080p(68)), int(hi_y if is3 else lo_y))
-        time.sleep(0.01)
-    common.mouse_move(int(sx + step * skill_num + common.scale_x_1080p(68)), int(base_y + common.scale_y_1080p(120)))
-    common.mouse_up()
-    time.sleep(0.2)
-    logger.info(f"Skill chain: {sum(moves)}/{skill_num} skill-3 slots chained")
-
 def battle():
     logger.info("Starting battle loop")
     battle_finished = 0
@@ -237,13 +186,14 @@ def battle():
                     ego_check()
                     common.key_press("enter")
                 else:
-                    logger.info("Clicking Winrate (P)")
+                    logger.info("Clicking Winrate (Ctrl+P, Enter)")
                     common.mouse_up()
-                    common.key_press("p")
+                    # Ctrl+P → auto-chains skills. Replaces the manual skill-3
+                    # drag that did click-and-drag across skill slots.
+                    common.hotkey("ctrl", "p")
                     time.sleep(0.35)
                     if not shared_vars.good_pc_mode:
                         common.sleep(0.5)
-                    _skill_chain(_winrate_match[0][1])
                     ego_check()
                     common.key_press("enter")
                     common.mouse_down()
@@ -517,19 +467,46 @@ def skill_check():
         ]
 
     common.mouse_move_click(*common.scale_coordinates_1080p(895, 465))
+    _loop_count = 0
+    _skill_deadline = time.time() + 30
     while True:
-        if common.element_exist("pictures/events/skill_check.png"):
+        _loop_count += 1
+        # Park mouse away so the cursor doesn't occlude template matching.
+        common.mouse_move(*common.scale_coordinates_1080p(200, 200))
+        # Single screenshot per iteration shared across all checks.
+        shot = common.capture_screen()
+        sc_visible = common.element_exist(
+            "pictures/events/skill_check.png",
+            screenshot=shot, quiet_failure=True,
+        )
+        if _loop_count % 5 == 1:
+            logger.info(f"skill_check loop #{_loop_count}: skill_check={bool(sc_visible)}")
+        if sc_visible:
+            logger.info("Skill check dialog detected, proceeding to intensity selection")
             break
-        if common.click_matching("pictures/events/proceed.png", recursive=False):
-            return
-        # Prefer clicking the skip button to advance text if it's visible —
-        # some events require the skip button specifically, not middle clicks.
-        if not common.click_matching("pictures/events/skip.png",
-                                     recursive=False, quiet_failure=True):
+        if common.click_matching("pictures/events/proceed.png",
+                                 recursive=False, screenshot=shot):
+            logger.info("Proceed clicked, sending 2 follow-up clicks")
+            for _ in range(2):
+                common.sleep(1.0)
+                common.mouse_click()
+            common.sleep(0.5)
+            break
+        # Click skip: red (active) first, then grey (awaiting).
+        clicked = (
+            common.click_matching("pictures/events/skip.png",
+                                  recursive=False, quiet_failure=True, screenshot=shot)
+            or common.click_matching("pictures/events/skipgrey.png",
+                                     recursive=False, quiet_failure=True, screenshot=shot)
+        )
+        if not clicked:
             common.mouse_click()
+        if time.time() > _skill_deadline:
+            logger.warning(f"skill_check timeout after {_loop_count} iterations")
+            return
         common.sleep(0.1)
 
-    # Post-proceed buffer — wait for animation, nudge a click so the skill
+    # Post-proceed buffer: wait for animation, nudge a click so the skill
     # check dialog is fully interactive before sinner selection.
     common.sleep(1.5)
     common.mouse_click()

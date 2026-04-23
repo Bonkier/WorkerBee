@@ -236,13 +236,21 @@ def load_logs_tab(parent, log_filename, log_modules, config, save_callback, root
             logging.getLogger(__name__).warning(f"Failed to load log file: {e}")
 
     def check_log_file_changes():
-        if auto_reload_var.get():
+        # Only poll when the logs tab is visible to the user. Hidden tabs
+        # don't need live updates and the 200ms interval caused UI lag on
+        # lower-end systems. Throttled to 1000ms when visible.
+        try:
+            visible = bool(log_text.winfo_ismapped())
+        except Exception:
+            return
+        if visible and auto_reload_var.get():
             try:
                 if os.path.exists(log_filename):
                     load_log_file(reload_all=False)
             except Exception as e:
                 logging.getLogger(__name__).warning(f"Log file change check failed: {e}")
-        root.after(200, check_log_file_changes)
+        next_ms = 1000 if visible else 2500
+        root.after(next_ms, check_log_file_changes)
 
     check_log_size_and_warn()
     load_log_file(reload_all=True)

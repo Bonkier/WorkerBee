@@ -77,7 +77,9 @@ class SidebarNavigation:
             current_y = 0.02 * (1 - progress)
 
             new_page.place(relx=0, rely=current_y, relwidth=1, relheight=1)
-            self._animation_id = self.content_frame.after(15, lambda: animate(step + 1, total_steps))
+            # 33ms = ~30fps, smooth enough for fade without hammering lower-end
+            # CPUs at 66fps which spiked tk scheduling overhead.
+            self._animation_id = self.content_frame.after(33, lambda: animate(step + 1, total_steps))
 
         animate(0)
 

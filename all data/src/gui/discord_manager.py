@@ -124,7 +124,7 @@ def _build_chain_context():
 
 
 def _check_busy():
-    """Return (busy_bool, message) — True if anything is already running."""
+    """Return (busy_bool, message): True if anything is already running."""
     from src.gui import chain_automation, process_handler
     if chain_automation.chain_running:
         return True, "Chain already running"

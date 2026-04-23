@@ -1,1 +1,10 @@
-{"order": {}, "upgrades": {}}
+{
+    "order": {
+        "Star of the Beginning": 1,
+        "Cumulating Starcloud": 2,
+        "Interstellar Travel": 3,
+        "Star Shower": 4,
+        "Perfected Possibility": 5
+    },
+    "upgrades": {}
+}

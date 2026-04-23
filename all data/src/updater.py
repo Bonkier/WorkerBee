@@ -71,19 +71,10 @@ class Updater:
         else:
             self.api_url = api_url
 
-        if getattr(sys, 'frozen', False):
-            try:
-                import common as _common
-                self.base_path = _common.BASE_PATH
-                self.all_data_dir = _common.BUNDLE_PATH
-            except Exception:
-                # Fallback path detection for Nuitka onefile
-                if sys.argv and sys.argv[0]:
-                    self.base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-                else:
-                    self.base_path = os.path.dirname(sys.executable)
-                meipass = getattr(sys, '_MEIPASS', None)
-                self.all_data_dir = meipass if meipass and os.path.isdir(meipass) else os.path.dirname(sys.executable)
+        from paths import is_frozen, get_base_path, get_bundle_path
+        if is_frozen():
+            self.base_path = get_base_path()
+            self.all_data_dir = get_bundle_path()
             self.parent_dir = self.base_path
         else:
             script_path = os.path.abspath(__file__)
@@ -128,15 +119,36 @@ class Updater:
         return False
         
     def get_current_version(self):
+        # Probe multiple paths (Nuitka onefile can set up paths unexpectedly)
+        candidates = [self.version_file_path]
+        # BUNDLE_PATH / BASE_PATH from common if available
         try:
-            if os.path.exists(self.version_file_path):
-                with open(self.version_file_path, 'r') as f:
-                    version = f.read().strip()
-                    return version if version else 'v0'
-            return 'v0'  
-        except Exception as e:
-            logger.error(f"Error reading version file: {e}")
-            return 'v0'
+            import common as _common
+            candidates.append(os.path.join(_common.BUNDLE_PATH, 'version.json'))
+            candidates.append(os.path.join(_common.BASE_PATH, 'version.json'))
+        except Exception:
+            pass
+        # Temp extraction dir (sys.executable's folder in Nuitka onefile)
+        candidates.append(os.path.join(os.path.dirname(sys.executable), 'version.json'))
+        # MEIPASS
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass:
+            candidates.append(os.path.join(meipass, 'version.json'))
+
+        for path in candidates:
+            try:
+                if path and os.path.exists(path):
+                    with open(path, 'r') as f:
+                        version = f.read().strip()
+                        if version:
+                            logger.debug(f"Read version '{version}' from {path}")
+                            return version
+            except Exception as e:
+                logger.debug(f"Failed reading version from {path}: {e}")
+                continue
+
+        logger.warning(f"version.json not found in any of: {candidates}")
+        return 'v0'
             
     def get_latest_version(self):
         ver_json_info = None

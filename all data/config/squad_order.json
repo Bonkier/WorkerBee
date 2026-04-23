@@ -1,1 +1,16 @@
-{}
+{
+    "rupture": {
+        "honglu": 1,
+        "faust": 2,
+        "yisang": 3,
+        "heathcliff": 4,
+        "sinclair": 5,
+        "gregor": 6,
+        "rodion": 7,
+        "ryoshu": 8,
+        "ishmael": 9,
+        "donquixote": 10,
+        "outis": 11,
+        "meursault": 12
+    }
+}

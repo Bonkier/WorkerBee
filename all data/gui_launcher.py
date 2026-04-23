@@ -1041,10 +1041,8 @@ if __name__ == "__main__":
         log_debug("Initializing UI Updater...")
         ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
 
-        ui_updater.check_processes()
-        ui_updater.update_compact_status()
-        ui_updater.check_stats_update()
-        ui_updater.check_chain_status()
+        # Single consolidated tick replaces the four separate polling loops.
+        ui_updater._unified_tick()
         
         log_debug("Starting mainloop...")
         
