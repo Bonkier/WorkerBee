@@ -507,10 +507,6 @@ def battle_check():
 
 def skill_check():
     logger.info("Handling Skill Check")
-    # Post-proceed transition buffer — wait for animation, nudge one click so
-    # the skill-check dialog is fully interactive before sinner selection.
-    common.sleep(1.5)
-    common.mouse_click()
 
     check_images = [
         "pictures/CustomAdded1080p/general/very_high.png",
@@ -528,7 +524,11 @@ def skill_check():
             return
         common.mouse_click()
         common.sleep(0.1)
-    common.sleep(1)
+
+    # Post-proceed buffer — wait for animation, nudge a click so the skill
+    # check dialog is fully interactive before sinner selection.
+    common.sleep(1.5)
+    common.mouse_click()
 
     # If skip button is up but no intensity option is shown yet, keep clicking
     # until an option appears (dialog transition / extra text pages).
