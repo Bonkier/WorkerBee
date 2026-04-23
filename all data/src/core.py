@@ -529,6 +529,18 @@ def skill_check():
         common.mouse_click()
         common.sleep(0.1)
     common.sleep(1)
+
+    # If skip button is up but no intensity option is shown yet, keep clicking
+    # until an option appears (dialog transition / extra text pages).
+    _intensity_deadline = time.time() + 10
+    while time.time() < _intensity_deadline:
+        if any(common.element_exist(img, quiet_failure=True) for img in check_images):
+            break
+        if not common.element_exist("pictures/events/skip.png", quiet_failure=True):
+            break
+        common.mouse_click()
+        common.sleep(0.25)
+
     for i in check_images:
         if common.click_matching(i, threshold=0.9, recursive=False):
             break
