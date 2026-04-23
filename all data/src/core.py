@@ -522,7 +522,11 @@ def skill_check():
             break
         if common.click_matching("pictures/events/proceed.png", recursive=False):
             return
-        common.mouse_click()
+        # Prefer clicking the skip button to advance text if it's visible —
+        # some events require the skip button specifically, not middle clicks.
+        if not common.click_matching("pictures/events/skip.png",
+                                     recursive=False, quiet_failure=True):
+            common.mouse_click()
         common.sleep(0.1)
 
     # Post-proceed buffer — wait for animation, nudge a click so the skill
