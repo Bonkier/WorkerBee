@@ -507,6 +507,11 @@ def battle_check():
 
 def skill_check():
     logger.info("Handling Skill Check")
+    # Post-proceed transition buffer — wait for animation, nudge one click so
+    # the skill-check dialog is fully interactive before sinner selection.
+    common.sleep(1.5)
+    common.mouse_click()
+
     check_images = [
         "pictures/CustomAdded1080p/general/very_high.png",
         "pictures/CustomAdded1080p/general/high.png",
@@ -514,7 +519,7 @@ def skill_check():
         "pictures/CustomAdded1080p/general/low.png",
         "pictures/CustomAdded1080p/general/very_low.png"
         ]
-    
+
     common.mouse_move_click(*common.scale_coordinates_1080p(895, 465))
     while True:
         if common.element_exist("pictures/events/skill_check.png"):
