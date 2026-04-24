@@ -5,10 +5,15 @@ import sys
 import platform
 import logging
 def get_base_path():
-    if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
-    else:
-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from paths import get_base_path as _get_base_path
+        return _get_base_path()
+    except ImportError:
+        folder_path = os.path.dirname(os.path.abspath(__file__))
+        if os.path.basename(folder_path) == 'src':
+            return os.path.dirname(folder_path)
+        return folder_path
+
 
 BASE_PATH = get_base_path()
 sys.path.append(BASE_PATH)

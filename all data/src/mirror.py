@@ -10,11 +10,12 @@ from core import (skill_check, battle_check, battle, check_loading,
                   post_run_load, refill_enkephalin, navigate_to_md)
 
 def get_base_path():
-    if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
-    else:
+    try:
+        from paths import get_base_path as _get_base_path
+        return _get_base_path()
+    except ImportError:
         folder_path = os.path.dirname(os.path.abspath(__file__))
-        return (os.path.dirname(folder_path) if os.path.basename(folder_path) == 'src' 
+        return (os.path.dirname(folder_path) if os.path.basename(folder_path) == 'src'
                 else folder_path)
 
 BASE_PATH = get_base_path()

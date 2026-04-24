@@ -81,9 +81,13 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
 logger = None
 
 def get_base_path():
-    if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from paths import get_base_path as _get_base_path
+        return _get_base_path()
+    except ImportError:
+        if getattr(sys, 'frozen', False):
+            return sys._MEIPASS
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def setup_paths_and_imports():
     BASE_PATH = get_base_path()
