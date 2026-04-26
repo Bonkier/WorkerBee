@@ -438,20 +438,22 @@ class Mirror:
         offset_x, offset_y = common.scale_offset_1440p(90, 90)
         common.mouse_move(x+offset_x,y+offset_y)
         if not common.click_matching(status, recursive=False):
-            for i in range(30):
-                common.mouse_scroll(1000)
-
-            for _ in range(4):
-                if not common.element_exist(status):
-                    for i in range(7):
-                        common.mouse_scroll(-1000)
-                    common.sleep(1)
-                    if common.click_matching(status, recursive=False):
-                        break
-                    continue
-                else:
-                    common.click_matching(status)
+            clicked = False
+            for _ in range(15):
+                common.mouse_scroll(-500)
+                common.sleep(0.15)
+                if common.click_matching(status, recursive=False):
+                    clicked = True
                     break
+            if not clicked:
+                for _ in range(20):
+                    common.mouse_scroll(500)
+                    common.sleep(0.15)
+                    if common.click_matching(status, recursive=False):
+                        clicked = True
+                        break
+            if not clicked:
+                self.logger.warning(f"Squad '{status}' not found after scrolling both directions, continuing")
         common.key_press("enter")
         while(not common.element_exist("pictures/1366/CustomAdded1080p/mirror/general/grace_menu.png")):
             common.click_matching("pictures/1366/CustomAdded1080p/general/confirm.png", recursive=False, mousegoto200=True)

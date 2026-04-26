@@ -817,17 +817,45 @@ def _setup_driver_manager(parent, base_path):
     ).pack(pady=(0, 10), padx=20)
 
     status_label = ctk.CTkLabel(card, text="Checking LGHub connection...", font=UIStyle.SMALL_FONT)
-    status_label.pack(pady=(0, 15))
+    status_label.pack(pady=(0, 5))
+
+    button_row = ctk.CTkFrame(card, fg_color="transparent")
+    button_row.pack(pady=(0, 15))
 
     def _refresh():
+        """Periodic check that calls bridge.open() as a side-effect-free
+        liveness probe. open() short-circuits to a no-op when the bridge
+        is still open (no IOCTL fired), but tries cg_open and raises if
+        LGHub has died, so this catches both cold-start and mid-session
+        disconnect cases."""
         try:
             from src.common import _get_bridge
-            if _get_bridge().is_open():
-                status_label.configure(text="Status: Connected to LGHub", text_color="#55cc88")
-            else:
-                status_label.configure(text="Status: Bridge not open", text_color="#ff8855")
+            b = _get_bridge()
+            b.open()
+            ok = b.is_open()
         except Exception as e:
-            status_label.configure(text=f"Status: LGHub not reachable ({e})", text_color="#ff8855")
+            status_label.configure(text=f"Status: LGHub not reachable - start LGHub then click Refresh ({type(e).__name__})", text_color="#ff8855")
+            try: card.after(3000, _refresh)
+            except Exception: pass
+            return
+
+        if ok:
+            status_label.configure(text="Status: Connected to LGHub", text_color="#55cc88")
+        else:
+            status_label.configure(text="Status: Bridge not open - is LGHub 2021.10 running?", text_color="#ff8855")
+
+        try:
+            card.after(3000, _refresh)
+        except Exception:
+            pass
+
+    refresh_btn = ctk.CTkButton(
+        button_row, text="Refresh now", width=120, height=UIStyle.BUTTON_HEIGHT,
+        font=UIStyle.SMALL_FONT, corner_radius=UIStyle.CORNER_RADIUS,
+        fg_color=UIStyle.BUTTON_COLOR, hover_color=UIStyle.BUTTON_HOVER_COLOR,
+        command=_refresh,
+    )
+    refresh_btn.pack(side="left", padx=5)
 
     card.after(500, _refresh)
 

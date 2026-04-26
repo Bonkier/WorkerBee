@@ -119,11 +119,19 @@ def _input_release_left():
     _get_bridge().mouse_release('left')
 
 def _input_scroll(amount):
+    """Scroll the wheel. `amount` follows Windows WHEEL_DELTA convention
+    where 120 == one notch, so callers pass values like 1000 expecting
+    ~8 notches. The previous implementation looped abs(amount) times,
+    which turned mouse_scroll(1000) into ~10 seconds of continuous
+    scrolling per call and made squad/market scroll bursts run for
+    minutes.
+    """
     _ensure_mouse_settings()
     direction = 1 if amount > 0 else -1
-    for _ in range(abs(int(amount))):
+    notches = max(1, abs(int(amount)) // 120)
+    for _ in range(notches):
         _get_bridge().mouse_scroll(direction)
-        time.sleep(0.01)
+        time.sleep(0.02)
 
 def _input_key_tap(key_str):
     key = key_str.lower().strip() if isinstance(key_str, str) else ''

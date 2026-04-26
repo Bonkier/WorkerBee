@@ -515,21 +515,22 @@ class Mirror:
         offset_x, offset_y = common.scale_offset_1440p(90, 90)
         common.mouse_move(x+offset_x,y+offset_y)
         if not common.click_matching(status, recursive=False):
-            for _ in range(30):
-                common.mouse_scroll(1000)
-
-            
-            for _ in range(4):
-                if not common.element_exist(status):
-                    for _ in range(7):
-                        common.mouse_scroll(-1000)
-                    common.sleep(1)
-                    if common.click_matching(status, recursive=False):
-                        break
-                    continue
-                else:
-                    common.click_matching(status)
+            clicked = False
+            for _ in range(15):
+                common.mouse_scroll(-500)
+                common.sleep(0.15)
+                if common.click_matching(status, recursive=False):
+                    clicked = True
                     break
+            if not clicked:
+                for _ in range(20):
+                    common.mouse_scroll(500)
+                    common.sleep(0.15)
+                    if common.click_matching(status, recursive=False):
+                        clicked = True
+                        break
+            if not clicked:
+                self.logger.warning(f"Squad '{status}' not found after scrolling both directions, continuing")
         common.key_press("enter")
         while(not common.element_exist("pictures/CustomAdded1080p/mirror/general/grace_menu.png")):
             common.sleep(0.2)
@@ -2026,11 +2027,12 @@ class Mirror:
                 status = mirror_utils.market_choice(self.status)
                 if status is None:
                     status = "pictures/mirror/restshop/market/poise_market.png"
-                for _ in range(2):  
-                    if common.click_matching("pictures/mirror/restshop/shop_scroll_up.png", recursive=False):  
-                        for _ in range(45): 
+                for _ in range(2):
+                    if common.click_matching("pictures/mirror/restshop/shop_scroll_up.png", recursive=False):
+                        for _ in range(12):
                             common.mouse_scroll(1000)
-                    for _ in range(3):
+                            common.sleep(0.05)
+                    for _ in range(6):
                         screenshot = common.capture_screen()
                         market_gifts = common.match_image(status, screenshot=screenshot) or []
                         if market_gifts:
@@ -2063,8 +2065,9 @@ class Mirror:
                         if market_gifts:
                             common.sleep(0.3)
                         if common.click_matching("pictures/mirror/restshop/shop_scroll_down.png", recursive=False):
-                            for _ in range(15):
+                            for _ in range(4):
                                 common.mouse_scroll(-1000)
+                                common.sleep(0.05)
                         else:
                             break
                     if common.element_exist("pictures/mirror/restshop/small_not.png"):
