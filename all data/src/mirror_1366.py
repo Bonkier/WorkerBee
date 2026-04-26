@@ -461,10 +461,13 @@ class Mirror:
         import cv2
         import numpy as np
 
-        floor_dir = os.path.join(BASE_PATH, f"pictures/1366/mirror/packs/f{floor_char}")
-        if not os.path.exists(floor_dir):
-            floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
-        if not os.path.exists(floor_dir):
+        primary_rel = f"pictures/1366/mirror/packs/f{floor_char}"
+        fallback_rel = f"pictures/mirror/packs/f{floor_char}"
+        floor_dir = common.resource_path(primary_rel)
+        if not os.path.isdir(floor_dir):
+            floor_dir = common.resource_path(fallback_rel)
+        if not os.path.isdir(floor_dir):
+            self.logger.error(f"Pack template folder missing for floor {floor_char}. Tried {primary_rel} and {fallback_rel} under both BASE_PATH and BUNDLE_PATH.")
             return [], {}, {}, [], 0
 
         actual_h, actual_w = screenshot.shape[:2]
@@ -751,11 +754,11 @@ class Mirror:
                     self.logger.error(f"All {excepted_visible_count} visible pack(s) on {floor} are in the exception list. Stopping macro.")
                     raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
                 if retry_attempt > 0:
-                    logger.debug("No packs detected, retrying...")
+                    logger.info(f"No packs detected on {floor} (retry {10 - retry_attempt}/10), trying again...")
                     common.sleep(0.5)
                     continue
 
-            self.logger.debug(f"Found {len(selectable_packs_pos)} selectable packs")
+            self.logger.info(f"Found {len(selectable_packs_pos)} selectable packs on {floor}")
 
             def robust_drag_pack(x, y):
                 common.mouse_move(x, y)
@@ -880,10 +883,13 @@ class Mirror:
             logger.error("Something went wrong, not fixable after 10 retries.")
             screenshot = common.capture_screen()
             floor_char = floor[-1] if floor else "1"
-            floor_dir = os.path.join(BASE_PATH, f"pictures/mirror/packs/f{floor_char}")
+            floor_rel = f"pictures/mirror/packs/f{floor_char}"
+            floor_dir = common.resource_path(floor_rel)
             final_exception_packs = shared_vars.ConfigCache.get_config("pack_exceptions").get(floor, [])
-            if os.path.exists(floor_dir):
+            self.logger.warning(f"Retry-0 fallback: floor_dir={floor_dir} exists={os.path.isdir(floor_dir)}")
+            if os.path.isdir(floor_dir):
                 all_packs = [f for f in os.listdir(floor_dir) if f.endswith(".png")]
+                self.logger.info(f"Retry-0 fallback scanning {len(all_packs)} pack templates at threshold 0.55")
                 for pack_file in all_packs:
                     pack_name = pack_file.replace(".png", "")
                     if pack_name in final_exception_packs:
@@ -896,8 +902,9 @@ class Mirror:
                 self.logger.warning("Final template scan found nothing. Attempting inpack.png blind fallback.")
                 inpack_matches = common.match_image(
                     "pictures/CustomAdded1080p/mirror/packs/inpack.png",
-                    threshold=0.7, quiet_failure=True, screenshot=screenshot
+                    threshold=0.6, quiet_failure=True, screenshot=screenshot
                 )
+                self.logger.info(f"inpack blind-fallback raw matches: {len(inpack_matches) if inpack_matches else 0}")
                 if inpack_matches:
                     iy1 = common.scale_y_1080p(260)
                     iy2 = common.scale_y_1080p(800)
@@ -911,6 +918,9 @@ class Mirror:
                         return
                 self.logger.error(f"inpack fallback also found nothing on {floor}. Stopping macro.")
                 raise RuntimeError(f"All visible packs are excepted on {floor}. Cannot select a pack.")
+            else:
+                self.logger.error(f"Pack template folder missing entirely. Cannot recover. Looked for: {floor_rel} under both BASE_PATH and BUNDLE_PATH. Stopping macro.")
+                raise RuntimeError(f"Pack template folder missing: {floor_rel}")
 
     def squad_select(self):
         self.logger.info("Selecting squad members for battle")
