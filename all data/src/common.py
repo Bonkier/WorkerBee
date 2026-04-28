@@ -347,6 +347,75 @@ def resource_path(relative_path):
         return bundle_path
     return user_path
 
+
+def scan_all_ui_images(screenshot, top_n=5, min_score=0.5,
+                       min_template_area=2500, exclude_substrings=None):
+    """Walk every PNG under pictures/ and template-match it against the
+    given screenshot. Returns the top_n matches as a list of
+    (score, relative_path) tuples sorted by descending score.
+
+    Used by the run watchdog to identify where the macro is stuck. The
+    screenshot is resized to the 1920x1080 reference resolution first
+    so single-scale matching works regardless of source resolution
+    (4K, DPI-scaled captures, etc.).
+
+    Tiny templates (scroll bar indicators, small icons) match against
+    any dark patch and produce noisy false positives, so we exclude
+    anything with area < min_template_area (default 2500 = 50x50)."""
+    import cv2
+    pictures_dir = resource_path("pictures")
+    if not os.path.isdir(pictures_dir):
+        return []
+    if screenshot is None:
+        return []
+    if screenshot.ndim == 3:
+        gray_screen = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+    else:
+        gray_screen = screenshot
+
+    # Normalize to 1920x1080 so templates (which are authored at that
+    # reference) match without per-template scaling.
+    if gray_screen.shape != (1080, 1920):
+        gray_screen = cv2.resize(gray_screen, (1920, 1080), interpolation=cv2.INTER_AREA)
+    sh_h, sh_w = gray_screen.shape[:2]
+
+    # Default denylist: known tiny templates that produce false positives
+    # against dark UI areas. Substring match against the relative path.
+    if exclude_substrings is None:
+        exclude_substrings = (
+            "fully_scrolled", "notification.png", "setting_cog",
+        )
+
+    results = []
+    for root, _dirs, files in os.walk(pictures_dir):
+        for fname in files:
+            if not fname.lower().endswith('.png'):
+                continue
+            full = os.path.join(root, fname)
+            rel = os.path.relpath(full, pictures_dir).replace('\\', '/')
+            if any(sub in rel for sub in exclude_substrings):
+                continue
+            try:
+                tmpl = _template_cache.get((full, cv2.IMREAD_GRAYSCALE))
+                if tmpl is None:
+                    tmpl = cv2.imread(full, cv2.IMREAD_GRAYSCALE)
+                    if tmpl is None:
+                        continue
+                    _template_cache[(full, cv2.IMREAD_GRAYSCALE)] = tmpl
+                t_h, t_w = tmpl.shape[:2]
+                if t_h * t_w < min_template_area:
+                    continue
+                if t_h > sh_h or t_w > sh_w:
+                    continue
+                res = cv2.matchTemplate(gray_screen, tmpl, cv2.TM_CCOEFF_NORMED)
+                score = float(res.max()) if res.size > 0 else 0.0
+                if score >= min_score:
+                    results.append((score, rel))
+            except Exception:
+                continue
+    results.sort(reverse=True)
+    return results[:top_n]
+
 class NoMillisecondsFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
         return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(record.created))
@@ -1125,21 +1194,41 @@ def scale_offset_1080p(x: int, y: int) -> tuple[int, int]:
     return scale_x_1080p(x, padding=False), scale_y_1080p(y, padding=False)
 
 def click_skip(times):
-    # Prefer clicking an actual skip button (red or grey); some events won't
-    # advance from middle-screen clicks and need the skip button specifically.
-    clicked_skip = (click_matching("pictures/events/skip.png", recursive=False,
-                                   quiet_failure=True)
-                    or click_matching("pictures/events/skipgrey.png", recursive=False,
-                                      quiet_failure=True))
-    if not clicked_skip:
-        mouse_move_click(*scale_coordinates_1080p(895, 465))
-    for _ in range(times):
-        # Re-try skip button on each iteration in case it appeared mid-sequence
-        if not click_matching("pictures/events/skip.png", recursive=False,
-                              quiet_failure=True):
-            if not click_matching("pictures/events/skipgrey.png", recursive=False,
-                                  quiet_failure=True):
+    """Advance whatever event is on screen.
+
+    skip.png = active red skip button: clicking it skips the cinematic.
+    skipgrey.png = greyed skip button with yellow pen icon: the cinematic
+    is OVER and the game is waiting for the player to click anywhere to
+    advance to the next prompt. Clicking the grey button itself does
+    NOTHING.
+
+    The previous version of this function called click_matching(skipgrey)
+    which "succeeded" (the template matched, the click landed on a useless
+    button), preventing the fallback mouse_click() from firing. That's
+    what caused users to get stuck on greyed-skip cinematics."""
+    # If active skip is visible, click it. That advances the cinematic.
+    if click_matching("pictures/events/skip.png", recursive=False, quiet_failure=True):
+        for _ in range(times):
+            # Keep clicking active skip while it's visible; once it disappears
+            # (cinematic done) fall through to a centre-screen click to
+            # advance whatever prompt comes next.
+            if not click_matching("pictures/events/skip.png", recursive=False, quiet_failure=True):
                 mouse_click()
+        return
+
+    # No active skip. If the greyed skip is showing, the cinematic is done
+    # and we need to click the cinematic area, NOT the button.
+    if element_exist("pictures/events/skipgrey.png", quiet_failure=True):
+        mouse_move_click(*scale_coordinates_1080p(895, 465))
+        for _ in range(times):
+            mouse_click()
+        return
+
+    # Neither skip variant visible: still try a centre-screen click to
+    # cover any other dialogs that need advancing.
+    mouse_move_click(*scale_coordinates_1080p(895, 465))
+    for _ in range(times):
+        mouse_click()
 
 def wait_skip(img_path, threshold=0.8):
     mouse_move_click(*scale_coordinates_1080p(895, 465))

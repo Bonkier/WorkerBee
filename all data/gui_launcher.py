@@ -154,23 +154,38 @@ compact_frame = None
 ui_context = {}
 
 def get_display_version():
+    """Read the bundled version.json. Probes multiple locations because
+    BASE_PATH (next to the exe) won't have version.json in a Nuitka
+    onefile build - the file is bundled inside the onefile and extracted
+    to BUNDLE_PATH at runtime."""
+    candidates = [os.path.join(BASE_PATH, "version.json")]
     try:
-        v_path = os.path.join(BASE_PATH, "version.json")
-        if os.path.exists(v_path):
+        from paths import get_bundle_path
+        candidates.append(os.path.join(get_bundle_path(), "version.json"))
+    except Exception:
+        pass
+    candidates.append(os.path.join(os.path.dirname(sys.executable), "version.json"))
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "version.json"))
+
+    for v_path in candidates:
+        try:
+            if not v_path or not os.path.exists(v_path):
+                continue
             with open(v_path, "r") as f:
                 content = f.read().strip()
-                try:
-                    data = json.loads(content)
-                    if isinstance(data, dict) and "version" in data:
-                        v = str(data["version"])
-                    else:
-                        v = content
-                except json.JSONDecodeError:
-                    v = content
-                if v:
-                    return f"v{v}" if v[0].isdigit() else v
-    except:
-        pass
+            if not content:
+                continue
+            try:
+                data = json.loads(content)
+                v = str(data["version"]) if isinstance(data, dict) and "version" in data else content
+            except json.JSONDecodeError:
+                v = content
+            if v:
+                return f"v{v}" if v[0].isdigit() else v
+        except Exception:
+            continue
     return "v2.0"
 
 def get_running_process_name():

@@ -58,7 +58,63 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
                         if curr_arr.shape == prev_arr.shape:
                             diff = np.mean(np.abs(curr_arr.astype(np.int32) - prev_arr.astype(np.int32)))
                             if diff < STUCK_THRESHOLD:
-                                logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f}), injecting TimeoutError")
+                                logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f})")
+                                stuck_sidecar = {
+                                    "timestamp": int(now),
+                                    "iso_time": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
+                                    "diff": round(float(diff), 3),
+                                    "screenshot_path": current_path,
+                                    "screenshot_size": None,
+                                    "expected_size": None,
+                                    "top_matches": [],
+                                    "tail_log_lines": [],
+                                }
+                                try:
+                                    sh_h, sh_w = curr_arr.shape[:2]
+                                    exp_w = getattr(common, 'EXPECTED_WIDTH', None)
+                                    exp_h = getattr(common, 'EXPECTED_HEIGHT', None)
+                                    stuck_sidecar["screenshot_size"] = [sh_w, sh_h]
+                                    stuck_sidecar["expected_size"] = [exp_w, exp_h]
+                                    logger.warning(f"Run watchdog: screenshot={sh_w}x{sh_h}, EXPECTED={exp_w}x{exp_h} (mismatch implies DPI-scaling or non-standard capture)")
+                                    bgr = curr_arr[:, :, ::-1] if curr_arr.shape[-1] == 3 else curr_arr
+                                    matches = common.scan_all_ui_images(bgr, top_n=5, min_score=0.55)
+                                    stuck_sidecar["top_matches"] = [
+                                        {"path": rel, "score": round(float(score), 4)}
+                                        for score, rel in matches
+                                    ]
+                                    if matches:
+                                        formatted = ", ".join(f"{rel} ({score:.3f})" for score, rel in matches)
+                                        logger.warning(f"Run watchdog: macro appears stuck on - {formatted}")
+                                    else:
+                                        logger.warning("Run watchdog: no UI templates matched above 0.55 - unknown screen state")
+                                except Exception as scan_err:
+                                    logger.warning(f"Run watchdog: stuck-screen UI scan failed: {scan_err}")
+                                # Tail the last 50 log lines for the sidecar so the
+                                # diagnostic agent doesn't need to re-parse the
+                                # whole rotating log.
+                                try:
+                                    log_path = os.path.join(get_base_path(), "logs", "Logs.log")
+                                    if os.path.exists(log_path):
+                                        with open(log_path, "r", encoding="utf-8", errors="replace") as _lf:
+                                            all_lines = _lf.readlines()
+                                        stuck_sidecar["tail_log_lines"] = [
+                                            line.rstrip() for line in all_lines[-50:]
+                                        ]
+                                except Exception as tail_err:
+                                    logger.warning(f"Run watchdog: failed to tail log into sidecar: {tail_err}")
+                                # Persist the sidecar JSON. Glob logs/stuck_*.json
+                                # to discover new failures since last poll.
+                                try:
+                                    sidecar_path = os.path.join(
+                                        get_base_path(), "logs",
+                                        f"stuck_{stuck_sidecar['timestamp']}.json"
+                                    )
+                                    with open(sidecar_path, "w", encoding="utf-8") as _sf:
+                                        json.dump(stuck_sidecar, _sf, indent=2)
+                                    logger.warning(f"Run watchdog: stuck-state sidecar written to {sidecar_path}")
+                                except Exception as sc_err:
+                                    logger.warning(f"Run watchdog: sidecar write failed: {sc_err}")
+                                logger.warning("Run watchdog: injecting TimeoutError to skip run")
                                 ctypes.pythonapi.PyThreadState_SetAsyncExc(
                                     ctypes.c_long(main_thread_id),
                                     ctypes.py_object(TimeoutError)

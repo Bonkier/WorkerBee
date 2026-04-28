@@ -195,10 +195,20 @@ class Updater:
                     candidates = [r for r in releases if not r.get('draft') and not r.get('prerelease') and _match(r.get('tag_name', ''))]
                     if candidates:
                         release_data = candidates[0]
-                        asset_url = next(
-                            (a['browser_download_url'] for a in release_data.get('assets', []) if a['name'].endswith('.zip')),
-                            None
-                        )
+                        # Asset preference for frozen builds: prefer the bare
+                        # .exe (Nuitka onefile ships the exe directly with no
+                        # zip wrapper). Source-build users still take .zip
+                        # assets so they get the full repo. The previous
+                        # logic only looked for .zip and silently fell back
+                        # to the source-code zipball, which dumped repo
+                        # source files instead of replacing the exe.
+                        assets = release_data.get('assets', [])
+                        exe_asset = next((a['browser_download_url'] for a in assets if a['name'].lower().endswith('.exe')), None)
+                        zip_asset = next((a['browser_download_url'] for a in assets if a['name'].lower().endswith('.zip')), None)
+                        if getattr(sys, 'frozen', False):
+                            asset_url = exe_asset or zip_asset
+                        else:
+                            asset_url = zip_asset or exe_asset
                         release_info = (release_data['tag_name'], asset_url or release_data['zipball_url'])
         except Exception as e:
             logger.warning(f"Could not fetch latest release info: {e}")
@@ -405,7 +415,14 @@ class Updater:
         try:
             os.makedirs(self.temp_path, exist_ok=True)
 
-            zip_path = os.path.join(self.temp_path, 'update.zip')
+            # Pick a filename that matches the asset type. Bare-exe
+            # releases need the .exe extension preserved so apply_update
+            # routes to the in-place swap path.
+            url_lower = download_url.lower()
+            if url_lower.endswith('.exe'):
+                zip_path = os.path.join(self.temp_path, 'update.exe')
+            else:
+                zip_path = os.path.join(self.temp_path, 'update.zip')
             logger.info(f"Downloading update from {download_url}")
 
             req = urllib.request.Request(download_url, headers={'User-Agent': 'WorkerBee-Updater'})
@@ -553,11 +570,22 @@ class Updater:
     def apply_update(self, zip_path, auto_restart=True):
         if self._is_staged_update():
             return self._perform_staged_update()
-            
+
         if not zip_path or not os.path.exists(zip_path):
-            logger.error("Invalid zip file path")
+            logger.error("Invalid update file path")
             return False
-            
+
+        # Detect bare-exe asset (Nuitka onefile release). When the
+        # downloaded payload is the WorkerBee.exe binary itself (not a
+        # zip), there's nothing to extract - just swap the running exe
+        # via a batch script.
+        if zip_path.lower().endswith('.exe') or self._looks_like_pe_binary(zip_path):
+            if not getattr(sys, 'frozen', False):
+                logger.error("Received .exe update but running from source. Aborting to avoid clobbering the source tree.")
+                return False
+            logger.info(f"Update payload is a bare exe ({zip_path}); applying via in-place swap.")
+            return self._run_exe_swap_update(zip_path, auto_restart)
+
         try:
             logger.info(f"Extracting update to {self.temp_path}")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -1096,6 +1124,82 @@ if exist "{config_backup_path}\\" (
 
     def _is_staged_update(self):
         return False
+
+    @staticmethod
+    def _looks_like_pe_binary(path):
+        """Return True if the file starts with the MZ DOS header. Used
+        to detect raw .exe payloads that arrive without an .exe
+        extension (e.g. Content-Disposition redirects)."""
+        try:
+            with open(path, 'rb') as f:
+                return f.read(2) == b'MZ'
+        except Exception:
+            return False
+
+    def _run_exe_swap_update(self, new_exe_path, auto_restart=True):
+        """Replace the running WorkerBee.exe with the freshly-downloaded
+        one. Windows holds an exclusive lock on a running PE, so we hand
+        the actual swap to a detached batch script that waits for our
+        PID to exit, copies the new exe over the old one, and relaunches.
+        """
+        try:
+            running_exe = sys.executable
+            current_pid = os.getpid()
+            os.makedirs(self.temp_path, exist_ok=True)
+            batch_script_path = os.path.join(self.temp_path, "swap_update.bat")
+            vbs_script_path = os.path.join(self.temp_path, "silent_swap_updater.vbs")
+
+            # Stage the new exe at a stable name so the batch script
+            # references it by absolute path.
+            staged_exe = os.path.join(self.temp_path, "WorkerBee_new.exe")
+            try:
+                if os.path.exists(staged_exe):
+                    os.remove(staged_exe)
+                shutil.copy2(new_exe_path, staged_exe)
+            except Exception as e:
+                logger.error(f"Failed to stage new exe at {staged_exe}: {e}")
+                return False
+
+            batch_content = f"""@echo off
+echo Waiting for WorkerBee (PID {current_pid}) to close...
+ping 127.0.0.1 -n 4 > NUL
+taskkill /F /PID {current_pid} /T > NUL 2>&1
+ping 127.0.0.1 -n 3 > NUL
+
+echo Swapping in new exe...
+copy /Y "{staged_exe}" "{running_exe}" > NUL
+if errorlevel 1 (
+    echo Copy failed, retrying once after a delay...
+    ping 127.0.0.1 -n 4 > NUL
+    copy /Y "{staged_exe}" "{running_exe}" > NUL
+)
+"""
+            if auto_restart:
+                batch_content += f'\necho Restarting WorkerBee...\nstart "" "{running_exe}" --updated\n'
+
+            batch_content += f'\necho Cleaning up...\nstart "" /B cmd /C "ping 127.0.0.1 -n 3 > NUL & rmdir /S /Q \\"{self.temp_path}\\""\n'
+            batch_content += "\necho Done.\nexit\n"
+
+            with open(batch_script_path, "w") as f:
+                f.write(batch_content)
+
+            with open(vbs_script_path, "w") as f:
+                f.write('Set WshShell = CreateObject("WScript.Shell")\n')
+                f.write(f'WshShell.Run chr(34) & "{batch_script_path}" & chr(34), 0, False\n')
+                f.write('Set WshShell = Nothing\n')
+
+            if self.pre_exit_callback:
+                try:
+                    self.pre_exit_callback()
+                except Exception as e:
+                    logger.error(f"Error in pre-exit callback: {e}")
+
+            logger.info(f"Launching exe-swap updater: {vbs_script_path}")
+            subprocess.Popen(["wscript.exe", vbs_script_path], shell=False, close_fds=True)
+            os._exit(0)
+        except Exception as e:
+            logger.error(f"Error running exe-swap update: {e}")
+            return False
 
 def check_for_updates(repo_owner, repo_name, callback=None):
     repo_owner = "Bonkier"

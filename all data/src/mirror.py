@@ -296,7 +296,10 @@ class Mirror:
             self.event_choice()
 
         elif common.click_matching("pictures/events/proceed.png", recursive=False):
-            self.logger.info("Event proceed button detected")
+            self.logger.info("Event proceed button detected, sending 2 follow-up clicks")
+            for _ in range(2):
+                common.sleep(1.0)
+                common.mouse_click()
             self.event_choice()
 
         elif common.element_exist("pictures/battle/winrate.png") or common.element_exist("pictures/battle/winrate_wave.png"):
@@ -1213,6 +1216,11 @@ class Mirror:
 
     def encounter_reward_select(self):
         self.logger.info("Selecting encounter rewards")
+        # Settle delay before entering the card-selection loop. The
+        # "continue" click that lands us on the encounter reward screen
+        # fires too quickly otherwise, so the card detection occasionally
+        # runs against a still-transitioning screen.
+        common.sleep(0.5)
         _valid = {"cost_gift", "cost", "gift", "resource", "starlight"}
         _priority = shared_vars.ConfigCache.get_config("card_priority")
         if not _priority or not isinstance(_priority, list):
@@ -1886,7 +1894,11 @@ class Mirror:
         common.click_matching("pictures/mirror/restshop/fusion/bytier.png")
         common.click_matching("pictures/mirror/restshop/fusion/bykeyword.png")
 
-        while True:
+        MAX_FUSION_CYCLES = 8
+        fusion_cycle = 0
+        while fusion_cycle < MAX_FUSION_CYCLES:
+            fusion_cycle += 1
+            self.logger.debug(f"fuse_gifts: cycle {fusion_cycle}/{MAX_FUSION_CYCLES}")
             if not common.click_matching("pictures/CustomAdded1080p/mirror/general/fully_scrolled_up.png", threshold=0.95, recursive=False) and common.click_matching("pictures/mirror/restshop/scroll_bar.png", recursive=False):
                 for _ in range(5):
                     common.mouse_scroll(1000)
@@ -2283,6 +2295,22 @@ class Mirror:
         elif not battle_check():
             battle()
             check_loading()
+
+        else:
+            # No specific event template matched and not in battle. The macro
+            # may be parked on an unknown Choices/dialog screen (e.g. Mirror
+            # Dungeon events with two custom answer buttons that don't have
+            # dedicated templates). Send generic advance signals: a centre
+            # click, ENTER, and clicks at typical choice-button positions
+            # so we don't sit and wait for the watchdog.
+            self.logger.info("event_choice: no specific event matched, sending generic advance")
+            common.mouse_move_click(*common.scale_coordinates_1080p(960, 540))
+            common.sleep(0.3)
+            common.key_press("enter")
+            common.sleep(0.3)
+            for cx, cy in ((1430, 420), (1430, 540), (1430, 480)):
+                common.mouse_move_click(*common.scale_coordinates_1080p(cx, cy))
+                common.sleep(0.4)
 
     def victory(self):
         common.click_matching("pictures/general/confirm_w.png", recursive=False)
