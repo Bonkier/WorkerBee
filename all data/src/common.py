@@ -44,7 +44,7 @@ import shared_vars
 # ---------------------------------------------------------------------------
 # Input backend: Windows / LGHub bridge
 # Inputs emit through Logitech HID driver as real hardware events.
-# Requires: LGHub 2021.10 installed and running (blocked from auto-updating).
+# Requires: LGHub 2021.11.1775 installed and running (blocked from auto-updating).
 # Uses ChargeGrinder's bridge.dll (GPL v3) under src/bridge/.
 # ---------------------------------------------------------------------------
 _bridge = None
@@ -428,13 +428,13 @@ def resource_path(relative_path):
 # 1. They install LGHub but never launch it - lghub_agent.exe isn't running
 # 2. They run WorkerBee.exe without "Run as administrator" - bridge IOCTL
 #    sometimes needs the admin token even though the file copy worked
-# 3. They install LGHub at the WRONG version (newer than 2021.10) and the
+# 3. They install LGHub at the WRONG version (newer than 2021.11.1775) and the
 #    bridge fails at cg_open with no obvious explanation
 # These checks run once at startup, log warnings, and return a dict the
 # GUI can render as a banner / dialog.
 
 _LGHUB_PROCESS_NAMES = ("lghub_agent.exe", "lghub.exe", "lghub_updater.exe")
-_LGHUB_REQUIRED_VERSION_PREFIX = "2021.10"
+_LGHUB_REQUIRED_VERSION_PREFIX = "2021.11.1775"
 _LGHUB_EXE_CANDIDATES = (
     r"C:\Program Files\LGHUB\lghub.exe",
     r"C:\Program Files\LGHUB\system_tray\lghub_system_tray.exe",
@@ -468,7 +468,7 @@ def _is_lghub_running():
 
 
 def _detect_lghub_version():
-    """Returns the detected LGHub version string (e.g. '2021.10.5673.0')
+    """Returns the detected LGHub version string (e.g. '2021.11.1775.5673.0')
     or None if LGHub isn't installed at any of the standard paths.
     Reads file metadata via PowerShell because we don't want to add
     pywin32 just for this."""
@@ -535,20 +535,20 @@ def run_startup_checks():
     if version is None:
         result["lghub_version"]["message"] = (
             "Could not detect installed LGHub version. WorkerBee requires "
-            "LGHub 2021.10 - any newer version has patched the IOCTL bypass "
+            "LGHub 2021.11.1775 - any newer version has patched the IOCTL bypass "
             "and WorkerBee will fail to open the bridge."
         )
         logger.warning("startup check: LGHUB-VERSION unknown - LGHub install not detected at standard paths")
     elif version.startswith(_LGHUB_REQUIRED_VERSION_PREFIX):
         result["lghub_version"]["ok"] = True
-        result["lghub_version"]["message"] = f"LGHub version {version} (correct - 2021.10.x)"
+        result["lghub_version"]["message"] = f"LGHub version {version} (correct)"
         logger.info(f"startup check: LGHub version OK ({version})")
     else:
         result["lghub_version"]["message"] = (
             f"LGHub version {version} is NOT supported. WorkerBee requires "
-            f"LGHub {_LGHUB_REQUIRED_VERSION_PREFIX}.x. Newer versions have "
+            f"LGHub {_LGHUB_REQUIRED_VERSION_PREFIX}. Newer versions have "
             "patched the bridge exploit. Uninstall current LGHub, install "
-            "the 2021.10 offline installer, and block its auto-update in "
+            "the 2021.11.1775 offline installer, and block its auto-update in "
             "Windows Firewall."
         )
         logger.warning(f"startup check: LGHUB-VERSION FAILED - detected {version}, need {_LGHUB_REQUIRED_VERSION_PREFIX}.x")

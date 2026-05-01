@@ -810,7 +810,7 @@ def _setup_driver_manager(parent, base_path):
 
     ctk.CTkLabel(
         card,
-        text="WorkerBee routes input through Logitech G Hub (v2021.10) so events "
+        text="WorkerBee routes input through Logitech G Hub (v2021.11.1775) so events "
              "emit through the Logitech HID driver as real hardware.\n\n"
              "LGHub must be running and must NOT auto-update to a newer version.",
         font=UIStyle.SMALL_FONT, text_color="gray", wraplength=500,
@@ -842,7 +842,7 @@ def _setup_driver_manager(parent, base_path):
         if ok:
             status_label.configure(text="Status: Connected to LGHub", text_color="#55cc88")
         else:
-            status_label.configure(text="Status: Bridge not open - is LGHub 2021.10 running?", text_color="#ff8855")
+            status_label.configure(text="Status: Bridge not open - is LGHub 2021.11.1775 running?", text_color="#ff8855")
 
         try:
             card.after(3000, _refresh)
