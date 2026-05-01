@@ -2,6 +2,7 @@ import sys
 import os
 import logging
 import json
+import random
 import time
 import common
 import copy
@@ -232,6 +233,19 @@ class Mirror:
 
         return win_flag, run_complete, self.run_stats
 
+    def _safe_phase(self, name, fn, *args, **kwargs):
+        """See mirror.Mirror._safe_phase."""
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            self.logger.error(f"[{name}] phase crashed: {e}", exc_info=True)
+            try:
+                common.key_press("esc")
+                common.sleep(0.6)
+            except Exception:
+                pass
+            return None
+
     def mirror_loop(self):
         if common.element_exist("pictures/1366/general/maint.png"):
             common.click_matching("pictures/1366/general/close.png", recursive=False)
@@ -244,32 +258,34 @@ class Mirror:
         if common.element_exist("pictures/1366/events/skip.png"):
             self.logger.info("Event skip button detected")
             common.mouse_move(*common.scale_coordinates_1080p(200, 200))
-            common.click_skip(15)
-            self.event_choice()
+            self._safe_phase("event_advance_enter", self.event_advance_enter)
+            self._safe_phase("event_choice", self.event_choice)
 
         elif common.click_matching("pictures/1366/events/proceed.png", recursive=False):
-            self.logger.info("Event proceed button detected, sending 2 follow-up clicks")
-            for _ in range(2):
-                common.sleep(1.0)
-                common.mouse_click()
-            self.event_choice()
+            self.logger.info("Event proceed button detected, advancing with ENTER until choice/intensity/end")
+            common.sleep(random.uniform(0.4, 0.8))
+            self._safe_phase("event_advance_enter", self.event_advance_enter)
+            self._safe_phase("event_choice", self.event_choice)
 
         elif common.element_exist("pictures/1366/battle/winrate.png"):
             self.logger.info("Battle winrate button detected")
-            battle()
-            check_loading()
+            try:
+                battle()
+                check_loading()
+            except Exception as e:
+                self.logger.error(f"[battle] phase crashed: {e}", exc_info=True)
 
         elif common.element_exist("pictures/1366/mirror/general/danteh.png"):
             self.logger.info("Navigation screen detected (danteh)")
-            self.navigation()
+            self._safe_phase("navigation", self.navigation)
 
         elif common.element_exist("pictures/1366/CustomAdded1080p/general/squads/clear_selection.png"):
             self.logger.info("Squad selection for battle detected")
-            self.squad_select()
+            self._safe_phase("squad_select", self.squad_select)
 
         elif common.element_exist("pictures/1366/mirror/general/reward_select.png"):
             self.logger.info("Reward selection detected")
-            self.reward_select()
+            self._safe_phase("reward_select", self.reward_select)
 
         elif common.element_exist("pictures/1366/mirror/general/ego_gift_get.png"):
             self.logger.info("EGO Gift acquisition detected")
@@ -277,15 +293,15 @@ class Mirror:
 
         elif common.element_exist("pictures/1366/mirror/restshop/shop.png") or common.element_exist("pictures/1366/mirror/restshop/super_shop.png"):
             self.logger.info("Rest shop detected")
-            self.rest_shop()
+            self._safe_phase("rest_shop", self.rest_shop)
 
         elif common.element_exist("pictures/1366/mirror/general/encounter_reward.png"):
             self.logger.info("Encounter reward detected")
-            self.encounter_reward_select()
+            self._safe_phase("encounter_reward_select", self.encounter_reward_select)
 
         elif self.is_pack_screen():
             self.logger.info("Pack selection detected")
-            self.pack_selection()
+            self._safe_phase("pack_selection", self.pack_selection)
 
         elif common.element_exist("pictures/1366/mirror/general/event_effect.png"):
             self.logger.info("Event effect selection detected")
@@ -295,7 +311,10 @@ class Mirror:
             common.sleep(1)
             common.click_matching("pictures/1366/general/confirm_b.png")
 
-        elif common.element_exist("pictures/1366/general/module.png") or common.element_exist("pictures/1366/mirror/general/md_enter.png"):
+        elif common.element_exist("pictures/1366/general/module.png") and common.element_exist("pictures/1366/mirror/general/md_enter.png"):
+            # See mirror.py for the rationale - OR was matching the
+            # boss-node Enter button mid-run. AND requires both the
+            # MD module thumbnail and the Enter button.
             self.logger.info("Main menu detected in loop. Forcing run completion.")
             return 0, 1, self.run_stats
 
@@ -820,6 +839,26 @@ class Mirror:
                 select_pack(best_pack[1], best_pack[2])
                 return
 
+            # F1 quirk: priority pack tiles can render slower than scan
+            # timing, missing the priority pack on the first scan even
+            # when it's visually on screen. Re-scan once before paying
+            # for a refresh.
+            if floor == "floor1" and floor_priorities and not found_priority_packs:
+                self.logger.info("F1: priority pack not found on first scan, re-scanning before refresh")
+                common.sleep(1.2)
+                rescreenshot = common.capture_screen()
+                (selectable_packs_pos, pack_identities, known_pack_names,
+                 found_priority_packs, excepted_visible_count) = self._fast_scan_packs(
+                    floor_char, rescreenshot, exception_packs, floor_priorities,
+                    min_x_scaled, min_y_scaled, max_x_scaled, max_y_scaled
+                )
+                if found_priority_packs:
+                    found_priority_packs.sort(key=lambda x: x[0])
+                    best_pack = found_priority_packs[0]
+                    logger.info(f"F1 re-scan: selecting priority pack '{best_pack[2]}'")
+                    select_pack(best_pack[1], best_pack[2])
+                    return
+
             if floor_priorities and refresh_count < MAX_REFRESHES:
                 logger.info(f"Priority packs defined but none found. Attempting refresh ({refresh_count + 1}/{MAX_REFRESHES}).")
 
@@ -998,7 +1037,9 @@ class Mirror:
                 selectable_ego_gift_matches.remove((x, y))
             elif i == 0:
                 logger.info("Force select at least 1 ego gift.")
-
+                if not ego_gift_matches:
+                    self.logger.warning("Force-select skipped: no ego_gift_matches available")
+                    break
                 x,y = common.random_choice(ego_gift_matches)
 
                 ego_gift_matches.remove((x, y))
@@ -1083,24 +1124,34 @@ class Mirror:
         nav_threshold = 0.65 if self.res_x < 1920 else 0.8
         nav_x1 = common.scale_x_1080p(1100)
 
-        if common.click_matching("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
+        # Already on a node-with-nav_enter screen: just press ENTER.
+        if common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1, quiet_failure=True):
+            common.key_press("enter")
+            common.sleep(random.uniform(0.40, 0.65))
             return
 
         duration = 5
         end_time = time.time() + duration
         nav_start_time = time.time()
 
+        # Wait for the nav screen to be present, pressing ENTER each
+        # iteration as a passive trigger.
         while not (
-            common.click_matching("pictures/1366/mirror/general/danteh.png", recursive=False) or
-            common.click_matching("pictures/1366/CustomAdded1080p/mirror/general/danteh_zoomed.png", recursive=False)
+            common.element_exist("pictures/1366/mirror/general/danteh.png", quiet_failure=True) or
+            common.element_exist("pictures/1366/CustomAdded1080p/mirror/general/danteh_zoomed.png", quiet_failure=True) or
+            common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1, quiet_failure=True)
         ):
+            common.key_press("enter")
+            common.sleep(random.uniform(0.30, 0.55))
             if time.time() > end_time:
                 break
 
         while common.element_exist("pictures/1366/general/connection_o.png"):
             pass
 
-        if common.click_matching("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, recursive=False, x1=nav_x1):
+        if common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1, quiet_failure=True):
+            common.key_press("enter")
+            common.sleep(random.uniform(0.40, 0.65))
             return
 
         else:
@@ -1147,18 +1198,38 @@ class Mirror:
                     common.element_exist("pictures/1366/CustomAdded1080p/mirror/general/retrystage.png", threshold=0.72, quiet_failure=True) or
                     common.element_exist("pictures/1366/general/victory.png")):
                     return
+                # Limbus added arrow-key node selection. Try right/up/down
+                # in priority order before falling back to mouse clicks
+                # on detected node centres.
                 nav_found = False
-                for x,y in node_location:
-                    common.mouse_move_click(x, y)
-                    common.sleep(1)
+                for arrow in ("right", "up", "down"):
+                    self.logger.info(f"Navigation: pressing '{arrow}'")
+                    common.key_press(arrow)
+                    common.sleep(random.uniform(0.30, 0.55))
                     if common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
                         nav_found = True
                         break
 
                 if not nav_found:
+                    self.logger.warning("Arrow keys did not enter navigation, falling back to mouse clicks on detected nodes")
+                    for x,y in node_location:
+                        common.mouse_move_click(x, y)
+                        common.sleep(random.uniform(0.9, 1.2))
+                        if common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1):
+                            nav_found = True
+                            break
+
+                if not nav_found:
                     self.navigation(drag_danteh=False, _depth=_depth + 1)
                     return
-            common.click_matching("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1)
+            # Press ENTER to confirm the highlighted node instead of
+            # clicking the nav_enter button.
+            common.sleep(random.uniform(0.30, 0.50))
+            for _ in range(3):
+                if not common.element_exist("pictures/1366/mirror/general/nav_enter.png", threshold=nav_threshold, x1=nav_x1, quiet_failure=True):
+                    break
+                common.key_press("enter")
+                common.sleep(random.uniform(0.40, 0.65))
 
     def sell_gifts(self):
         for _ in range(3):
@@ -1393,18 +1464,31 @@ class Mirror:
         self.logger.info("Starting gift fusion")
 
         def exit_fusion():
-            if common.element_exist("pictures/1366/mirror/restshop/close.png"):
-                common.click_matching("pictures/1366/mirror/restshop/close.png", recursive=False)
-            else:
-                common.sleep(1)
-                common.click_matching("pictures/1366/mirror/restshop/close.png", recursive=False)
+            try:
+                if common.element_exist("pictures/1366/mirror/restshop/close.png"):
+                    common.click_matching("pictures/1366/mirror/restshop/close.png", recursive=False)
+                else:
+                    common.sleep(1)
+                    common.click_matching("pictures/1366/mirror/restshop/close.png", recursive=False)
+                common.sleep(0.5)
+            except Exception as ee:
+                self.logger.error(f"exit_fusion failed: {ee}")
 
-            common.sleep(0.5)
+        try:
+            self._fuse_gifts_inner(exit_fusion)
+        except Exception as e:
+            self.logger.error(f"fuse_gifts crashed: {e}", exc_info=True)
+            try:
+                exit_fusion()
+            except Exception:
+                pass
 
+    def _fuse_gifts_inner(self, exit_fusion):
         statuses = ["burn","bleed","tremor","rupture","sinking","poise","charge","slash","pierce","blunt"]
         all_statuses = list(statuses)
         excluded_statuses = [self.status]
-        statuses.remove(self.status)
+        if self.status in statuses:
+            statuses.remove(self.status)
 
         try:
 
@@ -1548,7 +1632,12 @@ class Mirror:
 
         if not shared_vars.skip_ego_fusion:
             self.logger.info("Attempting fusion")
-            self.fuse_gifts()
+            try:
+                self.fuse_gifts()
+            except Exception as e:
+                self.logger.error(f"Fusion outer guard tripped: {e}", exc_info=True)
+                common.key_press("esc")
+                common.sleep(1)
 
         if common.element_exist("pictures/1366/mirror/restshop/small_not.png"):
             leave_restshop()
@@ -1717,6 +1806,78 @@ class Mirror:
 
             if not scrolled and not gifts and not wordless_gifts:
                 break
+
+    def event_advance_enter(self, max_seconds=120):
+        """1366 variant of mirror.Mirror.event_advance_enter. Mixes ENTER
+        with clicks on visible Skip/Proceed/Continue buttons, humanized
+        delays, never two inputs at once. See mirror.py for full
+        docstring."""
+        STOP_IMAGES = {
+            "end:encounter_reward":   "pictures/1366/mirror/general/encounter_reward.png",
+            "end:navigation":         "pictures/1366/mirror/general/danteh.png",
+            "end:reward_select":      "pictures/1366/mirror/general/reward_select.png",
+            "end:winrate":            "pictures/1366/battle/winrate.png",
+            "end:victory":            "pictures/1366/general/victory.png",
+            "end:battle_squad":       "pictures/1366/CustomAdded1080p/general/squads/clear_selection.png",
+            "intensity:very_high":    "pictures/1366/CustomAdded1080p/general/very_high.png",
+            "intensity:high":         "pictures/1366/CustomAdded1080p/general/high.png",
+            "intensity:normal":       "pictures/1366/CustomAdded1080p/general/normal.png",
+            "intensity:low":          "pictures/1366/CustomAdded1080p/general/low.png",
+            "choice:level_up":        "pictures/1366/events/level_up.png",
+            "choice:select_gain":     "pictures/1366/events/select_gain.png",
+            "choice:select_right":    "pictures/1366/events/select_right.png",
+            "choice:gain_check":      "pictures/1366/events/gain_check.png",
+            "choice:skill_check":     "pictures/1366/events/skill_check.png",
+            "choice:gain_gift":       "pictures/1366/events/gain_gift.png",
+            "choice:win_battle":      "pictures/1366/events/win_battle.png",
+            "choice:kqe":             "pictures/1366/mirror/events/kqe.png",
+        }
+
+        BUTTON_ACTIONS = (
+            ("proceed",  "pictures/1366/events/proceed.png"),
+            ("continue", "pictures/1366/events/continue.png"),
+            ("skip",     "pictures/1366/events/skip.png"),
+        )
+
+        self.logger.info("event_advance_enter: mixing ENTER + Skip/Proceed/Continue clicks")
+        deadline = time.time() + max_seconds
+        action_count = 0
+
+        while time.time() < deadline:
+            screenshot = common.capture_screen()
+            for label, img_path in STOP_IMAGES.items():
+                if common.element_exist(img_path, screenshot=screenshot, quiet_failure=True):
+                    self.logger.info(
+                        f"event_advance_enter: stopping at '{label}' "
+                        f"after {action_count} actions"
+                    )
+                    return
+
+            chose_button = random.random() < 0.35
+            action_label = "enter"
+            if chose_button:
+                clicked_any = False
+                for label, img_path in BUTTON_ACTIONS:
+                    if common.click_matching(
+                        img_path, recursive=False,
+                        quiet_failure=True, screenshot=screenshot,
+                    ):
+                        action_label = label
+                        clicked_any = True
+                        break
+                if not clicked_any:
+                    common.key_press("enter")
+            else:
+                common.key_press("enter")
+
+            action_count += 1
+            if action_count <= 5 or action_count % 20 == 0:
+                self.logger.debug(f"event_advance_enter: iter {action_count} action={action_label}")
+            common.sleep(random.uniform(0.30, 0.65))
+
+        self.logger.warning(
+            f"event_advance_enter: max_seconds reached after {action_count} actions"
+        )
 
     def event_choice(self):
         self.logger.info("Handling event choice")

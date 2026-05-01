@@ -62,6 +62,57 @@ def _ensure_mouse_settings():
     if not _mouse_settings_active:
         _get_bridge().mouse_settings_apply()
         _mouse_settings_active = True
+        _run_mouse_calibration()
+
+
+def _run_mouse_calibration():
+    """One-shot diagnostic: send known relative moves and report the
+    actual cursor delta. If the actual delta is > 1.2x or < 0.8x the
+    requested delta, mouse acceleration is interfering (typical RDP
+    issue). Logs once per session."""
+    try:
+        # Capture current position so we can restore.
+        orig_x, orig_y = _cursor_pos()
+        results = []
+        # Park the cursor in a stable spot so probe deltas don't hit
+        # screen edges.
+        _get_bridge().mouse_move_relative(-orig_x, -orig_y)
+        time.sleep(0.02)
+        _get_bridge().mouse_move_relative(500, 500)
+        time.sleep(0.05)
+        for requested in (50, 100, 200):
+            cx_before, cy_before = _cursor_pos()
+            _get_bridge().mouse_move_relative(requested, 0)
+            time.sleep(0.05)
+            cx_after, cy_after = _cursor_pos()
+            actual = cx_after - cx_before
+            results.append((requested, actual))
+            # Move back so subsequent probes start from same approx spot.
+            _get_bridge().mouse_move_relative(-actual, 0)
+            time.sleep(0.02)
+        # Restore approximate original cursor position.
+        cx_now, cy_now = _cursor_pos()
+        _get_bridge().mouse_move_relative(orig_x - cx_now, orig_y - cy_now)
+
+        ratios = [(actual / requested) for requested, actual in results if requested]
+        avg_ratio = sum(ratios) / len(ratios) if ratios else 1.0
+        detail = ", ".join(f"sent={req}/got={act}" for req, act in results)
+        if avg_ratio < 0.8 or avg_ratio > 1.2:
+            logger.warning(
+                f"Mouse calibration FAILED: avg actual/requested ratio = {avg_ratio:.2f} "
+                f"({detail}). Mouse acceleration is likely on, or the session "
+                f"is rescaling cursor moves (typical in RDP). Disable "
+                f"'Enhance pointer precision' in Control Panel > Mouse > "
+                f"Pointer Options inside the session, and ensure RDP smart "
+                f"sizing is OFF in your client."
+            )
+        else:
+            logger.info(
+                f"Mouse calibration OK: avg actual/requested ratio = {avg_ratio:.2f} "
+                f"({detail})"
+            )
+    except Exception as e:
+        logger.warning(f"Mouse calibration probe failed: {e}")
 
 def restore_mouse_settings():
     global _mouse_settings_active
@@ -94,11 +145,23 @@ def _input_move_abs_fast(x, y):
     _input_pos[1] = y
 
 
+_MOUSE_DEBUG_THRESHOLD_PX = 5
+_mouse_diag_count = [0]
+
 def _input_move_abs(x, y):
     """Move to (x, y) with a convergence pass. Use on the final position of
     a movement (e.g. before a click). Intermediate bezier points should use
-    the fast variant."""
+    the fast variant.
+
+    Also logs convergence diagnostics when the final cursor position is
+    more than _MOUSE_DEBUG_THRESHOLD_PX off the intended target. In RDP
+    sessions, mouse acceleration can cause large overshoots even after
+    several convergence iterations - those warnings tell us we need to
+    fix mouse settings in the host session.
+    """
     _input_move_abs_fast(x, y)
+    start_cx, start_cy = _cursor_pos()
+    iterations = 0
     deadline = time.time() + 0.06
     while time.time() < deadline:
         cx, cy = _cursor_pos()
@@ -109,7 +172,20 @@ def _input_move_abs(x, y):
         step_dx = max(-10, min(10, dx))
         step_dy = max(-10, min(10, dy))
         _get_bridge().mouse_move_relative(step_dx, step_dy)
+        iterations += 1
         time.sleep(0.001)
+    # Diagnostics: report when convergence didn't actually land.
+    final_cx, final_cy = _cursor_pos()
+    final_err = max(abs(final_cx - x), abs(final_cy - y))
+    if final_err > _MOUSE_DEBUG_THRESHOLD_PX:
+        _mouse_diag_count[0] += 1
+        if _mouse_diag_count[0] <= 50 or _mouse_diag_count[0] % 25 == 0:
+            logger.warning(
+                f"mouse convergence drift: target=({x},{y}) "
+                f"start=({start_cx},{start_cy}) final=({final_cx},{final_cy}) "
+                f"err={final_err}px iters={iterations} "
+                f"(possible mouse-accel/RDP issue)"
+            )
 
 def _input_press_left():
     _ensure_mouse_settings()
@@ -346,6 +422,143 @@ def resource_path(relative_path):
     if os.path.exists(bundle_path):
         return bundle_path
     return user_path
+
+
+# Startup environment checks. Three things have repeatedly broken users:
+# 1. They install LGHub but never launch it - lghub_agent.exe isn't running
+# 2. They run WorkerBee.exe without "Run as administrator" - bridge IOCTL
+#    sometimes needs the admin token even though the file copy worked
+# 3. They install LGHub at the WRONG version (newer than 2021.10) and the
+#    bridge fails at cg_open with no obvious explanation
+# These checks run once at startup, log warnings, and return a dict the
+# GUI can render as a banner / dialog.
+
+_LGHUB_PROCESS_NAMES = ("lghub_agent.exe", "lghub.exe", "lghub_updater.exe")
+_LGHUB_REQUIRED_VERSION_PREFIX = "2021.10"
+_LGHUB_EXE_CANDIDATES = (
+    r"C:\Program Files\LGHUB\lghub.exe",
+    r"C:\Program Files\LGHUB\system_tray\lghub_system_tray.exe",
+    r"C:\Program Files\LGHUB\lghub_agent.exe",
+    r"C:\Program Files\LGHUB\lghub_updater.exe",
+)
+
+
+def _is_admin():
+    try:
+        import ctypes as _ct
+        return bool(_ct.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def _is_lghub_running():
+    try:
+        import subprocess as _sp
+        out = _sp.run(
+            ["tasklist", "/NH", "/FO", "CSV"],
+            capture_output=True, text=True, timeout=4,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        if out.returncode != 0:
+            return False
+        lower = out.stdout.lower()
+        return any(name in lower for name in _LGHUB_PROCESS_NAMES)
+    except Exception:
+        return False
+
+
+def _detect_lghub_version():
+    """Returns the detected LGHub version string (e.g. '2021.10.5673.0')
+    or None if LGHub isn't installed at any of the standard paths.
+    Reads file metadata via PowerShell because we don't want to add
+    pywin32 just for this."""
+    import subprocess as _sp
+    for path in _LGHUB_EXE_CANDIDATES:
+        if not os.path.exists(path):
+            continue
+        try:
+            out = _sp.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"(Get-Item '{path}').VersionInfo.ProductVersion"],
+                capture_output=True, text=True, timeout=6,
+                creationflags=0x08000000,
+            )
+            if out.returncode == 0:
+                ver = out.stdout.strip()
+                if ver:
+                    return ver
+        except Exception:
+            continue
+    return None
+
+
+def run_startup_checks():
+    """Run the three startup health checks and return a dict of results.
+    The GUI calls this once during init and surfaces failures to the user."""
+    result = {
+        "admin": {"ok": False, "message": ""},
+        "lghub_running": {"ok": False, "message": ""},
+        "lghub_version": {"ok": False, "message": ""},
+        "version_string": None,
+        "any_failure": False,
+    }
+
+    is_admin = _is_admin()
+    result["admin"]["ok"] = is_admin
+    if is_admin:
+        result["admin"]["message"] = "WorkerBee is running as administrator"
+        logger.info("startup check: admin OK")
+    else:
+        result["admin"]["message"] = (
+            "WorkerBee is NOT running as administrator. Right-click "
+            "WorkerBee.exe and choose 'Run as administrator' - the LGHub "
+            "bridge needs the elevated token to open its kernel handle."
+        )
+        logger.warning(f"startup check: ADMIN FAILED - {result['admin']['message']}")
+
+    is_running = _is_lghub_running()
+    result["lghub_running"]["ok"] = is_running
+    if is_running:
+        result["lghub_running"]["message"] = "LGHub agent is running"
+        logger.info("startup check: LGHub process OK")
+    else:
+        result["lghub_running"]["message"] = (
+            "LGHub does NOT appear to be running. Launch Logitech G HUB "
+            "from the Start menu (or system tray) before using WorkerBee. "
+            "WorkerBee routes input through LGHub's kernel driver - "
+            "without the agent running, every click and key press will fail."
+        )
+        logger.warning(f"startup check: LGHUB-RUNNING FAILED - {result['lghub_running']['message']}")
+
+    version = _detect_lghub_version()
+    result["version_string"] = version
+    if version is None:
+        result["lghub_version"]["message"] = (
+            "Could not detect installed LGHub version. WorkerBee requires "
+            "LGHub 2021.10 - any newer version has patched the IOCTL bypass "
+            "and WorkerBee will fail to open the bridge."
+        )
+        logger.warning("startup check: LGHUB-VERSION unknown - LGHub install not detected at standard paths")
+    elif version.startswith(_LGHUB_REQUIRED_VERSION_PREFIX):
+        result["lghub_version"]["ok"] = True
+        result["lghub_version"]["message"] = f"LGHub version {version} (correct - 2021.10.x)"
+        logger.info(f"startup check: LGHub version OK ({version})")
+    else:
+        result["lghub_version"]["message"] = (
+            f"LGHub version {version} is NOT supported. WorkerBee requires "
+            f"LGHub {_LGHUB_REQUIRED_VERSION_PREFIX}.x. Newer versions have "
+            "patched the bridge exploit. Uninstall current LGHub, install "
+            "the 2021.10 offline installer, and block its auto-update in "
+            "Windows Firewall."
+        )
+        logger.warning(f"startup check: LGHUB-VERSION FAILED - detected {version}, need {_LGHUB_REQUIRED_VERSION_PREFIX}.x")
+
+    result["any_failure"] = not all((
+        result["admin"]["ok"],
+        result["lghub_running"]["ok"],
+        result["lghub_version"]["ok"],
+    ))
+    return result
 
 
 def scan_all_ui_images(screenshot, top_n=5, min_score=0.5,
@@ -615,18 +828,37 @@ def mouse_move_click(x, y, log_click=True):
         prof["lognorm_pre_click_mu"], prof["lognorm_pre_click_sig"]
     ))
     # Defensive: verify cursor is actually at the target before clicking.
-    # DPI scaling / mouse accel / other input sources can push it off by a
-    # few pixels even after convergence. Re-sync here catches that.
+    # DPI scaling / mouse accel / other input sources can push it off by
+    # a few pixels even after convergence. Tightened from >3px to >1px
+    # because clicks on small buttons (acceptdefeat, confirm dialogs)
+    # were being lost when the cursor landed 2-3px off the target.
     _cx, _cy = _cursor_pos()
-    if abs(_cx - real_x) > 3 or abs(_cy - real_y) > 3:
+    pre_press_drift = max(abs(_cx - real_x), abs(_cy - real_y))
+    if pre_press_drift > 1:
         _input_move_abs(real_x, real_y)
         time.sleep(random.uniform(0.02, 0.04))
     _input_press_left()
-    time.sleep(random.uniform(0.04, 0.09))
+    # Slightly longer hold (was 0.04-0.09) - some Limbus dialogs only
+    # register the click when the press lasts >=70ms. 0.07-0.13 is still
+    # within human-click range.
+    time.sleep(random.uniform(0.07, 0.13))
+    # Re-sync once more in case cursor drifted during the press hold.
+    _press_cx, _press_cy = _cursor_pos()
+    press_drift = max(abs(_press_cx - real_x), abs(_press_cy - real_y))
+    if press_drift > 1:
+        _input_move_abs(real_x, real_y)
     _input_release_left()
-    # Settle delay: ensure the release HID event reaches the game before any
-    # subsequent mouse movement, otherwise the game interprets the sequence
-    # as a drag (press + move + release) instead of a click.
+    # Surface drift as a warning whenever a click landed >5px off
+    # target - the click may not have registered.
+    if max(pre_press_drift, press_drift) > 5:
+        logger.warning(
+            f"mouse_move_click: drift detected at ({real_x},{real_y}) - "
+            f"pre_press_drift={pre_press_drift}px press_drift={press_drift}px"
+            f" (click may have missed the button)"
+        )
+    # Settle delay: ensure the release HID event reaches the game before
+    # any subsequent mouse movement, otherwise the game interprets the
+    # sequence as a drag (press + move + release) instead of a click.
     time.sleep(0.05)
 
 def mouse_drag(x, y, seconds=1, hold=0.06, release_hold=0.06):

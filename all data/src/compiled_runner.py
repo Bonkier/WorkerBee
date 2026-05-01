@@ -15,16 +15,44 @@ import common
 _CAPTURE_HANG_LIMIT = 30
 _RUN_TIME_LIMIT = 5400
 
+
+def _try_stuck_recovery(main_thread_id):
+    """Send ESC + center click + ENTER from the watchdog thread to
+    dismiss any modal dialog the macro is parked on. Resets the
+    screen-capture handle so a stale mss connection doesn't keep
+    returning the same frame. Strictly additive - if it works, the
+    next stuck check sees fresh pixels and resets the counter; if not,
+    the next check still hits the hard timeout."""
+    try:
+        common.key_press("esc")
+        time.sleep(0.3)
+        cx, cy = common.scale_coordinates_1080p(960, 540)
+        common.mouse_move_click(cx, cy)
+        time.sleep(0.3)
+        common.key_press("enter")
+        try:
+            common.reset_sct(main_thread_id)
+        except Exception:
+            pass
+        logger.info("Run watchdog: recovery sequence sent (esc + click + enter + reset_sct)")
+    except Exception as e:
+        logger.warning(f"Run watchdog: recovery sequence failed: {e}")
+
+
 def _run_watchdog(main_thread_id, run_start, stop_event):
     config_dir = os.path.join(get_base_path(), "config")
     screenshot_paths = [
         os.path.join(config_dir, "macro_state_0.png"),
         os.path.join(config_dir, "macro_state_1.png"),
     ]
-    SCREENSHOT_INTERVAL = 60
+    # Tighter interval so we can run a soft-recovery pass before the
+    # 60s hard timeout. Two consecutive stuck ticks (30s + 30s = 60s)
+    # = hard inject TimeoutError. One stuck tick = try recovery.
+    SCREENSHOT_INTERVAL = 30
     STUCK_THRESHOLD = 5.0
     last_screenshot = 0
     screenshot_index = 0
+    consecutive_stuck = 0
 
     while not stop_event.wait(5):
         now = time.time()
@@ -57,13 +85,49 @@ def _run_watchdog(main_thread_id, run_start, stop_event):
                     try:
                         if curr_arr.shape == prev_arr.shape:
                             diff = np.mean(np.abs(curr_arr.astype(np.int32) - prev_arr.astype(np.int32)))
-                            if diff < STUCK_THRESHOLD:
-                                logger.warning(f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s (diff={diff:.2f})")
+                            if diff >= STUCK_THRESHOLD:
+                                if consecutive_stuck > 0:
+                                    logger.info(
+                                        f"Run watchdog: screen moved (diff={diff:.2f}), "
+                                        f"clearing consecutive_stuck={consecutive_stuck}"
+                                    )
+                                consecutive_stuck = 0
+                            else:
+                                consecutive_stuck += 1
+                                logger.warning(
+                                    f"Run watchdog: screen unchanged for {SCREENSHOT_INTERVAL}s "
+                                    f"(diff={diff:.2f}, consecutive_stuck={consecutive_stuck})"
+                                )
+
+                            if 0 < consecutive_stuck < 2:
+                                # First stuck tick - send recovery sequence and
+                                # let the next 30s settle. If recovery worked,
+                                # the next screenshot shows diff above threshold
+                                # and consecutive_stuck resets to 0.
+                                _try_stuck_recovery(main_thread_id)
+                            elif consecutive_stuck >= 2:
+                                # Second consecutive stuck tick (60s total) -
+                                # hard timeout, write the diagnostic sidecar.
+                                # Save a STABLE screenshot copy too: macro_state_*
+                                # rotates every 30s and would be overwritten by
+                                # the time anyone reads the sidecar, so we save
+                                # logs/stuck_<ts>.png that won't get clobbered.
+                                stable_screenshot_path = os.path.join(
+                                    get_base_path(), "logs",
+                                    f"stuck_{int(now)}.png"
+                                )
+                                try:
+                                    img.save(stable_screenshot_path)
+                                    logger.warning(f"Run watchdog: stuck screenshot saved to {stable_screenshot_path}")
+                                except Exception as ss_err:
+                                    logger.warning(f"Run watchdog: failed to save stable stuck screenshot: {ss_err}")
+                                    stable_screenshot_path = current_path
                                 stuck_sidecar = {
                                     "timestamp": int(now),
                                     "iso_time": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
                                     "diff": round(float(diff), 3),
-                                    "screenshot_path": current_path,
+                                    "screenshot_path": stable_screenshot_path,
+                                    "rotating_screenshot_path": current_path,
                                     "screenshot_size": None,
                                     "expected_size": None,
                                     "top_matches": [],
@@ -401,6 +465,22 @@ def mirror_dungeon_run(num_runs, status_list_file, connection_manager, shared_va
             except Exception as e:
                 logger.exception(f"Error in run {i + 1}: {e}")
                 error_screenshot()
+                # Best-effort game-state recovery before the next run:
+                # spam ESC to dismiss modals, then a few clicks centre
+                # to advance any leftover dialogs. Intentionally non-
+                # destructive - if the screen is already on the main
+                # map, these inputs are no-ops.
+                try:
+                    for _ in range(4):
+                        common.key_press("esc")
+                        time.sleep(0.6)
+                    cx, cy = common.scale_coordinates_1080p(960, 540)
+                    for _ in range(2):
+                        common.mouse_move_click(cx, cy)
+                        time.sleep(0.4)
+                    common.reset_sct()
+                except Exception as rec_err:
+                    logger.warning(f"Inter-run recovery failed: {rec_err}")
                 i += 1
             finally:
                 _stop_watchdog.set()

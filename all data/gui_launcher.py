@@ -272,6 +272,41 @@ if "Settings" not in config:
 
 app_lifecycle.load_preferences(config, shared_vars)
 
+# Startup environment checks. Surfaces three common new-user issues:
+# admin token missing, LGHub not running, wrong LGHub version.
+try:
+    import common as _common_for_checks
+    _startup_checks = _common_for_checks.run_startup_checks()
+    if _startup_checks.get("any_failure"):
+        log_debug("Startup checks reported one or more failures; will surface to user once UI is up")
+except Exception as _sc_err:
+    log_debug(f"Startup checks failed to run: {_sc_err}")
+    _startup_checks = None
+
+
+def _show_startup_check_dialog(parent_root):
+    """Build and show a clear dialog summarising any startup-check
+    failures. Called after the main UI has been created."""
+    if not _startup_checks or not _startup_checks.get("any_failure"):
+        return
+    try:
+        lines = ["WorkerBee detected setup issues. Fix these before running:\n"]
+        for key, label in (("admin", "Administrator"),
+                           ("lghub_running", "LGHub running"),
+                           ("lghub_version", "LGHub version")):
+            entry = _startup_checks.get(key, {})
+            mark = "[OK]" if entry.get("ok") else "[!] "
+            lines.append(f"{mark} {label}: {entry.get('message', '?')}")
+        lines.append("\nThe macro will start but may not work correctly until these are fixed.")
+        body = "\n\n".join(lines)
+        try:
+            messagebox.showwarning("WorkerBee setup check", body, parent=parent_root)
+        except Exception:
+            messagebox.showwarning("WorkerBee setup check", body)
+    except Exception as _e:
+        log_debug(f"Failed to show startup check dialog: {_e}")
+
+
 def reset_settings_to_defaults():
     """Reset all settings to default values"""
     if messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to defaults?"):
@@ -1052,6 +1087,11 @@ if __name__ == "__main__":
         root.after(5, start_application)
 
         root.after(100, delayed_common_init)
+
+        # Show startup check warnings AFTER common init completes (so the
+        # version detection has a chance to log first). 1.5s gives the
+        # delayed_common_init pop time to settle.
+        root.after(1500, lambda: _show_startup_check_dialog(root))
 
         log_debug("Initializing UI Updater...")
         ui_updater = ui_updater_module.UIUpdater(root, ui_context, shared_vars, callbacks, BASE_PATH, sidebar)
